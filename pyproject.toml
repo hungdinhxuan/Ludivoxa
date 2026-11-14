@@ -1,0 +1,112 @@
+[project]
+name = "interpreter-v2"
+version = "1.0.0"
+description = "Ludivoxa: offline game OCR, local LLM translation and Vietnamese speech"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = "MIT"
+authors = [
+    { name = "qube" },
+    { name = "hungdinhxuan" }
+]
+keywords = ["ocr", "translation", "japanese", "games", "retro"]
+
+dependencies = [
+    # OCR
+    "meikiocr",
+    "onnxruntime",
+    # Translation (Sugoi V4)
+    "ctranslate2",
+    "sentencepiece",
+    # Image processing
+    "Pillow>=10.0.0",
+    "numpy",
+    "opencv-python",
+    # Screen capture
+    "mss>=9.0.0",
+    # Configuration
+    "PyYAML>=6.0",
+    # Model download
+    "requests",
+    "tqdm",
+    # Logging
+    "structlog>=24.0.0",
+    # macOS only - window capture
+    "pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'",
+    # Windows only - window capture
+    "pygetwindow>=0.0.9; sys_platform == 'win32'",
+    # HWND-based capture (window_hwnd) landed upstream in 2.0
+    "windows-capture>=2.0.1; sys_platform == 'win32'",
+    # Linux only - window capture (X11 fallback)
+    "python-xlib>=0.33; sys_platform == 'linux'",
+    # Linux only - window capture (Wayland via PipeWire portal)
+    "pipewire-capture>=0.3.0; sys_platform == 'linux'",
+    # GPU acceleration (CUDA 12) - Windows and Linux
+    "nvidia-cublas-cu12; sys_platform == 'win32' or sys_platform == 'linux'",
+    "nvidia-cudnn-cu12; sys_platform == 'win32' or sys_platform == 'linux'",
+    # GUI
+    "PySide6>=6.6.0",
+    # Global hotkeys (macOS/Windows use pynput, Linux uses evdev directly)
+    "pynput>=1.7.0; sys_platform == 'darwin' or sys_platform == 'win32'",
+    "pyobjc-framework-cocoa>=12.1; sys_platform == 'darwin'",
+    # Linux only - global hotkeys (evdev-binary provides pre-built wheels, no kernel headers needed)
+    "evdev-binary>=1.9.0; sys_platform == 'linux'",
+    "websockets>=13",
+]
+
+[project.optional-dependencies]
+tts = ["piper-tts>=1.3,<2", "sounddevice>=0.5,<1"]
+clone = ["vieneu==3.8.4"]
+# 3.3.x's oneDNN/PIR regression breaks accelerated CPU OCR on Windows.
+paddle = ["paddleocr>=3.7,<4", "paddlepaddle>=3.2.2,<3.3"]
+
+[project.scripts]
+interpreter-v2 = "interpreter:main"
+ludivoxa = "interpreter:main"
+
+[tool.uv]
+# Interpreter uses the torch-free ONNX SDK. Its web UI and optional librosa
+# loader are unused; soundfile + soxr load references without another GUI.
+exclude-dependencies = ["gradio", "librosa"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/interpreter"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.10",
+    "pytest>=8.0.0",
+]
+build = ["pyinstaller>=6.20,<7"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "F",      # pyflakes
+    "W",      # pycodestyle warnings
+    "I",      # isort
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+    "RUF",    # ruff-specific rules
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "RUF001", # ambiguous unicode (intentional Japanese punctuation)
+    "RUF012", # mutable class attributes (ctypes structures)
+    "SIM102", # nested if statements (sometimes clearer)
+    "SIM105", # contextlib.suppress (try/except/pass is clearer)
+    "SIM108", # ternary operator (multi-line if/else is clearer)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["interpreter"]

@@ -1,0 +1,32 @@
+# Source-development profile. Provision these local model folders first.
+window_title: ''
+source_language: English
+ocr_backend: paddle
+ocr_confidence: 0.6
+ocr_regions: {}
+exclusion_zones: {}
+translation_backend: llm
+llm:
+  provider: ollama
+  base_url: http://127.0.0.1:11434
+  model: qwen3-hauhau-aggressive:4b-q4_k_m
+  api_key: ''
+  target_language: Vietnamese
+  context_lines: 3
+  timeout: 30.0
+  request_options:
+    options:
+      num_ctx: 2048
+paddle:
+  detection_model_dir: models/PP-OCRv5_mobile_det_onnx
+  recognition_model_dir: models/en_PP-OCRv5_mobile_rec_onnx
+  device: cpu
+  cpu_threads: 2
+  max_side: 640
+output_mode: both
+overlay_mode: banner
+tts_enabled: true
+tts_model_path: models/VieNeu-TTS-v3-Nano
+tts_speaker_id: 4
+tts_rate: 1.0
+tts_reference_audio: ''

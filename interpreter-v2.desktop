@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Ludivoxa
+Comment=Offline game OCR, translation and speech
+Exec=ludivoxa
+Icon=interpreter-v2
+Type=Application
+Categories=Utility;Translation;
+StartupWMClass=interpreter-v2

@@ -1,0 +1,59 @@
+# Binary
+/interpreter
+/interpreter.exe
+
+# Models directory (downloaded on first run)
+models/
+.test-models/
+.test-results/
+build/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+.ruff_cache/
+.pytest_cache/
+/config.yml
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+.env
+
+# Claude Code
+.claude/
+
+# Debug files
+debug_capture.png
+
+# Local development audit reports; public guides live in docs/.
+/AUDIO_FIX.md
+/GAME_BENCHMARK.md
+/IMPLEMENTATION_NOTES.md
+/LATENCY_AND_SIZE_AUDIT.md
+/OCR_LATENCY_FIX.md
+/OCR_REPEAT_FIX.md
+/OCR_SELECTED_BOX.md
+/OCR_SPEED.md
+/PERFORMANCE_FIX.md
+/RUNTIME_SHUTDOWN.md
+/SETUP_AND_SPEED.md
+/TTS_SYMBOL_FILTER.md
+/TTS_UPDATE.md
+/VOICE_CLONING.md
