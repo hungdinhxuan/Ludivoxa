@@ -36,6 +36,30 @@ class OCRResult:
     bbox: dict | None = None  # {"x": int, "y": int, "width": int, "height": int}
 
 
+def group_ocr_rows(regions):
+    """Group horizontal word detections by their overlapping text baseline.
+
+    Detector y jitter must not put a later word before an earlier one. Keep
+    engine order for unpositioned results and predominantly vertical text.
+    """
+    if not regions or any(not r.bbox for r in regions):
+        return [[r] for r in regions]
+    if sum(r.bbox["height"] > r.bbox["width"] * 1.5 for r in regions) > len(regions) / 2:
+        return [[r] for r in regions]
+    rows = []
+    for region in sorted(regions, key=lambda r: r.bbox["y"] + r.bbox["height"] / 2):
+        center = region.bbox["y"] + region.bbox["height"] / 2
+        for row in rows:
+            row_center = float(np.median([r.bbox["y"] + r.bbox["height"] / 2 for r in row]))
+            row_height = float(np.median([r.bbox["height"] for r in row]))
+            if abs(center - row_center) <= 0.6 * max(region.bbox["height"], row_height):
+                row.append(region)
+                break
+        else:
+            rows.append([region])
+    return [sorted(row, key=lambda r: r.bbox["x"]) for row in rows]
+
+
 class OCREngine(Protocol):
     """Interface shared by the built-in MeikiOCR pipeline and the owocr websocket backend."""
 

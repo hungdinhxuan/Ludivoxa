@@ -38,9 +38,21 @@ def test_waits_for_typewriter_text_and_translates_final_line_once(dialogue, text
     assert spoken == []
     worker._translator.translate.assert_not_called()
     frame(text, len(text) * 0.05 + 0.4)
+    assert spoken == []  # An observed reveal needs a longer quiet window.
     frame(text, len(text) * 0.05 + 1)
     assert spoken == [(f"VI: {text}", 1)]
     worker._translator.translate.assert_called_once_with(text)
+
+
+def test_word_by_word_render_pauses_do_not_speak_partial_sentences(dialogue):
+    worker, frame, spoken = dialogue
+    for text, at in [("Hello", 0), ("Hello brave", 0.15), ("Hello brave", 0.55), ("Hello brave hero.", 0.7)]:
+        frame(text, at)
+    frame("Hello brave hero.", 1.1)
+    assert spoken == []
+    frame("Hello brave hero.", 1.8)
+    assert spoken == [("VI: Hello brave hero.", 1)]
+    worker._translator.translate.assert_called_once_with("Hello brave hero.")
 
 
 def test_ocr_flicker_and_punctuation_do_not_repeat_spoken_source(dialogue):
@@ -130,10 +142,10 @@ def visual_dialogue(monkeypatch):
     image[25:45, 20:380, :3] = np.random.default_rng(5).integers(0, 255, (20, 360, 3), dtype=np.uint8)
     box = {"x": 20, "y": 25, "width": 360, "height": 20}
 
-    def observe(text, at, frame=None, extra=None, generation=1):
+    def observe(text, at, frame=None, extra=None, generation=1, origin=(0, 0)):
         clock[0] = at
         worker._ocr.extract_text_regions.return_value = ([OCRResult(text, box.copy())] if text else []) + (extra or [])
-        worker._process_frame(image if frame is None else frame, generation)
+        worker._process_frame(image if frame is None else frame, generation, origin=origin)
 
     return worker, observe, spoken, image, box
 
@@ -188,6 +200,7 @@ def test_new_text_outside_old_boxes_is_not_hidden_by_visual_guard(visual_dialogu
     extra = [OCRResult("New quest unlocked", {"x": 20, "y": 90, "width": 180, "height": 20})]
     observe("Hello world", 1, changed, extra)
     observe("Hello world", 1.4, changed, extra)
+    observe("Hello world", 3, changed, extra)
     assert len(spoken) == 2
 
 
@@ -296,4 +309,268 @@ def test_new_colored_or_dim_glyph_is_not_mistaken_for_background_shading(visual_
     observe("Hello world", 0.4, first)
     observe("Hello world V", 1, changed)
     observe("Hello world V", 1.4, changed)
+    observe("Hello world V", 3, changed)
     assert len(spoken) == 2
+
+
+def test_pokemon_ocr_variants_do_not_repeat_when_only_box_padding_animates(visual_dialogue):
+    worker, observe, spoken, image, _ = visual_dialogue
+    animated = image.copy()
+    animated[10:18, 25:200, :3] = (10, 80, 180)
+    for text, pixels, at in [
+        ("Pokemon", image, 0),
+        ("Pokamon", animated, 1),
+        ("Pokemon", image, 2),
+        ("Pokamon", animated, 3),
+    ]:
+        observe(text, at, pixels)
+        observe(text, at + 0.4, pixels)
+    assert spoken == ["VI: Pokemon"]
+    worker._translator.translate.assert_called_once_with("Pokemon")
+
+
+@pytest.mark.parametrize("effect", ["antialias", "colored_panel", "shift"])
+@pytest.mark.parametrize("mode", [OutputMode.TTS, OutputMode.BOTH])
+@pytest.mark.parametrize("origin", [(0, 0), (950, 1400)])
+def test_pixel_font_render_changes_do_not_restart_pokemon_speech(visual_dialogue, effect, mode, origin):
+    worker, observe, spoken, image, box = visual_dialogue
+    worker._config.output_mode = mode
+    box["y"], box["height"] = 20, 32  # Include ascenders/descenders and antialiased edges.
+    first = np.full_like(image, 235)
+    if effect == "colored_panel":
+        first[:, :, :3] = (100, 40, 20)
+    color = (235, 235, 235, 255) if effect == "colored_panel" else (15, 15, 15, 255)
+    cv2.putText(first, "Pokemon are waiting.", (25, 43), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2, cv2.LINE_AA)
+    changed = first.copy()
+    if effect == "antialias":
+        gray = first[:, :, 0]
+        edges = (gray > 60) & (gray < 170)
+        values = gray.astype(np.int16)
+        values = np.where(values <= 125, values - 48, values + 48).clip(0, 255).astype(np.uint8)
+        changed[edges, :3] = values[edges, None]
+    elif effect == "colored_panel":
+        changed[:, :, :3] -= 8
+    else:
+        changed = cv2.warpAffine(first, np.float32([[1, 0, 1], [0, 1, 1]]), (460, 140), borderValue=(235,) * 4)
+    observe("Pokemon are waiting.", 0, first, origin=origin)
+    observe("Pokemon are waiting.", 0.4, first, origin=origin)
+    if effect == "shift":
+        box["x"] += 1
+        box["y"] += 1
+    for text, at in [("Pokamon are waiting.", 1), ("Pokemon are waiting.", 2), ("Pokamon are waiting.", 3)]:
+        observe(text, at, changed, origin=origin)
+        observe(text, at + 0.4, changed, origin=origin)
+    assert spoken == ["VI: Pokemon are waiting."]
+
+
+@pytest.mark.parametrize(
+    ("first_text", "next_text"),
+    [
+        ("Pokemon", "Pokamon"),
+        ("HP: 10", "HP: 20"),
+        ("Take the potion.", "Do not take the potion."),
+    ],
+)
+def test_similar_but_visibly_different_dialogue_is_still_read(visual_dialogue, first_text, next_text):
+    _, observe, spoken, image, _ = visual_dialogue
+    for index, text in enumerate((first_text, next_text)):
+        pixels = np.full_like(image, 235)
+        cv2.putText(pixels, text, (25, 43), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (15,) * 3, 2, cv2.LINE_AA)
+        observe(text, index, pixels)
+        observe(text, index + 0.4, pixels)
+    assert spoken == [f"VI: {first_text}", f"VI: {next_text}"]
+
+
+def test_proven_render_variant_is_cached_and_cache_resets_on_new_dialogue(visual_dialogue, monkeypatch):
+    worker, observe, spoken, image, box = visual_dialogue
+    box["y"], box["height"] = 20, 32
+    first = np.full_like(image, 235)
+    cv2.putText(first, "Pokemon", (25, 43), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (15,) * 3, 2, cv2.LINE_AA)
+    shifted = cv2.warpAffine(first, np.float32([[1, 0, 1], [0, 1, 1]]), (460, 140), borderValue=(235,) * 4)
+    helper = MagicMock(wraps=ProcessWorker._same_pixel_text)
+    monkeypatch.setattr(ProcessWorker, "_same_pixel_text", staticmethod(helper))
+    observe("Pokemon", 0, first)
+    observe("Pokemon", 0.4, first)
+    observe("Pokamon", 1, shifted)
+    assert helper.call_count == 1
+    for at in (1.4, 2, 2.4, 3, 3.4):
+        observe("Pokamon", at, shifted)
+    assert helper.call_count == 1 and len(spoken) == 1
+    assert len(worker._spoken_image_cache) == 1
+    second = np.full_like(image, 235)
+    cv2.putText(second, "Welcome", (25, 43), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (15,) * 3, 2, cv2.LINE_AA)
+    observe("Welcome", 4, second)
+    observe("Welcome", 4.4, second)
+    observe("Welcome", 5, second)
+    assert len(spoken) == 2 and not worker._spoken_image_cache
+    observe("Pokemon", 6, first)
+    observe("Pokemon", 6.4, first)
+    assert len(spoken) == 3
+
+
+@pytest.mark.parametrize("mode", [OutputMode.TTS, OutputMode.BOTH])
+def test_ocr_variant_does_not_start_another_translation_speech_stream(visual_dialogue, mode):
+    worker, observe, spoken, image, box = visual_dialogue
+    worker._config.output_mode = mode
+    box["y"], box["height"] = 20, 32
+    first = np.full_like(image, 235)
+    cv2.putText(first, "Pokemon", (25, 43), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (15,) * 3, 2, cv2.LINE_AA)
+    shaded = first.copy()
+    shaded[:, :, :3] -= 8
+
+    class Translator:
+        def translate(self, text):
+            return f"VI: {text}", False
+
+        def translate_stream(self, text, on_sentence):
+            on_sentence(f"VI: {text}")
+            return f"VI: {text}", False
+
+    worker._translator = Translator()
+    streams = []
+    worker.speech_stream_ready.connect(lambda stream, _: streams.append(stream))
+    for text, pixels, at in [("Pokemon", first, 0), ("Pokamon", shaded, 1), ("Pokemon", first, 2)]:
+        observe(text, at, pixels, origin=(950, 1400))
+        observe(text, at + 0.4, pixels, origin=(950, 1400))
+    assert len(streams) == 1 and list(streams[0]) == ["VI: Pokemon"]
+    assert not spoken
+
+
+def test_visual_text_growth_resets_settle_even_when_ocr_key_does_not_change(visual_dialogue):
+    _, observe, spoken, image, box = visual_dialogue
+    box["y"], box["height"] = 20, 32
+    final = "Pokemon are waiting."
+    for text, at in [("Pokemon", 0), ("Pokemon are", 0.2), (final, 0.4)]:
+        pixels = np.full_like(image, 235)
+        cv2.putText(pixels, text, (25, 43), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (15,) * 3, 2)
+        observe(final, at, pixels)
+    observe(final, 0.8, pixels)
+    assert not spoken
+    observe(final, 1.3, pixels)
+    assert spoken == [f"VI: {final}"]
+
+
+@pytest.mark.parametrize("show_final_cursor", [False, True])
+def test_learned_dialogue_cursor_defers_partial_next_page(visual_dialogue, show_final_cursor):
+    _, observe, spoken, image, _ = visual_dialogue
+
+    def rendered(text, cursor):
+        pixels = np.full_like(image, 235)
+        cv2.putText(pixels, text, (25, 43), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (15,) * 3, 2)
+        if cursor:
+            cv2.fillPoly(pixels, [np.array([[398, 29], [414, 29], [406, 41]])], (0, 0, 255, 255))
+        return pixels
+
+    first = rendered("Hello world", True)
+    observe("Hello world", 0, first)
+    observe("Hello world", 0.4, first)
+    assert len(spoken) == 1
+    pending = rendered("Let us", False)
+    observe("Let us", 1, pending)
+    observe("Let us", 1.4, pending)
+    assert len(spoken) == 1
+    final = rendered("Let us begin.", show_final_cursor)
+    observe("Let us begin.", 1.6, final)
+    observe("Let us begin.", 2.0, final)
+    assert len(spoken) == (2 if show_final_cursor else 1)
+    if not show_final_cursor:
+        observe("Let us begin.", 3.2, final)  # Cue-less labels never wait forever.
+    assert len(spoken) == 2
+
+
+def test_cursor_blink_before_first_read_does_not_restart_settle(visual_dialogue):
+    _, observe, spoken, image, _ = visual_dialogue
+    plain = np.full_like(image, 235)
+    cv2.putText(plain, "Pokemon are waiting.", (25, 43), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (15,) * 3, 2)
+    cursor = plain.copy()
+    cv2.fillPoly(cursor, [np.array([[398, 29], [414, 29], [406, 41]])], (0, 0, 255, 255))
+    observe("Pokemon are waiting.T", 0, cursor)
+    observe("Pokemon are waiting.", 0.15, plain)
+    observe("Pokemon are waiting.T", 0.4, cursor)
+    assert spoken == ["VI: Pokemon are waiting."]
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "remaining"),
+    [
+        ("Hello brave hero.", "Hello brave hero. Find the key.", "Find the key."),
+        ("Welcome professor. This is Pokemon.", "This is Pokemon. What is your name?", "What is your name?"),
+    ],
+)
+def test_completed_source_overlap_reads_only_new_dialogue_tail(dialogue, old, new, remaining):
+    worker, frame, spoken = dialogue
+    frame(old, 0)
+    frame(old, 0.4)
+    frame(new, 1)
+    frame(new, 3)
+    assert spoken == [(f"VI: {old}", 1), (f"VI: {remaining}", 1)]
+    assert worker._translator.translate.call_args.args[0] == remaining
+
+
+def test_word_boxes_are_read_by_row_instead_of_detector_y_jitter():
+    regions = [
+        OCRResult("someday.", dict(x=320, y=20, width=90, height=30)),
+        OCRResult("All", dict(x=20, y=26, width=35, height=24)),
+        OCRResult("boys", dict(x=70, y=22, width=50, height=29)),
+        OCRResult("leave", dict(x=140, y=30, width=65, height=21)),
+        OCRResult("home", dict(x=225, y=28, width=65, height=24)),
+        OCRResult("It said so on TV.", dict(x=20, y=70, width=280, height=30)),
+    ]
+    ordered = ProcessWorker._dialogue_regions(regions)
+    assert " ".join(r.text for r in ordered) == "All boys leave home someday. It said so on TV."
+
+
+def test_word_box_split_merge_does_not_repeat_unchanged_line(visual_dialogue):
+    worker, _observe, spoken, image, _box = visual_dialogue
+    first = np.full_like(image, 235)
+    cv2.putText(first, "All boys leave home", (25, 43), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (15,) * 3, 2)
+    worker._ocr.extract_text_regions.return_value = [
+        OCRResult("All", dict(x=20, y=25, width=35, height=25)),
+        OCRResult("boys", dict(x=65, y=23, width=65, height=27)),
+        OCRResult("leave home", dict(x=145, y=25, width=145, height=25)),
+    ]
+    clock = [0.0]
+    from interpreter.gui import workers
+
+    original_time = workers.time
+    workers.time = type("Clock", (), {"monotonic": lambda: clock[0], "perf_counter": original_time.perf_counter})
+    try:
+        worker._process_frame(first, 1)
+        clock[0] = 0.4
+        worker._process_frame(first, 1)
+        worker._ocr.extract_text_regions.return_value = [
+            OCRResult("Al1 boys", dict(x=20, y=23, width=110, height=27)),
+            OCRResult("leave", dict(x=145, y=24, width=60, height=26)),
+            OCRResult("home", dict(x=220, y=25, width=70, height=25)),
+        ]
+        for at in (1.0, 1.5, 2.0, 3.0):
+            clock[0] = at
+            worker._process_frame(first, 1)
+    finally:
+        workers.time = original_time
+    assert len(spoken) == 1
+
+
+def test_vertical_text_keeps_engine_column_order():
+    right = OCRResult("こんにちは", dict(x=220, y=20, width=20, height=120))
+    left = OCRResult("世界", dict(x=180, y=20, width=20, height=80))
+    assert ProcessWorker._dialogue_regions([right, left]) == [right, left]
+
+
+def test_bouncing_cursor_shadow_is_masked_but_real_text_changes_are_not():
+    worker = ProcessWorker(Config(source_language="English", output_mode="tts"))
+    box = dict(x=20, y=30, width=500, height=100)
+
+    def render(number, bounce):
+        pixels = np.full((200, 800, 4), 235, dtype=np.uint8)
+        cv2.putText(pixels, f"HP {number}", (350, 105), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (15,) * 3, 2)
+        triangle = np.array([[550, 60], [600, 60], [575, 95]])
+        triangle[:, 1] += bounce
+        cv2.fillPoly(pixels, [triangle + np.array([0, 9])], (70, 70, 70, 255))
+        cv2.fillPoly(pixels, [triangle], (0, 0, 255, 255))
+        return pixels
+
+    original = render(10, 0)
+    worker._spoken_snapshot = worker._text_snapshot(original, [OCRResult("HP 10", box)])
+    assert worker._same_spoken_image(render(10, 8), [OCRResult("HP 1O", box)])
+    assert not worker._same_spoken_image(render(20, 8), [OCRResult("HP 20", box)])

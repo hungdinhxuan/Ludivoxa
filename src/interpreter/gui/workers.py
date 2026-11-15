@@ -13,7 +13,7 @@ from PySide6.QtCore import QObject, Signal
 from .. import log
 from ..config import Config, OutputMode, OverlayMode
 from ..languages import contains_japanese, contains_script  # noqa: F401  (contains_japanese kept for callers)
-from ..ocr import OCREngine, OCRResult, create_ocr
+from ..ocr import OCREngine, OCRResult, create_ocr, group_ocr_rows
 from ..speech import SpeechStream
 from ..translate import TranslationEngine, create_translator
 
@@ -24,6 +24,8 @@ logger = log.get_logger()
 MAX_CONSECUTIVE_TRANSLATION_FAILURES = 3
 MAX_CONSECUTIVE_OCR_FAILURES = 3
 SPEECH_SETTLE_SECONDS = 0.35
+SPEECH_REVEAL_SETTLE_SECONDS = 0.8
+SPEECH_CURSOR_FALLBACK_SECONDS = 1.2
 
 
 class FrameBuffer:
@@ -104,8 +106,17 @@ class ProcessWorker(QObject):
         self._confidence_threshold = 0.6
         self._speech_candidate = ""
         self._speech_candidate_since = 0.0
+        self._speech_visual_since = 0.0
+        self._speech_candidate_ink = None
+        self._speech_revealing = False
+        self._speech_reveal_gap = 0.0
+        self._speech_candidate_cursor = False
+        self._speech_cursor_expected = False
+        self._spoken_complete = False
         self._spoken_source = ""
         self._spoken_snapshot = None
+        self._spoken_image_cache_snapshot = None
+        self._spoken_image_cache = []
         self._suppressed_source = ""
         self._speech_session = None
         self.stream_speech = True
@@ -340,20 +351,31 @@ class ProcessWorker(QObject):
             self._emit(self.models_ready)
 
     @staticmethod
-    def _dialogue_regions(regions):
+    def _dialogue_regions(regions, frame=None):
         """Ignore small, detached cursor glyphs beside normal-size text."""
         heights = [r.bbox["height"] for r in regions if r.bbox and len(re.findall(r"\w", r.text)) > 1]
         if not heights:
             return regions
         height = float(np.median(heights))
         markers = {"v", "V", "√", "▼", "▽", "▾", "▿", "▲", "△", "◀", "▶", "►", "◄", "✓", "✔"}
-        return [
+        filtered = [
             r
             for r in regions
             if not (
                 r.text.strip() in markers and r.bbox and r.bbox["height"] < height * 0.75 and r.bbox["width"] <= height
             )
         ]
+        if isinstance(frame, np.ndarray) and frame.ndim == 3 and frame.shape[2] >= 3:
+            for index, region in enumerate(filtered):
+                if (
+                    region.bbox
+                    and re.search(r"[.!?。！？]\s*[tTvVyY]\s*$", region.text)
+                    and ProcessWorker._cursor_rectangles(frame, region.bbox)
+                ):
+                    # A filled GBA continuation arrow can be recognized as T.
+                    # Remove only a suffix backed by the actual cursor pixels.
+                    filtered[index] = OCRResult(re.sub(r"(?<=[.!?。！？])\s*[tTvVyY]\s*$", "", region.text), region.bbox)
+        return [region for row in group_ocr_rows(filtered) for region in row]
 
     @staticmethod
     def _cursor_rectangles(frame, box):
@@ -390,12 +412,13 @@ class ProcessWorker(QObject):
                 continue
             # Include the small dark/antialiased shadow around a pixel arrow.
             pad = max(2, min(8, round(line_height * 0.08)))
+            vertical_pad = max(pad, min(16, int(np.ceil(line_height * 0.1))))
             rectangles.append(
                 (
                     max(0, x + left - pad),
-                    max(0, y + top - pad),
+                    max(0, y + top - vertical_pad),
                     min(width, x + left + w + pad),
-                    min(height, y + top + h + pad),
+                    min(height, y + top + h + vertical_pad),
                 )
             )
         return rectangles
@@ -407,10 +430,14 @@ class ProcessWorker(QObject):
             return None
         height, width = frame.shape[:2]
         patches = []
-        for region in regions:
-            box = region.bbox
-            if not box:
+        for row in group_ocr_rows(regions):
+            if any(not region.bbox for region in row):
                 return None  # Engines without positions keep the exact-text guard.
+            left = min(r.bbox["x"] for r in row)
+            top = min(r.bbox["y"] for r in row)
+            end_x = max(r.bbox["x"] + r.bbox["width"] for r in row)
+            end_y = max(r.bbox["y"] + r.bbox["height"] for r in row)
+            box = dict(x=left, y=top, width=end_x - left, height=end_y - top)
             margin = max(16, min(32, round(box["height"] * 0.25)))
             x, y = max(0, int(box["x"]) - margin), max(0, int(box["y"]) - margin)
             # A little right-side context also covers a continuation
@@ -420,11 +447,85 @@ class ProcessWorker(QObject):
             if right <= x or bottom <= y:
                 return None
             cursors = ProcessWorker._cursor_rectangles(frame, box)
+            for region in row:
+                cursors.extend(ProcessWorker._cursor_rectangles(frame, region.bbox))
             patches.append((x, y, right, bottom, frame[y:bottom, x:right, :3].copy(), cursors, box.copy()))
         return (height, width), patches
 
+    @staticmethod
+    def _same_pixel_text(pixels, current, focus):
+        """Allow flat-panel shading and resampling only with identical ink."""
+        masks = []
+        old_gray = None
+        for image in (pixels, current):
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            histogram = cv2.calcHist([gray], [0], focus.astype(np.uint8), [256], [0, 256]).ravel()
+            total = histogram.sum()
+            if not total:
+                return False
+            cumulative = histogram.cumsum()
+            low, high = (np.searchsorted(cumulative, total * p) for p in (0.01, 0.99))
+            if high - low < 96:
+                return False
+            if old_gray is None:
+                old_gray, old_low, old_high = gray, low, high
+            # A solid dialogue panel is eligible; textures/random pixels are
+            # not. Two adjacent bins tolerate a small background gradient.
+            bins = histogram.reshape(16, 16).sum(axis=1)
+            if max(bins[:-1] + bins[1:]) < 0.55 * total:
+                return False
+            ink = gray > (float(low) + float(high)) / 2
+            if np.count_nonzero(ink & focus) > 0.5 * total:
+                ink = ~ink
+            masks.append((ink & focus).astype(np.uint8))
+        old, new = masks
+        old_moments, new_moments = (cv2.moments(mask, binaryImage=True) for mask in masks)
+        if not old_moments["m00"] or not new_moments["m00"]:
+            return False
+        dx, dy = (
+            round(new_moments[key] / new_moments["m00"] - old_moments[key] / old_moments["m00"])
+            for key in ("m10", "m01")
+        )
+        if abs(dx) > 2 or abs(dy) > 2:
+            return False
+        # Excluded cursor pixels move with the image too. Only compare pixels
+        # valid in both alignments, including when an arrow touches the box.
+        aligned_focus = focus & np.roll(focus, (dy, dx), (0, 1))
+        if np.any((np.roll(old, (dy, dx), (0, 1)) != new) & aligned_focus):
+            return False
+        # Antialias changes are limited to existing glyph edges. A new dim or
+        # colored glyph away from those edges must remain a real text change.
+        kernel = np.ones((3, 3), dtype=np.uint8)
+        edges = cv2.dilate(new, kernel) != cv2.erode(new, kernel)
+        aligned_gray = np.roll(old_gray, (dy, dx), (0, 1))
+        # Small glyphs can have antialias pixels inside a filled stroke too.
+        # Only pre-existing intermediate tones qualify, never fresh marks on
+        # the solid background; the binary glyph geometry still matches exactly.
+        edges |= (aligned_gray > old_low + (old_high - old_low) * 0.08) & (
+            aligned_gray < old_high - (old_high - old_low) * 0.08
+        )
+        interior = aligned_focus & ~edges
+        if not interior.any():
+            return False
+        aligned_pixels = np.roll(pixels, (dy, dx), (0, 1))
+        indices = np.flatnonzero(interior)
+        indices = indices[:: max(1, len(indices) // 2048)]
+        samples = current.reshape(-1, 3)[indices].astype(np.int16) - aligned_pixels.reshape(-1, 3)[indices]
+        offset = np.rint(np.median(samples, axis=0)).astype(np.int16)
+        # OpenCV's channel comparisons avoid full-frame NumPy RGB reductions.
+        unchanged = cv2.inRange(cv2.absdiff(current, aligned_pixels), (0, 0, 0), (2, 2, 2)) != 0
+        if np.max(np.abs(offset)) <= 32:
+            shifted = cv2.add(aligned_pixels, (*map(int, offset), 0))
+            shading = cv2.inRange(cv2.absdiff(current, shifted), (0, 0, 0), (2, 2, 2)) != 0
+        else:
+            shading = False
+        return not np.any(interior & ~unchanged & ~shading)
+
     def _same_spoken_image(self, frame, regions):
         snapshot = self._spoken_snapshot
+        if snapshot is not self._spoken_image_cache_snapshot:
+            self._spoken_image_cache_snapshot = snapshot
+            self._spoken_image_cache.clear()
         if not snapshot or not isinstance(frame, np.ndarray) or frame.ndim != 3 or frame.shape[2] < 3:
             return False
         shape, patches = snapshot
@@ -443,17 +544,45 @@ class ProcessWorker(QObject):
                 for x, y, right, bottom, _, _, _ in patches
             ):
                 return False
+        if all(np.array_equal(frame[y:bottom, x:right, :3], pixels) for x, y, right, bottom, pixels, _, _ in patches):
+            return True
+        # Cursor/filter states often alternate. Remember only hashes of up to
+        # four proven variants for this snapshot, not extra copies of frames.
+        digest = hashlib.blake2b(digest_size=16)
+        for x, y, right, bottom, _, _, _ in patches:
+            digest.update(np.ascontiguousarray(frame[y:bottom, x:right, :3]))
+        image_key = digest.digest()
+        if image_key in self._spoken_image_cache:
+            return True
         for x, y, right, bottom, pixels, old_cursors, box in patches:
             current = frame[y:bottom, x:right, :3]
             if np.array_equal(current, pixels):
                 continue
+            # Margins locate jittered boxes/cursors, but animation in those
+            # margins is not a change to the accepted dialogue itself.
+            focus = np.zeros(pixels.shape[:2], dtype=bool)
+            boxes = [box] + [
+                r.bbox
+                for r in regions
+                if r.bbox
+                and x <= r.bbox["x"]
+                and y <= r.bbox["y"]
+                and r.bbox["x"] + r.bbox["width"] <= right
+                and r.bbox["y"] + r.bbox["height"] <= bottom
+            ]
+            for area in boxes:
+                fringe = max(2, min(8, round(area["height"] * 0.1)))
+                left, top = max(0, int(area["x"]) - x - fringe), max(0, int(area["y"]) - y - fringe)
+                end_x = min(right - x, int(area["x"] + area["width"]) - x + fringe)
+                end_y = min(bottom - y, int(area["y"] + area["height"]) - y + fringe)
+                focus[top:end_y, left:end_x] = True
             cursors = old_cursors + self._cursor_rectangles(frame, box)
-            changed = np.any(current != pixels, axis=2)
             for left, top, cursor_right, cursor_bottom in cursors:
-                changed[max(0, top - y) : max(0, cursor_bottom - y), max(0, left - x) : max(0, cursor_right - x)] = (
-                    False
-                )
+                focus[max(0, top - y) : max(0, cursor_bottom - y), max(0, left - x) : max(0, cursor_right - x)] = False
+            changed = np.any(current != pixels, axis=2) & focus
             if changed.any():
+                if self._same_pixel_text(pixels, current, focus):
+                    continue
                 # A flat dialogue panel may shade/fade while its glyphs stay
                 # identical. Compare exact high-contrast ink geometry, not RGB
                 # brightness or approximate OCR strings. Textured/colored crops
@@ -481,6 +610,8 @@ class ProcessWorker(QObject):
                     shifted_ink = (gray > threshold) != (current_gray > threshold + offset)
                     if np.any(shifted_ink & changed):
                         return False
+        self._spoken_image_cache.append(image_key)
+        del self._spoken_image_cache[:-4]
         return True
 
     @staticmethod
@@ -488,6 +619,53 @@ class ProcessWorker(QObject):
         if not box or origin == (0, 0):
             return box
         return {**box, "x": box["x"] + origin[0], "y": box["y"] + origin[1]}
+
+    @staticmethod
+    def _reveal_ink(frame, regions):
+        """Count flat-panel text ink, including a little still-unrecognized tail."""
+        if not isinstance(frame, np.ndarray) or frame.ndim != 3 or frame.shape[2] < 3 or not regions:
+            return None, False
+        total, measured, cursor = 0, False, False
+        h, w = frame.shape[:2]
+        for region in regions:
+            box = region.bbox
+            if not box:
+                continue
+            arrows = ProcessWorker._cursor_rectangles(frame, box)
+            cursor |= bool(arrows)
+            x, y = max(0, int(box["x"]) - 2), max(0, int(box["y"]) - 2)
+            right = min(w, int(box["x"] + box["width"] + 2 * box["height"]))
+            bottom = min(h, int(box["y"] + box["height"]) + 2)
+            if right <= x or bottom <= y:
+                continue
+            gray = cv2.cvtColor(frame[y:bottom, x:right, :3], cv2.COLOR_BGR2GRAY)
+            histogram = cv2.calcHist([gray], [0], None, [256], [0, 256]).ravel()
+            cumulative = histogram.cumsum()
+            low, high = (np.searchsorted(cumulative, gray.size * p) for p in (0.01, 0.99))
+            bins = histogram.reshape(16, 16).sum(axis=1)
+            if high - low < 96 or max(bins[:-1] + bins[1:]) < 0.55 * gray.size:
+                continue
+            ink = gray > (float(low) + float(high)) / 2
+            if np.count_nonzero(ink) > gray.size / 2:
+                ink = ~ink
+            for left, top, end_x, end_y in arrows:
+                ink[max(0, top - y) : max(0, end_y - y), max(0, left - x) : max(0, end_x - x)] = False
+            total += np.count_nonzero(ink)
+            measured = True
+        return (total if measured else None), cursor
+
+    def _unread_source_tail(self, text):
+        """Keep completed dialogue carried onto a new GBA line out of TTS."""
+        if self._config.output_mode != OutputMode.TTS or not self._spoken_complete:
+            return text
+        previous = self._spoken_source.split()
+        tokens = list(re.finditer(r"\w+", text))
+        current = [m.group().casefold() for m in tokens]
+        for count in range(min(len(previous), len(current)), 2, -1):
+            overlap = previous[-count:]
+            if sum(map(len, overlap)) >= 12 and overlap == current[:count]:
+                return re.sub(r"^[\s,.!?。！？…:;]+", "", text[tokens[count - 1].end() :])
+        return text
 
     def _process_frame(self, frame, generation: int = 0, origin=(0, 0), preview_only=False):
         """Process a frame through OCR and translation."""
@@ -522,8 +700,9 @@ class ProcessWorker(QObject):
         self._emit(self.ocr_results_ready, display_regions, generation)
         if preview_only:
             return  # The OCR editor previews detection without translating/speaking edits.
-        regions = self._dialogue_regions(regions)
+        regions = self._dialogue_regions(regions, frame)
         text = " ".join(r.text for r in regions if r.text)
+        captured_text = text
 
         # Speech follows stable source text, not each intermediate typewriter
         # frame or a new wording returned by the translator. A transient empty
@@ -547,6 +726,10 @@ class ProcessWorker(QObject):
             self._spoken_snapshot = None
             self._suppressed_source = ""
             self._speech_candidate = ""
+            self._speech_revealing = self._speech_candidate_cursor = self._speech_cursor_expected = False
+            self._speech_reveal_gap = 0.0
+            self._speech_candidate_ink = None
+            self._spoken_complete = False
         if self._same_spoken_image(frame, regions):
             # A fresh OCR pass can change letters/order while recognizing the
             # same pixels. It must not manufacture a second translation/TTS.
@@ -555,13 +738,70 @@ class ProcessWorker(QObject):
                 self._suppressed_source = source_key
             source_key = self._spoken_source
         if source_key != self._speech_candidate:
+            previous = self._speech_candidate
+            growing = (
+                bool(previous)
+                and len(source_key) > len(previous)
+                and (source_key.startswith(previous) or (len(previous) >= 6 and source_key.startswith(previous[:-2])))
+            )
+            if growing:
+                self._speech_revealing = True
+                self._speech_reveal_gap = max(self._speech_reveal_gap, now - self._speech_candidate_since)
+            else:
+                self._speech_revealing = False
+                self._speech_reveal_gap = 0.0
             self._speech_candidate = source_key
             self._speech_candidate_since = now
+            self._speech_visual_since = now
+            self._speech_candidate_ink = None
+            self._speech_candidate_cursor = False
             self._previewed_source = ""
-        speech_stable = bool(source_key) and now - self._speech_candidate_since >= SPEECH_SETTLE_SECONDS
+            logger.debug(
+                "speech candidate changed",
+                source_id=hashlib.sha256(source_key.encode("utf-8")).hexdigest()[:12],
+                source_chars=len(captured_text),
+                growing=growing,
+                generation=generation,
+            )
+        if (
+            source_key
+            and source_key != self._spoken_source
+            and self._config.tts_enabled
+            and self._config.output_mode != OutputMode.OVERLAY
+        ):
+            ink, cursor = self._reveal_ink(frame, regions)
+            if cursor:
+                if not self._speech_cursor_expected:
+                    logger.debug("speech completion cursor learned", generation=generation)
+                self._speech_cursor_expected = self._speech_candidate_cursor = True
+            previous_ink = self._speech_candidate_ink
+            if ink is not None and previous_ink is not None and ink > previous_ink + max(4, previous_ink * 0.005):
+                if not self._speech_revealing:
+                    logger.debug("speech reveal detected", reason="visible ink growth", generation=generation)
+                self._speech_revealing = True
+                self._speech_reveal_gap = max(self._speech_reveal_gap, now - self._speech_visual_since)
+                self._speech_visual_since = now
+                if not cursor:
+                    self._speech_candidate_cursor = False
+            self._speech_candidate_ink = ink
+        settle_seconds = SPEECH_SETTLE_SECONDS
+        if not self._speech_candidate_cursor:
+            if self._speech_cursor_expected:
+                settle_seconds = SPEECH_CURSOR_FALLBACK_SECONDS
+            if self._speech_revealing:
+                settle_seconds = max(
+                    settle_seconds, SPEECH_REVEAL_SETTLE_SECONDS, min(1.5, self._speech_reveal_gap * 1.5 + 0.15)
+                )
+        # Bound extra visual-only waiting under persistent shader/edge noise.
+        since = max(self._speech_candidate_since, self._speech_visual_since)
+        if now - self._speech_candidate_since >= 2.0:
+            since = self._speech_candidate_since
+        speech_stable = bool(source_key) and now - since >= settle_seconds
+        source_complete = self._speech_candidate_cursor or bool(re.search(r"[.!?。！？…][\"'”’)]*\s*$", captured_text))
         if not source_key and now - self._speech_candidate_since >= 1.5:
             self._spoken_source = ""  # A sustained scene break can start a new identical line.
             self._spoken_snapshot = None
+            self._spoken_complete = False
 
         if not text:
             if self._mode == OverlayMode.INPLACE:
@@ -581,6 +821,9 @@ class ProcessWorker(QObject):
             return
 
         # Translation
+        text = self._unread_source_tail(text)
+        if not text:
+            return
         can_preview = (
             self.stream_speech
             and self._config.tts_enabled
@@ -666,7 +909,15 @@ class ProcessWorker(QObject):
                                 streamed = True
                                 self._spoken_source = source_key
                                 self._spoken_snapshot = snapshot
+                                self._spoken_complete = source_complete
                                 self._suppressed_source = ""
+                                logger.debug(
+                                    "speech stream source accepted",
+                                    source_id=hashlib.sha256(source_key.encode("utf-8")).hexdigest()[:12],
+                                    source_chars=len(captured_text),
+                                    reveal_wait_ms=round(settle_seconds * 1000),
+                                    generation=generation,
+                                )
                                 self._emit(self.speech_stream_ready, stream, generation)
 
                         translated, was_cached = self._translator.translate_stream(text, sentence_ready)
@@ -702,11 +953,13 @@ class ProcessWorker(QObject):
         ):
             self._spoken_source = source_key
             self._spoken_snapshot = snapshot
+            self._spoken_complete = source_complete
             self._suppressed_source = ""
             logger.debug(
                 "speech source accepted",
                 source_id=hashlib.sha256(source_key.encode("utf-8")).hexdigest()[:12],
-                source_chars=len(text),
+                source_chars=len(captured_text),
+                reveal_wait_ms=round(settle_seconds * 1000),
                 generation=generation,
             )
             self._emit(self.speech_ready, " ".join(speech_parts), generation)

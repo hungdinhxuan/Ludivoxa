@@ -43,6 +43,7 @@ lower is faster.
 | v1.0.0 — buffered baseline | 1,413.6 ms | 1,743.6 ms | 4,465.2 ms |
 | v1.1.0 — streaming profile¹ | 912.6 ms | 1,013.6 ms | 1,436.9 ms |
 | Reduction versus v1.0.0 | **35.4%** | **41.9%** | **67.8%** |
+| v1.1.1 — OCR repeat/audio fixes² | Not measured | Not measured | Not measured |
 
 Measured on Windows 11, Core i7-13700F and RTX 4090 24 GB, using the same saved
 dialogue crops, English OCR → Vietnamese, local HauhauCS Qwen3 4B Q4_K_M,
@@ -55,6 +56,13 @@ the final prompt/updater changes; the published installer was not separately
 re-benchmarked. These trials exclude model loading, native capture phase,
 game typewriter reveal and waiting for earlier speech. They do not measure
 live game FPS, acoustic speaker latency or p95 latency.
+
+² v1.1.1 fixes repeated speech from OCR word-box jitter, animated dialogue
+cursors and streamed translation aliases, and negotiates supported audio
+channel formats. A controlled replay with real OCR on ten saved GBA images
+reduced speech requests from 10 to 1; it did not measure TTFA or synthesize
+audio. Revealing text now waits adaptively, so earlier TTFA results are not
+reused for this version. See the [patch validation](docs/PERFORMANCE.md#v111-live-gba-repeat-reproduction).
 
 See [measurement details and reproduction](docs/PERFORMANCE.md#v110-streaming-profile)
 and the [public timing samples](docs/benchmarks/ttfa.json). New versions will
@@ -72,10 +80,10 @@ Python, English/Japanese OCR models, Vietnamese speech, Ollama 0.40.16 and
 HauhauCS Qwen3 4B Aggressive Q4_K_M are included. No separate model download is
 needed for that profile. The installer preserves an existing `config.yml`.
 
-Already using v1.0.0? Run **Ludivoxa-1.1.0-App-Update.exe** and select the
-existing installation directory. This smaller package preserves your models,
-runtime and settings. Version 1.1.0 adds the Updates page for future releases;
-public release checks and downloads need no GitHub token or sign-in.
+Already using v1.1.0? Open **Updates** to install v1.1.1. For v1.0.0, or to
+update manually, run **Ludivoxa-1.1.1-App-Update.exe** and select the existing
+installation directory. This smaller package preserves your models, runtime
+and settings. Public release checks and downloads need no GitHub token or sign-in.
 
 GitHub's automatic **Source code** archives do not include models or runtimes.
 The Windows build is unsigned. Executable/config compatibility names such as

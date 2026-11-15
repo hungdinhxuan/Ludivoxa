@@ -1,5 +1,119 @@
 # Validation and performance
 
+## v1.1.1 live GBA repeat reproduction
+
+A read-only capture collected 112 selected-box frames while the user operated
+the game. It used real local OCR and simulated translation, without playing
+additional audio. The initial adaptive typewriter patch and the deployed build
+both accepted four sources in that session: adaptive waiting alone did not fix
+the static-dialogue repeat.
+
+Inspection identified two image-guard failures. Word detections split/merged
+between frames, and y-coordinate jitter changed the recognized word order.
+Individual remembered word patches could not contain newly merged boxes.
+Separately, a bouncing continuation arrow left one scanline of gray shadow
+outside its mask. The guard now stores horizontal line patches, orders words
+left to right within each line and includes the arrow's vertical shadow.
+Predominantly vertical detections retain engine order.
+
+Replaying ten saved states of the same completed dialogue, with their actual
+pixels, box positions and captured source variations, produced **10 translation/
+speech events before the fix and 1 after it**. Replay timing was controlled;
+translations were simulated and no audio was synthesized. This establishes
+the captured image-guard regression, not an audible live-game success rate or
+an end-to-end TTFA measurement. Tests also retain genuine changes such as
+HP 10 to HP 20, new text and vertical Japanese column order.
+
+A second replay reran the real offline OCR engine on those ten saved images,
+including its per-word text, instead of injecting the previously captured
+source strings. It reproduced the same **10 to 1** reduction in speech events.
+The source suite passes **590 tests, one platform skip** after these changes.
+The rebuilt Windows EXE also passes its real offline OCR/Ollama/TTS diagnostic
+(**591 passed, one skipped** across both checks), including playback under UI
+stalls and loopback-only network destinations. Fifteen embedded modules match
+the source. The patched local app was reopened with its configuration retained;
+these fixes are not in the published v1.1.0 installer.
+
+## v1.1.1 typewriter dialogue handling
+
+Live debug logs recorded accepted sources of 8, 13 and 20 characters within
+about two seconds. Those were different translations, so identical-utterance
+suppression alone could not stop the successive reads. Character counts are
+diagnostic evidence of a possible reveal sequence, not a recording of every
+intermediate source string. The log also showed an identical utterance after
+opening the OCR editor, which previously cleared the completed-speech guard.
+
+The worker now tracks growing text and newly appearing high-contrast ink in
+flat dialogue regions. Static text keeps the 350 ms settle window. Observed
+reveals use 800–1500 ms of quiet, adapted to the observed interval between
+updates; a detected continuation cursor permits the 350 ms path. Once a game
+has shown such a cursor, cue-less candidates have at least a 1200 ms fallback.
+Additional visual-only waiting is bounded for persistent shader noise.
+Cursor-backed trailing T/V/Y OCR artifacts are removed before debounce, so a
+blinking GBA arrow does not restart the source timer.
+
+In TTS-only mode, exact overlap of at least three words/twelve word characters
+from completed prior dialogue is excluded from the next translation. This
+handles appended sentences and carried-over lines, using the existing LLM
+context. The fuzzy translation cache cannot substitute an earlier prefix for
+newly extended text. Tests cover word-render pauses longer than 350 ms,
+unchanged OCR while visible ink grows, cursor learning/blinking and fallback,
+source overlap, changed content and unchanged OCR-editor exits. These are
+controlled tests; no new live FPS or end-to-end TTFA result is claimed.
+
+## v1.1.1 streaming translation repeat guard
+
+The streaming controller previously keyed requests only by OCR source text.
+The translation cache can map small source variations to the same Vietnamese
+utterance; different source keys could therefore play that utterance twice.
+The controller now compares against the last actually played translation.
+It buffers only a matching prefix, suppresses a fully identical utterance and
+releases the complete new text as soon as it differs. Numbers, new sentences,
+shorter translations and explicit capture/voice resets remain supported.
+
+Regression tests cover duplicates after playback, prefetched duplicates,
+different chunk/sentence boundaries, buffered/streamed transitions and the
+real LLM translation-cache interface. The latter exercises three alternating
+OCR keys with one synthesis and one playback, without the image guard. The
+fuzzy cache also excludes matches with changed numbers or negation markers.
+
+A live 56-frame selected-box sample produced one simulated speech request;
+that sample did not reproduce the user's audible repeat. Separately, the local
+LLM/cache mapped the observed Pokemon/Pokamon variants to identical translations.
+These are diagnostic observations, not a new end-to-end latency benchmark.
+Debug logs now identify accepted streaming sources, generated translations and
+playback starts with hashes, without adding dialogue text to those events.
+
+Validation: **570 passing full-suite source tests, one platform skip**, plus
+one additional passing intentional-repetition regression and one passing
+rebuilt-EXE diagnostic (**572 passed, one skipped** across those checks).
+These were intermediate development checks with debug logging before the
+final v1.1.1 validation above; they were not in the v1.1.0 installer.
+
+## v1.1.1 pixel-font repeat guard
+
+Controlled OCR variants were replayed over a recorded GBA frame cropped to a
+1500 × 320 dialogue selection, with source origin (950, 1400). Across panel
+shading, a one-pixel translation and animated box padding, v1.1.0 produced four
+translation/speech events; the updated guard produced one per case. OCR text
+variants were injected for this comparison; it does not measure recognition
+accuracy, live gameplay or synthesis latency.
+
+The guard compares exact binary ink geometry on eligible flat panels, with
+bounded translation and antialias/background checks. It retains four hashes
+of proven image states for the current accepted dialogue. Twenty subsequent
+checks per case had medians of about 3.7–3.8 ms on that crop; first-time variant
+validation is more expensive. This timing is not OCR latency or TTFA. Tests
+also retain genuine changes such as HP 10 → HP 20, added negation, new dialogue,
+and reset behavior across scene/capture changes. No new end-to-end TTFA number
+is claimed for this patch.
+
+The combined audio-format and pixel-font patches pass **551 source tests,
+one platform skip**, plus a passing rebuilt Windows EXE diagnostic (**552
+passed, one skipped** overall). Fifteen embedded modules match the source.
+These were intermediate development checks before the final v1.1.1
+validation above; the v1.1.0 installer did not include these patches.
+
 ## v1.1.0 updater validation
 
 The public updater source suite passes **522 tests, one platform skip**.

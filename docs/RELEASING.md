@@ -5,7 +5,7 @@ version numbers do not define this fork's release sequence.
 
 Version **1.1.0** adds compatible features: the updater,
 streaming speech and latency improvements. Use patch
-versions such as 1.1.1 for fixes afterward. The published v1.0.0 has no updater;
+version **1.1.1** fixes OCR/TTS repeats and audio formats. The published v1.0.0 has no updater;
 its users must install the first updater-enabled version manually once.
 
 1. Update the project version in `pyproject.toml`, its editable entry in
@@ -23,11 +23,11 @@ its users must install the first updater-enabled version manually once.
 ```powershell
 $releaseCommit = git rev-parse HEAD
 uv run python packaging/package_release.py `
-  --installer dist/installer-v1.1.0 `
-  --output dist/releases/v1.1.0 `
+  --installer dist/installer-v1.1.1 `
+  --output dist/releases/v1.1.1 `
   --source-commit $releaseCommit `
-  --app-update dist/app-update/Ludivoxa-1.1.0-App-Update.exe `
-  --local-zip dist/Ludivoxa-1.1.0-Full-Offline-Setup.zip
+  --app-update dist/app-update/Ludivoxa-1.1.1-App-Update.exe `
+  --local-zip dist/Ludivoxa-1.1.1-Full-Offline-Setup.zip
 ```
 
 The helper validates contiguous data slices and the per-file upload limit,
@@ -43,11 +43,11 @@ Create the release as a draft, upload all assets, check their reported byte
 counts/digests, then publish it for the existing tag. With GitHub CLI:
 
 ```powershell
-git tag -a v1.1.0 -m 'Ludivoxa v1.1.0'
-git push origin v1.1.0
-gh release create v1.1.0 --draft --verify-tag --title 'Ludivoxa v1.1.0' --notes-file docs/releases/v1.1.0.md
-gh release upload v1.1.0 dist/releases/v1.1.0/*
-gh release edit v1.1.0 --draft=false --latest
+git tag -a v1.1.1 -m 'Ludivoxa v1.1.1'
+git push origin v1.1.1
+gh release create v1.1.1 --draft --verify-tag --title 'Ludivoxa v1.1.1' --notes-file docs/releases/v1.1.1.md
+gh release upload v1.1.1 dist/releases/v1.1.1/*
+gh release edit v1.1.1 --draft=false --latest
 ```
 
 GitHub's automatic source archives exclude the binary/model distribution.

@@ -4,10 +4,10 @@
 
 Từ [Releases](https://github.com/hungdinhxuan/Ludivoxa/releases), tải cùng phiên bản:
 
-- `Ludivoxa-1.1.0-Full-Offline-Setup.exe`
-- `Ludivoxa-1.1.0-Full-Offline-Setup-1.bin`
-- `Ludivoxa-1.1.0-Full-Offline-Setup-2.bin`
-- `Ludivoxa-1.1.0-Full-Offline-Setup-3.bin`
+- `Ludivoxa-1.1.1-Full-Offline-Setup.exe`
+- `Ludivoxa-1.1.1-Full-Offline-Setup-1.bin`
+- `Ludivoxa-1.1.1-Full-Offline-Setup-2.bin`
+- `Ludivoxa-1.1.1-Full-Offline-Setup-3.bin`
 - `SHA256SUMS.txt`, `README.txt` và `release-manifest.json` nếu cần đối chiếu.
 
 Đặt EXE và cả ba BIN trong cùng thư mục, rồi chạy EXE. Không chạy từng BIN.
@@ -126,7 +126,7 @@ Tải cache nằm ở `%USERPROFILE%/.interpreter/updates`; nếu cài đặt l�
 `install.log` trong thư mục phiên bản đó. Cài tự động dành cho EXE Windows;
 bản chạy từ source cần dùng bộ cài hoặc cập nhật mã nguồn thủ công. Bộ cài
 hiện vẫn chưa ký số. Bản v1.0.0 đã phát hành trước đó chưa có trang Updates;
-cần chạy gói `Ludivoxa-1.1.0-App-Update.exe` thủ công một lần vào thư mục app cũ.
+cần chạy gói `Ludivoxa-1.1.1-App-Update.exe` thủ công một lần vào thư mục app cũ.
 
 ## Xử lý sự cố
 

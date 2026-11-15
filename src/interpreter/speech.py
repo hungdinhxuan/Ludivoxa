@@ -1,5 +1,6 @@
 """Offline Vietnamese voices, background prefetch and buffered native PCM playback."""
 
+import hashlib
 import json
 import os
 import re
@@ -30,6 +31,7 @@ class SpeechStream:
         self._queue = Queue(maxsize=capacity)
         self._done, self._cancelled = threading.Event(), threading.Event()
         self._error = None
+        self.translation_text = ""  # Populated only on generated audio streams.
 
     def put(self, value, cancelled=lambda: False):
         while not self._cancelled.is_set() and not cancelled():
@@ -79,6 +81,37 @@ def _output_device(sd):
         if len(matches) == 1:
             return matches[0]
     return device
+
+
+def _speech_text_key(text):
+    return " ".join(re.findall(r"\w+", text.casefold()))
+
+
+def _output_format(sd):
+    """Validate the selected endpoint's format before consuming speech audio."""
+    preferred = _output_device(sd)
+    original = sd.query_devices(kind="output")
+    devices = [preferred]
+    if preferred["index"] != original["index"]:
+        devices.append(original)  # Only fall back to the user's original output.
+    last_error = None
+    for device in devices:
+        maximum = int(device["max_output_channels"])
+        if maximum < 1:
+            continue
+        settings = dict(device=device["index"], samplerate=int(device["default_samplerate"]), dtype="float32")
+        if sd.query_hostapis(device["hostapi"])["name"] == "Windows WASAPI":
+            settings["extra_settings"] = sd.WasapiSettings(exclusive=False, auto_convert=True)
+        # Some surround/virtual endpoints require their native channel count;
+        # max_output_channels is not a guarantee that stereo is supported.
+        for channels in dict.fromkeys((min(2, maximum), maximum, 1)):
+            try:
+                sd.check_output_settings(channels=channels, **settings)
+            except sd.PortAudioError as exc:
+                last_error = exc
+                continue
+            return device, dict(settings, channels=channels)
+    raise ValueError(f"Selected audio output has no supported speech format. {last_error or 'No output channels.'}")
 
 
 def _wav_bytes(samples, sample_rate):
@@ -194,9 +227,9 @@ class PCMPlayer(QObject):
         try:
             import sounddevice as sd
 
-            device = _output_device(sd)
-            rate = int(device["default_samplerate"])
-            channels = min(2, int(device["max_output_channels"]))
+            device, output_format = _output_format(sd)
+            rate = output_format["samplerate"]
+            channels = output_format["channels"]
             host = sd.query_hostapis(device["hostapi"])["name"]
             callback_mode = host in ("Windows WDM-KS", "ASIO")
 
@@ -212,7 +245,11 @@ class PCMPlayer(QObject):
                     if rate != source_rate:
                         size = round(len(samples) * rate / source_rate)
                         samples = np.interp(np.arange(size) * source_rate / rate, np.arange(len(samples)), samples)
-                    yield np.ascontiguousarray(np.repeat(samples[:, None], channels, axis=1) * volume, dtype="float32")
+                    pcm = np.zeros((len(samples), channels), dtype="float32")
+                    # Mono speech goes to the front L/R channels. Do not send
+                    # a full-range voice signal to surround or LFE channels.
+                    pcm[:, : min(2, channels)] = (samples * volume)[:, None]
+                    yield pcm
 
             chunks = iter(decoded())
             if callback_mode:
@@ -238,9 +275,7 @@ class PCMPlayer(QObject):
                     raise sd.CallbackStop
 
             options = {"callback": render, "finished_callback": done.set} if callback_mode else {}
-            stream = sd.OutputStream(
-                device=device["index"], samplerate=rate, channels=channels, dtype="float32", latency=0.06, **options
-            )
+            stream = sd.OutputStream(**output_format, latency=0.06, **options)
             with self._lock:
                 if token != self._generation or self._closed:
                     return
@@ -296,6 +331,7 @@ class PCMPlayer(QObject):
                 streaming=isinstance(wav_bytes, SpeechStream) and not callback_mode,
                 requested_latency_ms=60,
                 output_device=device["index"],
+                output_channels=channels,
                 device_latency_ms=stream.latency * 1000,
                 buffer_active=False,
             )
@@ -593,6 +629,7 @@ class SpeechController(QObject):
         self._pending = self._ready = None
         self._warm_key = None
         self._playing_audio = self._input_stream = None
+        self._last_spoken_translation = None
 
     @property
     def _busy(self):
@@ -627,14 +664,18 @@ class SpeechController(QObject):
             normalized = ("source", text.key)
         else:
             text = clean_speech_text(text)
-            normalized = " ".join(re.findall(r"\w+", text.casefold()))
+            normalized = _speech_text_key(text)
         if self._closed or not self._enabled or not normalized or normalized == self._last_text:
             if isinstance(text, SpeechStream):
                 text.cancel()
             return
-        if self._playing and normalized == self._playing_text:
-            # OCR can oscillate A -> B -> A while A is still being read. Keep
-            # the current audio and discard the obsolete variant/prefetch.
+        previous = self._last_spoken_translation
+        previous_key = _speech_text_key(previous.translation_text) if isinstance(previous, SpeechStream) else previous
+        if (self._playing and normalized == self._playing_text) or (
+            not isinstance(text, SpeechStream) and normalized == previous_key
+        ):
+            # OCR can oscillate A -> B -> A. Compare translated text too when
+            # switching between streamed and buffered output paths.
             self._last_text = normalized
             self._request += 1
             if isinstance(text, SpeechStream):
@@ -697,6 +738,8 @@ class SpeechController(QObject):
     def _produce_stream(self, generation, request, source, model_path, speaker_id, rate, reference_audio):
         audio = SpeechStream(capacity=2, source=source)
         first = True
+        previous = self._last_spoken_translation
+        previous_key = _speech_text_key(previous.translation_text) if isinstance(previous, SpeechStream) else previous
 
         def cancelled():
             return (
@@ -705,13 +748,39 @@ class SpeechController(QObject):
                 or (request != self._request and audio is not self._playing_audio)
             )
 
-        try:
+        def translated_parts():
+            # Restore the translated-text guard used by buffered speech. OCR
+            # keys may differ while their Vietnamese translations are equal.
+            # Hold only a prefix matching the last played translation; release
+            # the full new text immediately when it diverges. Packet/sentence
+            # boundaries must not affect the comparison.
+            comparing = previous_key
+            pending = []
             for text in source:
                 if cancelled():
                     raise CancelledError()
                 text = clean_speech_text(text)
-                if not text:
+                if not _speech_text_key(text):
                     continue
+                if comparing:
+                    pending.append(text)
+                    key = _speech_text_key(" ".join(pending))
+                    if key == comparing or comparing.startswith(key + " "):
+                        continue
+                    text = " ".join(pending)
+                    pending.clear()
+                    comparing = None
+                yield text
+            if pending:
+                text = " ".join(pending)
+                if _speech_text_key(text) != comparing:
+                    yield text  # A shorter, different translation remains valid.
+                else:
+                    logger.debug("speech repeat suppressed", reason="same translated utterance", request=request)
+
+        try:
+            for text in translated_parts():
+                audio.translation_text = " ".join(filter(None, (audio.translation_text, text)))
                 for chunk in self._synthesizer.iter_audio(
                     text,
                     model_path,
@@ -726,6 +795,15 @@ class SpeechController(QObject):
                         first = False
                         self._stream_ready.emit(generation, request, audio)
             audio.finish()
+            logger.debug(
+                "speech translation processed",
+                source_id=hashlib.sha256(str(source.key).encode("utf-8")).hexdigest()[:12],
+                translation_id=hashlib.sha256(_speech_text_key(audio.translation_text).encode("utf-8")).hexdigest()[
+                    :12
+                ],
+                generated_audio=not first,
+                request=request,
+            )
         except Exception as exc:
             audio.finish(exc)
             if first:
@@ -763,6 +841,15 @@ class SpeechController(QObject):
         self._playing = True
         self._playing_audio = audio
         self._playing_text = text_key
+        self._last_spoken_translation = audio if isinstance(audio, SpeechStream) else text_key
+        logger.debug(
+            "speech playback started",
+            request=self._request,
+            streaming=isinstance(audio, SpeechStream),
+            source_id=hashlib.sha256(
+                str(audio.source.key if isinstance(audio, SpeechStream) and audio.source else text_key).encode("utf-8")
+            ).hexdigest()[:12],
+        )
         self.status_changed.emit("Reading Vietnamese translation")
         self._player.play(audio)
 
@@ -782,6 +869,7 @@ class SpeechController(QObject):
         if isinstance(self._playing_audio, SpeechStream):
             self._playing_audio.cancel()
         self._playing_audio = None
+        self._last_spoken_translation = None
         self._cancel_waiting_streams()
         self._pending = self._ready = None
         self._generation += 1
@@ -805,6 +893,7 @@ class SpeechController(QObject):
         self._player.stop()
         if reset:
             self._last_text = ""
+            self._last_spoken_translation = None
 
     def close(self):
         self._closed = True

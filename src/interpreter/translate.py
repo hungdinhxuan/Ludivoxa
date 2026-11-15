@@ -1,6 +1,7 @@
 """Translation module using Sugoi V4 for offline Japanese to English."""
 
 import os
+import re
 import sys
 
 # Suppress HuggingFace Hub warnings (must be set before import)
@@ -187,11 +188,28 @@ class TranslationCache:
             return self._cache[text]
 
         # Try fuzzy match
+        facts = self._facts(text)
+        words = re.findall(r"\w+", text.casefold())
         for cached_text, translation in self._cache.items():
-            if text_similarity(text, cached_text) >= self._similarity_threshold:
+            cached_words = re.findall(r"\w+", cached_text.casefold())
+            if words != cached_words and (
+                words[: len(cached_words)] == cached_words or cached_words[: len(words)] == words
+            ):
+                continue  # Typewriter extensions/truncations contain different content.
+            if facts == self._facts(cached_text) and text_similarity(text, cached_text) >= self._similarity_threshold:
                 return translation
 
         return None
+
+    @staticmethod
+    def _facts(text):
+        """Do not reuse a nearby OCR key when numbers or negation changed."""
+        text = text.casefold()
+        numbers = tuple(re.findall(r"\d+", text))
+        negation = tuple(
+            re.findall(r"\b(?:no|not|never|without|cannot|không|chưa|đừng|chẳng|chớ)\b|n['’]t\b|ない|ません|無い", text)
+        )
+        return numbers, negation
 
     def put(self, text: str, translation: str) -> None:
         """Store a translation in the cache.

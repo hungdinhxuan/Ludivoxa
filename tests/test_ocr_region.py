@@ -141,6 +141,32 @@ def test_editor_preview_performs_ocr_without_llm_or_speech():
     assert raw and not spoken
 
 
+@pytest.mark.parametrize("busy", [False, True])
+@pytest.mark.parametrize(("accepted", "changed"), [(False, False), (True, False), (True, True)])
+def test_unchanged_editor_does_not_forget_completed_speech(window, monkeypatch, busy, accepted, changed):
+    from interpreter.gui import main_window
+
+    window._capturing = True
+    window._capture_generation = 3
+    window._last_frame = np.zeros((80, 120, 4), dtype=np.uint8)
+    window._last_ocr_results = []
+    window._config.save = MagicMock()
+    window._speech = SimpleNamespace(_busy=busy, stop=MagicMock())
+    window._process_worker = MagicMock()
+    dialog = MagicMock()
+    dialog.exec.return_value = accepted
+    dialog.get_zones.return_value = []
+    dialog.get_confidence.return_value = window._config.get_ocr_confidence("Game")
+    dialog.get_scan_region.return_value = REGION if changed else None
+    monkeypatch.setattr(main_window, "OCRConfigDialog", MagicMock(return_value=dialog))
+    window._open_ocr_config()
+    resets = [call.kwargs["reset"] for call in window._speech.stop.call_args_list]
+    assert resets == ([False, True] if accepted and changed and not busy else [busy])
+    assert window._capture_generation == 5  # Stale preview results remain rejected.
+    assert window._process_worker.discard_pending_frames.call_count == 2
+    assert window._ocr_config_dialog is None
+
+
 @pytest.fixture
 def dialog(qapp):
     instance = OCRConfigDialog(initial_zones=[{"x": 0, "y": 0, "width": 1, "height": 0.2}])

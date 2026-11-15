@@ -1,10 +1,10 @@
-Ludivoxa 1.1.0 - Windows release
+Ludivoxa 1.1.1 - Windows release
 
 Keep the Setup.exe and every Setup-*.bin file in the same directory. Run Setup.exe.
 The installer is per-user and does not require administrator rights. Python and
 a separate Ollama installation are not required. Model files are included.
 
-For an existing installation, Ludivoxa-1.1.0-App-Update.exe contains only the
+For an existing installation, Ludivoxa-1.1.1-App-Update.exe contains only the
 app and libraries. Select the existing installation directory; configuration,
 models and Ollama are kept. It cannot create a fresh offline installation.
 Version 1.0.0 users must upgrade manually once. From 1.1.0, open Updates to

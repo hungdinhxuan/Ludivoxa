@@ -262,7 +262,7 @@ class MainWindow(QMainWindow):
         self._pages.addWidget(self._build_play_page(capture_group))
         self._pages.addWidget(self._page(appearance_group))
         self._pages.addWidget(self._build_engines_page(pair_card, ocr_group, translation_group))
-        self._updates_page = UpdatesPage(self._config,__version__,self)
+        self._updates_page = UpdatesPage(self._config, __version__, self)
         self._updates_page.update_available.connect(self._on_update_available)
         self._pages.addWidget(self._updates_page)
         self._nav.currentRowChanged.connect(self._pages.setCurrentIndex)
@@ -2360,6 +2360,8 @@ class MainWindow(QMainWindow):
         # Get current settings for this window
         current_zones = self._config.get_exclusion_zones(self._current_window_title)
         current_confidence = self._config.get_ocr_confidence(self._current_window_title)
+        current_region = self._config.get_ocr_region(self._current_window_title)
+        interrupted_speech = bool(self._speech._busy)
 
         # Create and show dialog
         dialog = OCRConfigDialog(
@@ -2367,7 +2369,7 @@ class MainWindow(QMainWindow):
             window_title=self._current_window_title,
             initial_confidence=current_confidence,
             initial_zones=current_zones,
-            initial_region=self._config.get_ocr_region(self._current_window_title),
+            initial_region=current_region,
         )
 
         # Connect confidence changes to worker (for live preview)
@@ -2377,7 +2379,7 @@ class MainWindow(QMainWindow):
         self._ocr_config_dialog = dialog
         self._capture_generation += 1
         self._process_worker.discard_pending_frames()
-        self._speech.stop(reset=True, reason="OCR region editing")
+        self._speech.stop(reset=interrupted_speech, reason="OCR region editing")
 
         # Update with current frame
         dialog.update_frame(self._last_frame)
@@ -2390,9 +2392,14 @@ class MainWindow(QMainWindow):
             # Save zones and confidence to config
             new_zones = dialog.get_zones()
             new_confidence = dialog.get_confidence()
+            new_region = dialog.get_scan_region()
+            if not interrupted_speech and (
+                new_zones != current_zones or new_confidence != current_confidence or new_region != current_region
+            ):
+                self._speech.stop(reset=True, reason="OCR settings changed")
 
             self._config.set_exclusion_zones(self._current_window_title, new_zones)
-            self._config.set_ocr_region(self._current_window_title, dialog.get_scan_region())
+            self._config.set_ocr_region(self._current_window_title, new_region)
             self._config.set_ocr_confidence(self._current_window_title, new_confidence)
             self._config.save()
 
@@ -2407,7 +2414,8 @@ class MainWindow(QMainWindow):
             self._process_worker.set_confidence_threshold(current_confidence)
 
         self._ocr_config_dialog = None
-        # Reject in-flight preview work and read the final selection once.
+        # Reject in-flight preview work. Unchanged settings retain the completed
+        # TTS guard; changed settings or an interrupted line can be read anew.
         self._capture_generation += 1
         self._process_worker.discard_pending_frames()
         self._last_ocr_results = []
@@ -2418,7 +2426,7 @@ class MainWindow(QMainWindow):
 
     def cleanup(self):
         """Clean up resources before closing."""
-        if hasattr(self,"_updates_page"):
+        if hasattr(self, "_updates_page"):
             self._updates_page.shutdown()
         self._stop_capture()
         self._speech.close()

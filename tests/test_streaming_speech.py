@@ -145,6 +145,187 @@ class Player(QObject):
         self.stop = MagicMock()
 
 
+@pytest.mark.parametrize("prefetch", [False, True])
+@pytest.mark.parametrize(
+    ("first_parts", "next_parts"),
+    [
+        (["Đây là Pokémon."], ["Đây là Pokémon."]),
+        (["Xin chào. Đi cùng tôi."], ["Xin chào.", "Đi cùng tôi."]),
+        (["Xin chào.", "Đi cùng tôi."], ["Xin chào. Đi cùng tôi."]),
+    ],
+)
+def test_different_ocr_keys_do_not_replay_the_same_translation(qapp, prefetch, first_parts, next_parts):
+    synth = MagicMock()
+    synth.iter_audio.side_effect = lambda text, *_args, **_kwargs: iter([text.encode()])
+    player = Player()
+    controller = SpeechController(synthesizer=synth, player=player)
+
+    def submit(key, parts):
+        source = SpeechStream(key=key)
+        for text in parts:
+            source.put(text)
+        source.finish()
+        controller.submit(source, "voice.onnx")
+
+    try:
+        submit("creatures called pokemon", first_parts)
+        until(lambda: player.play.call_count == 1)
+        assert list(player.play.call_args.args[0])
+        until(lambda: not controller._working)
+        if not prefetch:
+            player.finished.emit()
+        submit("creatures called pokamon", next_parts)
+        until(lambda: not controller._working)
+        if prefetch:
+            player.finished.emit()
+        QTest.qWait(20)
+        assert player.play.call_count == 1
+        assert controller._ready is None and controller._pending is None
+    finally:
+        controller.close()
+
+
+@pytest.mark.parametrize("next_text", ["Bạn có 20 HP.", "Bạn có 10 HP. Đừng đi.", "Bạn có 10 HP."])
+def test_duplicate_guard_preserves_new_text_and_explicit_reset(qapp, next_text):
+    synth = MagicMock()
+    synth.iter_audio.side_effect = lambda text, *_args, **_kwargs: iter([text.encode()])
+    player = Player()
+    controller = SpeechController(synthesizer=synth, player=player)
+
+    def read(key, text, count):
+        source = SpeechStream(key=key)
+        source.put(text)
+        source.finish()
+        controller.submit(source, "voice.onnx")
+        until(lambda: player.play.call_count == count)
+        assert list(player.play.call_args.args[0]) == [text.encode()]
+        until(lambda: not controller._working)
+        player.finished.emit()
+
+    try:
+        read("first", "Bạn có 10 HP.", 1)
+        if next_text == "Bạn có 10 HP.":
+            controller.stop(reset=True)
+        read("second", next_text, 2)
+    finally:
+        controller.close()
+
+
+def test_matching_translation_prefix_is_not_spoken_until_it_diverges(qapp):
+    synth = MagicMock()
+    synth.iter_audio.side_effect = lambda text, *_args, **_kwargs: iter([text.encode()])
+    player = Player()
+    controller = SpeechController(synthesizer=synth, player=player)
+    first = SpeechStream(key="first")
+    first.put("Xin chào. Đi theo tôi.")
+    first.finish()
+    try:
+        controller.submit(first, "voice.onnx")
+        until(lambda: player.play.call_count == 1)
+        assert list(player.play.call_args.args[0])
+        until(lambda: not controller._working)
+        player.finished.emit()
+        second = SpeechStream(key="second")
+        second.put("Xin chào.")
+        controller.submit(second, "voice.onnx")
+        QTest.qWait(30)
+        assert player.play.call_count == 1
+        second.put("Đợi ở đây.")
+        until(lambda: player.play.call_count == 2)
+        output = iter(player.play.call_args.args[0])
+        assert next(output) == "Xin chào. Đợi ở đây.".encode()
+        second.finish()
+        assert list(output) == []
+    finally:
+        controller.close()
+
+
+def test_stream_to_buffered_path_does_not_repeat_last_played_translation(qapp):
+    synth = MagicMock()
+    synth.iter_audio.side_effect = lambda text, *_args, **_kwargs: iter([text.encode()])
+    synth.synthesize.return_value = b"buffered"
+    player = Player()
+    controller = SpeechController(synthesizer=synth, player=player)
+    first = SpeechStream(key="pokemon")
+    first.put("Đây là Pokémon.")
+    first.finish()
+    try:
+        controller.submit(first, "voice.onnx")
+        until(lambda: player.play.call_count == 1)
+        assert list(player.play.call_args.args[0])
+        until(lambda: not controller._working)
+        player.finished.emit()
+        controller.submit("Đây là Pokémon!", "voice.onnx")
+        until(lambda: not controller._working)
+        assert player.play.call_count == 1
+        synth.synthesize.assert_not_called()
+    finally:
+        controller.close()
+
+
+def test_intentional_repeated_words_inside_new_utterance_are_preserved(qapp):
+    synth = MagicMock()
+    synth.iter_audio.side_effect = lambda text, *_args, **_kwargs: iter([text.encode()])
+    player = Player()
+    controller = SpeechController(synthesizer=synth, player=player)
+    try:
+        first = SpeechStream(key="no")
+        first.put("Không!")
+        first.finish()
+        controller.submit(first, "voice.onnx")
+        until(lambda: player.play.call_count == 1)
+        assert list(player.play.call_args.args[0])
+        until(lambda: not controller._working)
+        player.finished.emit()
+        repeated = SpeechStream(key="no no")
+        repeated.put("Không!")
+        repeated.put("Không!")
+        repeated.finish()
+        controller.submit(repeated, "voice.onnx")
+        until(lambda: player.play.call_count == 2)
+        assert list(player.play.call_args.args[0]) == ["Không! Không!".encode()]
+    finally:
+        controller.close()
+
+
+def test_real_translation_cache_and_ocr_variants_produce_one_playback(qapp, monkeypatch):
+    from interpreter.gui import workers
+
+    config = Config(source_language="English", output_mode=OutputMode.TTS)
+    worker = ProcessWorker(config)
+    worker._ocr = MagicMock()
+    client, response = translator()
+    source = "This world is inhabited by creatures called Pokemon."
+    client._cache.put(source, "Thế giới này có những sinh vật gọi là Pokemon.")
+    worker._translator = client
+    synth = MagicMock()
+    synth.iter_audio.side_effect = lambda text, *_args, **_kwargs: iter([text.encode()])
+    player = Player()
+    controller = SpeechController(synthesizer=synth, player=player)
+    worker.speech_stream_ready.connect(lambda stream, _: controller.submit(stream, "voice.onnx"))
+    clock = [0.0]
+    monkeypatch.setattr(workers, "time", SimpleNamespace(monotonic=lambda: clock[0], perf_counter=time.perf_counter))
+    try:
+        for index, text in enumerate((source, source.replace("Pokemon", "Pokamon"), source)):
+            # No bounding boxes: this deliberately bypasses the visual guard.
+            worker._ocr.extract_text_regions.return_value = [OCRResult(text)]
+            for delta in (0, 0.4):
+                clock[0] = index + delta
+                worker._process_frame("frame", 1)
+            if index == 0:
+                until(lambda: player.play.call_count == 1)
+                assert list(player.play.call_args.args[0])
+            until(lambda: not controller._working)
+            if index == 0:
+                player.finished.emit()
+        assert player.play.call_count == 1
+        assert synth.iter_audio.call_count == 1
+        client._session.post.assert_not_called()
+        response.iter_lines.assert_not_called()
+    finally:
+        controller.close()
+
+
 def test_playback_starts_while_translation_is_still_open_and_preserves_order(qapp):
     source = SpeechStream(key="hello")
     source.put("Xin chào.")

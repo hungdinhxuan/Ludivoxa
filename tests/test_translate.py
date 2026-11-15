@@ -8,6 +8,48 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        ("You need 10 gold to open this locked gate.", "You need 20 gold to open this locked gate."),
+        ("Your current health is 100 out of 100 HP.", "Your current health is 101 out of 100 HP."),
+        ("You should take the potion before leaving.", "You should not take the potion before leaving."),
+        ("You can take the potion before leaving.", "You can't take the potion before leaving."),
+        ("Bạn nên uống thuốc trước khi ra khỏi đây.", "Bạn không nên uống thuốc trước khi ra khỏi đây."),
+        ("ここでしばらく待ってから外へ出てください。", "ここでしばらく待ってから外へ出ないでください。"),
+    ],
+)
+def test_fuzzy_cache_does_not_hide_changed_numbers_or_negation(first, second):
+    from interpreter.translate import TranslationCache, text_similarity
+
+    assert text_similarity(first, second) >= 0.9
+    cache = TranslationCache()
+    cache.put(first, "Old translation")
+    assert cache.get(first) == "Old translation"
+    assert cache.get(second) is None
+
+
+def test_fuzzy_cache_still_reuses_translation_for_pokemon_ocr_typo():
+    from interpreter.translate import TranslationCache
+
+    cache = TranslationCache()
+    cache.put("This world is inhabited by creatures called Pokemon.", "Vietnamese translation")
+    assert cache.get("This world is inhabited by creatures called Pokamon.") == "Vietnamese translation"
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_fuzzy_cache_does_not_replace_growing_text_with_earlier_prefix(reverse):
+    from interpreter.translate import TranslationCache, text_similarity
+
+    short = "This world is inhabited by creatures called Pokemon."
+    longer = short + " Here."
+    assert text_similarity(short, longer) >= 0.9
+    cached, query = (longer, short) if reverse else (short, longer)
+    cache = TranslationCache()
+    cache.put(cached, "Old partial translation")
+    assert cache.get(query) is None
+
+
 class TestGetShortPath:
     """Tests for _get_short_path function."""
 

@@ -3,7 +3,38 @@
 All notable Ludivoxa changes are recorded here. This project uses version tags
 such as `v1.0.0`; numbering is independent of the upstream Interpreter project.
 
-## Unreleased
+## [1.1.1] - 2026-11-15
+
+- Order horizontal OCR words by line and x position, and remember line-wide
+  pixel snapshots so detector split/merge jitter cannot replay unchanged text.
+  Include the vertical shadow of bouncing GBA continuation arrows in masking;
+  keep genuine glyph/number changes and vertical Japanese reading order.
+- Wait adaptively for typewriter dialogue and visible glyph growth, even when
+  OCR still returns the same prefix. Learn GBA completion cursors, normalize
+  cursor-backed trailing T/V/Y artifacts and retain a bounded cue-less fallback.
+  In TTS-only mode, translate only new text after a completed carried-over line.
+- Keep completed speech remembered when the OCR editor is cancelled or saved
+  unchanged; interrupted speech and actual setting changes can be read anew.
+- Exclude strict source-word extensions/truncations from fuzzy translation
+  cache reuse so newly rendered words do not inherit an older partial translation.
+
+- Restore translated-utterance duplicate suppression in streaming speech. OCR
+  aliases that reuse the same cached translation no longer replay it, including
+  while queued and across different sentence boundaries or buffered playback.
+  Preserve divergent/shorter translations and explicit capture/voice resets.
+- Prevent fuzzy translation-cache matches when numbers or negation markers
+  differ, so meaningful dialogue changes are translated again.
+
+- Suppress repeated speech from pixel-font OCR variants such as Pokemon/Pokamon
+  when the displayed glyph geometry is unchanged. Ignore animated box margins,
+  tolerate flat-panel shading, antialiasing and up to two pixels of translation,
+  and cache four verified image states. Preserve real glyph/number changes,
+  additional dialogue, typewriter settling and selected-box capture boundaries.
+
+- Validate native speech output formats, enable shared WASAPI conversion and
+  support mono/surround channel layouts to avoid `Invalid number of channels`
+  (`PaErrorCode -9998`). If an automatically selected WASAPI format is unsupported,
+  retain the user's original output endpoint. Surround/LFE channels stay silent.
 
 ## [1.1.0] - 2026-11-15
 
@@ -94,3 +125,4 @@ Initial Ludivoxa release, based on Interpreter 2.23.3.
 
 [1.0.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.0.0
 [1.1.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.0
+[1.1.1]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1
