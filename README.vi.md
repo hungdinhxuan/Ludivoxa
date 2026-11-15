@@ -9,7 +9,7 @@ Ludivoxa được phát triển từ [Interpreter](https://github.com/bquenin/in
 của qube/bquenin, giữ pipeline và giao diện Qt hiện có. Dự án này bắt đầu bằng
 **v1.0.0**, độc lập với phiên bản của upstream.
 
-## Có gì trong v1.0.0?
+## Có gì trong v1.1.0?
 
 - OCR Anh/Nhật offline, phát hiện ngôn ngữ hoặc chọn thủ công.
 - Khoanh box hội thoại để chỉ quét phần cần dịch; lưu riêng theo game. Cách
@@ -19,7 +19,10 @@ của qube/bquenin, giữ pipeline và giao diện Qt hiện có. Dự án này 
 - Overlay, TTS hoặc cả hai; tự đọc mỗi bản dịch ổn định mới.
 - Nano có 11 preset, clone từ file ghi âm local nếu bạn cung cấp; đồng thời
   giữ 67 lựa chọn Piper. Không kèm mẫu clone giọng cá nhân.
-- Xử lý nền, cache, chống đọc lặp và phát âm thanh đã đệm đủ.
+- Xử lý nền, cache, chống đọc lặp; dịch từng câu và phát Nano theo từng đoạn
+  audio để giảm thời gian chờ tiếng đầu tiên.
+- Tab Updates: kiểm tra bản mới, tải nền và cài đặt/khởi động lại; không cần
+  GitHub key. Có tùy chọn tự kiểm tra khi mở app.
 - Đóng app cuối cùng tự tắt Ollama riêng cùng model runners; giữ nguyên server
   local/LAN dùng chung. Mở lại app phải tải model lại.
 
@@ -30,6 +33,11 @@ Trong [Releases](https://github.com/hungdinhxuan/Ludivoxa/releases), tải EXE v
 `SHA256SUMS.txt` để kiểm tra. Tổng khoảng 4,9 GB; app cài xong khoảng 6,4 GB.
 Python, Ollama, OCR/TTS models và HauhauCS Qwen3 4B Aggressive Q4_K_M đã có sẵn.
 Bản build chưa ký số. Các file Source code tự động của GitHub không chứa model.
+
+Nếu đã cài v1.0.0, chỉ cần tải **Ludivoxa-1.1.0-App-Update.exe**, chạy và chọn
+đúng thư mục app đang dùng. Gói nhỏ này giữ nguyên cấu hình, Ollama và model.
+v1.0.0 chưa có updater nên cần nâng cấp thủ công một lần; từ v1.1.0 có thể
+cập nhật các bản tiếp theo trong tab **Updates**.
 
 Mở game → chọn cửa sổ → **Start Capture → Configure OCR → Only selected box**,
 khoanh hội thoại rồi **OK**. Có thể di chuyển, đổi kích thước hoặc nhập phần

@@ -1,8 +1,15 @@
-Ludivoxa 1.0.0 - full offline Windows bundle
+Ludivoxa 1.1.0 - Windows release
 
 Keep the Setup.exe and every Setup-*.bin file in the same directory. Run Setup.exe.
 The installer is per-user and does not require administrator rights. Python and
 a separate Ollama installation are not required. Model files are included.
+
+For an existing installation, Ludivoxa-1.1.0-App-Update.exe contains only the
+app and libraries. Select the existing installation directory; configuration,
+models and Ollama are kept. It cannot create a fresh offline installation.
+Version 1.0.0 users must upgrade manually once. From 1.1.0, open Updates to
+check/download/install future stable releases. Public GitHub access needs no
+key or sign-in. Startup checks are optional; installation requires a click.
 
 Open Ludivoxa from the Start menu or installed Interpreter.exe. Its private
 Ollama service listens only on 127.0.0.1:11435 and uses the included HauhauCS
@@ -44,8 +51,11 @@ is required. Clear that optional field to return to a preset. Piper's original
 voices are also included. Reference files are never uploaded.
 Nano uses eight inference steps on two CPU threads for faster generation; this
 can sound rougher than sixteen steps. Obsolete synthesis is cancelled between
-chunks. Playback remains fully buffered; long paragraphs and waiting for the
-current spoken line to finish can still add substantial delay.
+chunks. Nano plays generated audio chunks through one native stream; complete
+translation sentences can start speech before the LLM response finishes.
+Callback-only audio drivers and Piper retain buffered playback. Waiting for
+the current spoken line to finish still adds delay. The default prompt keeps
+the source's tone and intensity; an existing custom prompt remains in control.
 
 Settings are in config.yml beside Interpreter.exe. Upgrades and uninstall keep
 this settings file. Uninstall stops only the Ollama service owned by this

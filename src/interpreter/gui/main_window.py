@@ -75,11 +75,12 @@ from ..permissions import (
     request_accessibility,
     request_screen_recording,
 )
-from ..speech import DEFAULT_VOICE_PATH, SpeechController, available_voices, voice_details
+from ..speech import DEFAULT_VOICE_PATH, SpeechController, SpeechStream, available_voices, voice_details
 from ..translate import SUGOI_ONLY_JAPANESE, SUGOI_SOURCE_LANGUAGE
 from . import keyboard
 from .ocr_config import OCRConfigDialog
 from .theme import ERROR, OK, set_role
+from .updates_page import UpdatesPage
 from .workers import ProcessWorker
 
 logger = log.get_logger()
@@ -205,6 +206,7 @@ class MainWindow(QMainWindow):
         worker.text_ready.connect(self._on_text_ready)
         worker.regions_ready.connect(self._on_regions_ready)
         worker.speech_ready.connect(self._on_speech_ready)
+        worker.speech_stream_ready.connect(self._on_speech_ready)
         worker.ocr_results_ready.connect(self._on_ocr_results_ready)
         worker.models_ready.connect(self._on_models_ready)
         worker.models_failed.connect(self._on_models_failed)
@@ -244,7 +246,7 @@ class MainWindow(QMainWindow):
         self._nav = QListWidget()
         self._nav.setProperty("role", "nav")
         self._nav.setFixedWidth(170)
-        for name in ("Play", "Overlay", "Engines"):
+        for name in ("Play", "Overlay", "Engines", "Updates"):
             self._nav.addItem(name)
         nav_box = QWidget()
         nav_layout = QVBoxLayout(nav_box)
@@ -260,6 +262,9 @@ class MainWindow(QMainWindow):
         self._pages.addWidget(self._build_play_page(capture_group))
         self._pages.addWidget(self._page(appearance_group))
         self._pages.addWidget(self._build_engines_page(pair_card, ocr_group, translation_group))
+        self._updates_page = UpdatesPage(self._config,__version__,self)
+        self._updates_page.update_available.connect(self._on_update_available)
+        self._pages.addWidget(self._updates_page)
         self._nav.currentRowChanged.connect(self._pages.setCurrentIndex)
         self._nav.setCurrentRow(0)
         body.addWidget(self._pages, 1)
@@ -279,6 +284,10 @@ class MainWindow(QMainWindow):
             page_layout.addWidget(widget)
         page_layout.addStretch()
         return page
+
+    def _on_update_available(self, version):
+        self._nav.item(3).setText("Updates •")
+        self.statusBar().showMessage(f"Ludivoxa {version} is available. Open Updates to download it.")
 
     def _build_play_page(self, capture_group: QGroupBox) -> QWidget:
         """Everything used during a session: window, preview, mode, hide, and the feed."""
@@ -2101,6 +2110,9 @@ class MainWindow(QMainWindow):
                     self._config.tts_rate,
                     reference_audio=self._config.tts_reference_audio,
                 )
+                return
+        if isinstance(translated, SpeechStream):
+            translated.cancel()
 
     def _on_output_changed(self):
         self._config.output_mode = OutputMode(self._output_combo.currentData())
@@ -2406,6 +2418,8 @@ class MainWindow(QMainWindow):
 
     def cleanup(self):
         """Clean up resources before closing."""
+        if hasattr(self,"_updates_page"):
+            self._updates_page.shutdown()
         self._stop_capture()
         self._speech.close()
         self._keyboard_listener.stop()

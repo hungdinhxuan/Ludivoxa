@@ -1,6 +1,7 @@
 # Public defaults for a new Ludivoxa offline installation.
 # Existing installations keep their own config.yml during upgrades.
 window_title: ''
+update_check_on_startup: false
 source_language: English
 ocr_backend: paddle
 ocr_confidence: 0.6

@@ -1,5 +1,6 @@
 # Source-development profile. Provision these local model folders first.
 window_title: ''
+update_check_on_startup: false
 source_language: English
 ocr_backend: paddle
 ocr_confidence: 0.6

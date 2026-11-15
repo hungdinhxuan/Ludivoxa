@@ -22,10 +22,13 @@ starts at **v1.0.0**; see [attribution and licenses](NOTICE.md).
 - Eleven VieNeu Nano presets, optional local reference-audio cloning, and the
   existing 67 Piper speaker choices in the full Windows package.
 - Background OCR/speech, bounded frame/prefetch queues, cached models/results,
-  visual duplicate suppression and buffered native audio.
+  visual duplicate suppression and streaming native audio for Nano speech.
 - Private bundled Ollama stops with the last app instance, including forced
   termination of a running app. External/local shared and LAN servers are retained.
 - Existing MeikiOCR, Sugoi V4, owocr and capture backends remain available.
+- An Updates page with opt-in startup checks,
+  verified background downloads and explicit install/restart, with app-only
+  update packages that keep local models and settings.
 
 ## Install on Windows
 
@@ -37,6 +40,11 @@ The complete offline download is approximately 4.9 GB, with about 6.4 GB install
 Python, English/Japanese OCR models, Vietnamese speech, Ollama 0.40.16 and
 HauhauCS Qwen3 4B Aggressive Q4_K_M are included. No separate model download is
 needed for that profile. The installer preserves an existing `config.yml`.
+
+Already using v1.0.0? Run **Ludivoxa-1.1.0-App-Update.exe** and select the
+existing installation directory. This smaller package preserves your models,
+runtime and settings. Version 1.1.0 adds the Updates page for future releases;
+public release checks and downloads need no GitHub token or sign-in.
 
 GitHub's automatic **Source code** archives do not include models or runtimes.
 The Windows build is unsigned. Executable/config compatibility names such as
@@ -82,5 +90,6 @@ release or [source instructions](docs/DEVELOPMENT.md) for this fork.
 - [MIT application license](LICENSE) and [third-party attribution](NOTICE.md)
 
 OCR and synthesis timings depend on text length, font, region size and hardware.
-Long paragraphs are still fully synthesized before playback. Recorded-frame
+Version 1.1.0 starts Nano speech from completed audio chunks; the
+in-place overlay and callback-only driver paths retain buffered playback. Recorded-frame
 benchmarks do not establish live game FPS or guarantee latency for every scene.

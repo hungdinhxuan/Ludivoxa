@@ -4,6 +4,7 @@ import hashlib
 import re
 import threading
 import time
+from concurrent.futures import CancelledError
 
 import cv2
 import numpy as np
@@ -13,6 +14,7 @@ from .. import log
 from ..config import Config, OutputMode, OverlayMode
 from ..languages import contains_japanese, contains_script  # noqa: F401  (contains_japanese kept for callers)
 from ..ocr import OCREngine, OCRResult, create_ocr
+from ..speech import SpeechStream
 from ..translate import TranslationEngine, create_translator
 
 logger = log.get_logger()
@@ -75,6 +77,7 @@ class ProcessWorker(QObject):
     # stopped session cannot update the next session's overlays.
     text_ready = Signal(str, int)
     speech_ready = Signal(str, int)  # Successful translations only; never speak source/error fallback text
+    speech_stream_ready = Signal(object, int)
 
     # Inplace mode: list of (text, bbox) regions
     regions_ready = Signal(list, int)
@@ -105,6 +108,9 @@ class ProcessWorker(QObject):
         self._spoken_snapshot = None
         self._suppressed_source = ""
         self._speech_session = None
+        self.stream_speech = True
+        self._previewed_source = ""
+        self._last_preview_time = float("-inf")
 
         # Track which models failed (for "Fix Models" button) and why
         self._ocr_failed = False
@@ -551,6 +557,7 @@ class ProcessWorker(QObject):
         if source_key != self._speech_candidate:
             self._speech_candidate = source_key
             self._speech_candidate_since = now
+            self._previewed_source = ""
         speech_stable = bool(source_key) and now - self._speech_candidate_since >= SPEECH_SETTLE_SECONDS
         if not source_key and now - self._speech_candidate_since >= 1.5:
             self._spoken_source = ""  # A sustained scene break can start a new identical line.
@@ -574,12 +581,38 @@ class ProcessWorker(QObject):
             return
 
         # Translation
+        can_preview = (
+            self.stream_speech
+            and self._config.tts_enabled
+            and self._config.output_mode == OutputMode.TTS
+            and self._config.llm.target_language.strip().casefold() in ("vietnamese", "vi", "vi-vn", "tiếng việt", "")
+            and callable(getattr(type(self._translator), "preview_translation", None))
+        )
+        if can_preview and not speech_stable:
+            # Use the existing settle window, not a shorter duplicate guard.
+            # Only speculate on terminal punctuation observed on multiple frames,
+            # at most once per 750 ms. A changed candidate never commits context.
+            if (
+                now - self._speech_candidate_since >= 0.1
+                and len(text) <= 120
+                and now - self._last_preview_time >= 0.75
+                and source_key != self._previewed_source
+                and re.search(r"[.!?。！？][\"'”’]*$", text.rstrip())
+            ):
+                self._previewed_source, self._last_preview_time = source_key, now
+                try:
+                    self._translator.preview_translation(text)
+                    self._translation_failures = 0
+                except Exception as exc:
+                    self._record_translation_failure(exc)
+            return
         if self._config.output_mode == OutputMode.TTS and (not speech_stable or source_key == self._spoken_source):
             return
         # Take the copy before a potentially slow translation, not afterwards.
         snapshot = self._text_snapshot(frame, regions) if speech_stable and source_key != self._spoken_source else None
         translate_start = time.perf_counter()
         speech_parts = []
+        streamed = False
         if self._mode == OverlayMode.INPLACE and self._config.output_mode != OutputMode.TTS:
             translated_regions = []
             all_cached = True
@@ -611,15 +644,48 @@ class ProcessWorker(QObject):
             self._emit(self.regions_ready, translated_regions, generation)
         else:
             if self._translator:
+                stream = None
                 try:
-                    translated, was_cached = self._translator.translate(text)
+                    can_stream = (
+                        self.stream_speech
+                        and speech_stable
+                        and source_key != self._spoken_source
+                        and self._config.tts_enabled
+                        and self._config.output_mode != OutputMode.OVERLAY
+                        and callable(getattr(type(self._translator), "translate_stream", None))
+                        and self._config.llm.target_language.strip().casefold()
+                        in ("vietnamese", "vi", "vi-vn", "tiếng việt", "")
+                    )
+                    if can_stream:
+                        stream = SpeechStream(key=source_key)
+
+                        def sentence_ready(sentence):
+                            nonlocal streamed
+                            stream.put(sentence, lambda: self._stopped)
+                            if not streamed:
+                                streamed = True
+                                self._spoken_source = source_key
+                                self._spoken_snapshot = snapshot
+                                self._suppressed_source = ""
+                                self._emit(self.speech_stream_ready, stream, generation)
+
+                        translated, was_cached = self._translator.translate_stream(text, sentence_ready)
+                    else:
+                        translated, was_cached = self._translator.translate(text)
                     if translated:
                         speech_parts.append(translated)
                     self._translation_failures = 0
+                except CancelledError:
+                    return  # Session/output stopped; this is not an endpoint failure.
                 except Exception as e:
+                    if stream is not None:
+                        stream.finish(e)
                     logger.warning("Translation error", error=str(e), text=text[:50])
                     translated = f"[{text}]"
                     self._record_translation_failure(e)
+                finally:
+                    if stream is not None:
+                        stream.finish()
             else:
                 translated = text
             translate_ms = int((time.perf_counter() - translate_start) * 1000)
@@ -628,6 +694,7 @@ class ProcessWorker(QObject):
 
         if (
             speech_parts
+            and not streamed
             and speech_stable
             and source_key != self._spoken_source
             and self._config.tts_enabled

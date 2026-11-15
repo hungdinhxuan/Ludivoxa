@@ -4,6 +4,7 @@ Users bring their own model runtime (Ollama, LM Studio, llama.cpp server, vLLM,
 a hosted API...). The application only needs a small HTTP client and a prompt.
 """
 
+import json
 import re
 import time
 from collections import deque
@@ -43,6 +44,10 @@ DEFAULT_BASE_URLS = {
 DEFAULT_SYSTEM_PROMPT = (
     "You translate text captured by OCR from a {source_language} retro video game. "
     "Translate the user's message from {source_language} into {target_language}. "
+    "Preserve the original meaning, tone, emotion, register and intensity. "
+    "Keep profanity, insults, slang and sexual wording as direct or euphemistic as the original; "
+    "do not soften, censor, intensify or invent details. "
+    "Keep polite language polite and neutral language neutral. "
     "Keep character names as they appear, keep menu items in the same order, "
     "and do not add explanations, notes, transliterations or quotation marks. "
     "Output only the translation."
@@ -66,7 +71,7 @@ WARMUP_TEXT = SAMPLE_TEXT[DEFAULT_SOURCE_LANGUAGE]
 TEST_TEXT = SAMPLE_TEXT[DEFAULT_SOURCE_LANGUAGE]
 
 # Some OpenAI-compatible servers return the reasoning inline instead of in a separate field.
-THINK_BLOCK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
+THINK_BLOCK_RE = re.compile(r"<think>.*?(?:</think>\s*|$)", re.DOTALL | re.IGNORECASE)
 
 
 class LLMTranslationError(Exception):
@@ -143,14 +148,24 @@ def list_models(settings: LLMSettings) -> list[str]:
     base = normalize_base_url(settings.provider, settings.base_url)
     headers = _auth_headers(settings)
     if settings.provider == PROVIDER_OLLAMA:
-        response = requests.get(f"{base}/api/tags", headers=headers, timeout=settings.timeout,
-                                proxies={"http": "", "https": ""}, allow_redirects=False)
+        response = requests.get(
+            f"{base}/api/tags",
+            headers=headers,
+            timeout=settings.timeout,
+            proxies={"http": "", "https": ""},
+            allow_redirects=False,
+        )
         _reject_redirect(response)
         response.raise_for_status()
         names = [m.get("name", "") for m in response.json().get("models", [])]
     else:
-        response = requests.get(f"{base}/models", headers=headers, timeout=settings.timeout,
-                                proxies={"http": "", "https": ""}, allow_redirects=False)
+        response = requests.get(
+            f"{base}/models",
+            headers=headers,
+            timeout=settings.timeout,
+            proxies={"http": "", "https": ""},
+            allow_redirects=False,
+        )
         _reject_redirect(response)
         response.raise_for_status()
         names = [m.get("id", "") for m in response.json().get("data", [])]
@@ -165,7 +180,9 @@ def _auth_headers(settings: LLMSettings) -> dict[str, str]:
 
 def _reject_redirect(response):
     if 300 <= response.status_code < 400:
-        raise requests.HTTPError("Endpoint redirects are disabled; configure the final local/LAN URL.", response=response)
+        raise requests.HTTPError(
+            "Endpoint redirects are disabled; configure the final local/LAN URL.", response=response
+        )
 
 
 def clean_output(raw: str) -> str:
@@ -222,6 +239,7 @@ class LLMTranslator:
         self._session = requests.Session()
         self._session.trust_env = False
         self._loaded = False
+        self._preview = None
 
     @property
     def name(self) -> str:
@@ -295,9 +313,9 @@ class LLMTranslator:
 
         if self._source_language == "Auto":
             self._detected_language = detect_language(text)
-        cached = self._cache.get(text)
-        if cached is not None:
-            return cached, True
+        ready = self._ready_translation(text)
+        if ready is not None:
+            return ready
 
         if not self._loaded:
             self.load()
@@ -323,6 +341,146 @@ class LLMTranslator:
             messages.append({"role": "assistant", "content": translation})
         messages.append({"role": "user", "content": text})
         return messages
+
+    def preview_translation(self, text):
+        """Prepare one candidate without committing speculative OCR to context."""
+        cached = self._cache.get(text)
+        if cached is not None:
+            return cached
+        if not self._loaded:
+            self.load()
+        if self._source_language == "Auto":
+            self._detected_language = detect_language(text)
+        context = tuple(self._history)
+        try:
+            result = clean_output(self._chat(self._build_messages(text)))
+        except requests.RequestException as exc:
+            raise LLMTranslationError(describe_request_error(exc, self._settings)) from exc
+        self._preview = (text, context, result) if result else None
+        return result
+
+    def _ready_translation(self, text):
+        cached = self._cache.get(text)
+        if cached is not None:
+            return cached, True
+        preview, self._preview = self._preview, None
+        if preview is not None and preview[:2] == (text, tuple(self._history)):
+            self._cache.put(text, preview[2])
+            self._history.append((text, preview[2]))
+            return preview[2], False
+        return None
+
+    def translate_stream(self, text, on_sentence):
+        """Deliver completed sentences early; commit cache/context only on success."""
+        if not text or not text.strip():
+            return "", False
+        if self._source_language == "Auto":
+            self._detected_language = detect_language(text)
+        ready = self._ready_translation(text)
+        if ready is not None:
+            on_sentence(ready[0])
+            return ready
+        if not self._loaded:
+            self.load()
+        raw, emitted, complete = "", 0, False
+        try:
+            for token, done in self._stream_chat(self._build_messages(text)):
+                raw += token
+                complete |= done
+                # Hide reasoning even when its tags span network packets. Keep
+                # the original prefix so quotes/normalization cannot move offsets.
+                visible = re.sub(r"<think>.*?(?:</think>|$)", "", raw, flags=re.DOTALL | re.IGNORECASE)
+                # Require whitespace after punctuation: don't split decimals,
+                # abbreviations arriving in pieces, or a final wrapping quote.
+                for boundary in re.finditer(r"[.!?。！？]+[\"'”’]*\s+", visible):
+                    end = boundary.end()
+                    if end <= emitted:
+                        continue
+                    segment = visible[emitted:end]
+                    if re.search(r"\b(?:Mr|Mrs|Ms|Dr|Prof|St|TS|ThS|BS|PGS)\.\s*$", segment):
+                        continue
+                    sentence = clean_output(segment).strip('"')
+                    if sentence:
+                        on_sentence(sentence)
+                    emitted = end
+            if not complete:
+                raise LLMTranslationError("Translation stream ended before completion.")
+        except requests.RequestException as exc:
+            raise LLMTranslationError(describe_request_error(exc, self._settings)) from exc
+        result = clean_output(raw)
+        visible = re.sub(r"<think>.*?(?:</think>|$)", "", raw, flags=re.DOTALL | re.IGNORECASE)
+        remainder = clean_output(visible[emitted:]).strip('"')
+        if remainder:
+            on_sentence(remainder)
+        if result:
+            self._cache.put(text, result)
+            self._history.append((text, result))
+        return result, False
+
+    def _stream_chat(self, messages):
+        ollama = self._settings.provider == PROVIDER_OLLAMA
+        payload = {"model": self._settings.model, "messages": messages}
+        if ollama:
+            payload.update(
+                think=False,
+                keep_alive=OLLAMA_KEEP_ALIVE,
+                options={"temperature": TEMPERATURE, "seed": SEED, "num_predict": MAX_OUTPUT_TOKENS},
+            )
+        else:
+            payload.update(temperature=TEMPERATURE, seed=SEED, max_tokens=MAX_OUTPUT_TOKENS)
+        payload = merge_request_options(payload, self._settings.request_options)
+        payload["stream"] = True  # The parser and wire format must agree.
+        base = normalize_base_url(self._settings.provider, self._settings.base_url)
+        endpoint = "/api/chat" if ollama else "/chat/completions"
+        with self._session.post(
+            base + endpoint,
+            json=payload,
+            headers=_auth_headers(self._settings),
+            timeout=self._settings.timeout,
+            allow_redirects=False,
+            stream=True,
+        ) as response:
+            _reject_redirect(response)
+            response.raise_for_status()
+            deadline = time.monotonic() + self._settings.timeout
+            # requests' default 512-byte read can hold several small tokens.
+            for line in response.iter_lines(chunk_size=1):
+                if time.monotonic() > deadline:
+                    raise requests.Timeout("Translation stream exceeded its deadline.")
+                if not line:
+                    continue
+                line = line.decode("utf-8") if isinstance(line, bytes) else line
+                if not ollama:
+                    if not line.startswith("data:"):
+                        continue  # SSE comments/heartbeats
+                    line = line[5:].strip()
+                    if line == "[DONE]":
+                        yield "", True
+                        return
+                try:
+                    packet = json.loads(line)
+                    if packet.get("error"):
+                        raise LLMTranslationError("Translation endpoint reported a stream error.")
+                    if ollama:
+                        token = packet.get("message", {}).get("content") or ""
+                        done = packet.get("done", False)
+                        if done and packet.get("done_reason") == "length":
+                            raise LLMTranslationError("Translation reached its output limit before finishing.")
+                    else:
+                        choices = packet.get("choices") or []
+                        if not choices:
+                            continue
+                        token = choices[0].get("delta", {}).get("content") or ""
+                        done = choices[0].get("finish_reason") is not None
+                        if choices[0].get("finish_reason") == "length":
+                            raise LLMTranslationError("Translation reached its output limit before finishing.")
+                    if not isinstance(token, str):
+                        raise ValueError("Invalid content")
+                except (ValueError, AttributeError, TypeError) as exc:
+                    raise LLMTranslationError("Invalid translation stream response.") from exc
+                yield token, bool(done)
+                if done:
+                    return
 
     def _chat(self, messages: list[dict[str, str]], timeout: float | None = None) -> str:
         timeout = self._settings.timeout if timeout is None else timeout

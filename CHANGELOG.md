@@ -3,6 +3,33 @@
 All notable Ludivoxa changes are recorded here. This project uses version tags
 such as `v1.0.0`; numbering is independent of the upstream Interpreter project.
 
+## Unreleased
+
+## [1.1.0] - 2026-11-15
+
+- Add an Updates page with opt-in startup checks, release notes, background
+  downloads/progress/cancel and explicit verified installation/restart.
+- Check and download public GitHub releases without a token or Git sign-in.
+- Prefer app-only update installers that preserve configuration and local
+  models/runtime; retain verified full offline installer fallback for older releases.
+- Remove obsolete application version metadata during upgrades so the UI and
+  updater report the installed version correctly.
+- Preserve the source's tone, emotion, politeness, profanity and level of
+  explicitness in the default translation prompt, without softening or intensifying it.
+- Deliver complete translated sentences from Ollama NDJSON/OpenAI-compatible SSE
+  to speech before the full response finishes. Cache/context commit only after
+  successful completion; truncated or malformed streams do not trigger fallback.
+- Play Nano audio incrementally through one native output stream with two queued
+  audio chunks, one synthesis worker and the existing two-thread CPU limit.
+- Prepare short, punctuated TTS-only candidates during the existing settle
+  window, without speaking or committing speculative OCR to translation context.
+- Prefer WASAPI when it uniquely matches the same Windows output endpoint;
+  request a 60 ms device buffer. Preserve buffered callback playback for ASIO/WDM-KS.
+- Preserve source stability, duplicate suppression, current-line completion,
+  latest-pending dialogue and capture-generation cancellation.
+- Add streaming/context/cancellation/device tests and full native streaming
+  playback under Qt stalls. See [measurements](docs/PERFORMANCE.md).
+
 ## [1.0.0] - 2026-11-14
 
 Initial Ludivoxa release, based on Interpreter 2.23.3.
@@ -66,3 +93,4 @@ Initial Ludivoxa release, based on Interpreter 2.23.3.
   non-Windows GUI/capture behavior were not verified for this release.
 
 [1.0.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.0.0
+[1.1.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.0

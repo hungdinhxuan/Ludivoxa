@@ -538,7 +538,7 @@ def test_real_vietnamese_synthesis_is_offline(monkeypatch, speech):
             import sounddevice as sd
 
             assert controller._player.diagnostics["sample_rate"] == int(
-                sd.query_devices(kind="output")["default_samplerate"]
+                sd.query_devices(controller._player.diagnostics["output_device"])["default_samplerate"]
             )
             messages.clear()
             controller.submit("Dòng tiếp theo", "unused.onnx")

@@ -19,7 +19,7 @@ def sha256(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def prepare(installer, output, *, app=None, source_commit=None):
+def prepare(installer, output, *, app=None, source_commit=None, app_update=None):
     installer, output = Path(installer).resolve(), Path(output).resolve()
     if output == installer or output.is_relative_to(installer) or installer.is_relative_to(output):
         raise ValueError("Release output and installer input must be separate directories.")
@@ -36,11 +36,22 @@ def prepare(installer, output, *, app=None, source_commit=None):
     for path in [executable, *parts]:
         if not 0 < path.stat().st_size < GITHUB_ASSET_LIMIT:
             raise ValueError(f"Release asset must be non-empty and smaller than 2 GiB: {path.name}")
+    if app_update is not None:
+        app_update = Path(app_update)
+        if (
+            app_update.name != f"Ludivoxa-{VERSION}-App-Update.exe"
+            or not app_update.is_file()
+            or not 0 < app_update.stat().st_size < GITHUB_ASSET_LIMIT
+        ):
+            raise ValueError("The app-update installer must have the release version name and be smaller than 2 GiB.")
     output.mkdir(parents=True, exist_ok=True)
     for path in [executable, *parts]:
         shutil.copy2(path, output / path.name)
     shutil.copy2(ROOT / "packaging/OFFLINE_SETUP_README.txt", output / "README.txt")
     assets = [output / p.name for p in [executable, *parts]] + [output / "README.txt"]
+    if app_update is not None:
+        shutil.copy2(app_update, output / app_update.name)
+        assets.append(output / app_update.name)
     manifest = {
         "application": "Ludivoxa",
         "version": VERSION,
@@ -86,9 +97,12 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--app", default="dist/Interpreter/Interpreter.exe")
     parser.add_argument("--source-commit")
+    parser.add_argument("--app-update", help="Optional app-only installer, preferred by the in-app updater")
     parser.add_argument("--local-zip", help="Optional local archive; too large for a single GitHub release asset")
     args = parser.parse_args()
-    assets = prepare(args.installer, args.output, app=args.app, source_commit=args.source_commit)
+    assets = prepare(
+        args.installer, args.output, app=args.app, source_commit=args.source_commit, app_update=args.app_update
+    )
     if args.local_zip:
         local_zip(assets, args.local_zip)
     print(

@@ -1,6 +1,7 @@
 """Offline Vietnamese voices, background prefetch and buffered native PCM playback."""
 
 import json
+import os
 import re
 import threading
 import time
@@ -10,6 +11,7 @@ from collections import OrderedDict
 from concurrent.futures import CancelledError, ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
+from queue import Empty, Full, Queue
 
 import numpy as np
 from PySide6.QtCore import QCoreApplication, QObject, Signal, Slot
@@ -18,6 +20,78 @@ from . import log
 
 DEFAULT_VOICE_PATH = str(Path.home() / ".interpreter" / "voices" / "vi_VN-vais1000-medium.onnx")
 logger = log.get_logger()
+
+
+class SpeechStream:
+    """Bounded hand-off between translation, synthesis and native playback."""
+
+    def __init__(self, key=None, capacity=32, source=None):
+        self.key, self.source = key, source
+        self._queue = Queue(maxsize=capacity)
+        self._done, self._cancelled = threading.Event(), threading.Event()
+        self._error = None
+
+    def put(self, value, cancelled=lambda: False):
+        while not self._cancelled.is_set() and not cancelled():
+            try:
+                self._queue.put(value, timeout=0.05)
+                return
+            except Full:
+                continue
+        raise CancelledError()
+
+    def finish(self, error=None):
+        if self._done.is_set():
+            return
+        self._error = error
+        self._done.set()
+
+    def cancel(self):
+        self._cancelled.set()
+        if self.source is not None:
+            self.source.cancel()
+
+    def __iter__(self):
+        while not self._cancelled.is_set():
+            try:
+                yield self._queue.get(timeout=0.05)
+            except Empty:
+                if self._done.is_set():
+                    if self._error:
+                        raise self._error from None
+                    return
+        raise CancelledError()
+
+
+def _output_device(sd):
+    """Use WASAPI only when it uniquely identifies the same selected endpoint."""
+    device = sd.query_devices(kind="output")
+    host = sd.query_hostapis(device["hostapi"])["name"]
+    if os.name == "nt" and host == "MME":
+        devices = sd.query_devices()
+        matches = [
+            d
+            for d in devices
+            if d["max_output_channels"] > 0
+            and sd.query_hostapis(d["hostapi"])["name"] == "Windows WASAPI"
+            and d["name"].startswith(device["name"])
+        ]
+        if len(matches) == 1:
+            return matches[0]
+    return device
+
+
+def _wav_bytes(samples, sample_rate):
+    samples = np.asarray(samples, dtype=np.float32)
+    if samples.ndim != 1 or not samples.size or not np.isfinite(samples).all():
+        raise ValueError("Local voice synthesis returned invalid audio.")
+    output = BytesIO()
+    with wave.open(output, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes((np.clip(samples, -1, 1) * 32767).astype("<i2").tobytes())
+    return output.getvalue()
 
 
 def clean_speech_text(text):
@@ -110,6 +184,7 @@ class PCMPlayer(QObject):
         if self._closed:
             return
         self.stop()
+        self._audio = wav_bytes
         token = self._generation
         self._executor.submit(self._write_audio, token, wav_bytes, self._volume)
 
@@ -119,21 +194,34 @@ class PCMPlayer(QObject):
         try:
             import sounddevice as sd
 
-            device = sd.query_devices(kind="output")
+            device = _output_device(sd)
             rate = int(device["default_samplerate"])
             channels = min(2, int(device["max_output_channels"]))
-            with wave.open(BytesIO(wav_bytes)) as wav_file:
-                if wav_file.getsampwidth() != 2:
-                    raise ValueError("Piper audio must use 16-bit PCM.")
-                samples = np.frombuffer(wav_file.readframes(wav_file.getnframes()), dtype="<i2")
-                samples = samples.reshape(-1, wav_file.getnchannels()).mean(axis=1) / 32768.0
-                source_rate = wav_file.getframerate()
-            if rate != source_rate:
-                size = round(len(samples) * rate / source_rate)
-                samples = np.interp(np.arange(size) * source_rate / rate, np.arange(len(samples)), samples)
-            pcm = np.ascontiguousarray(np.repeat(samples[:, None], channels, axis=1) * volume, dtype="float32")
             host = sd.query_hostapis(device["hostapi"])["name"]
             callback_mode = host in ("Windows WDM-KS", "ASIO")
+
+            def decoded():
+                chunks = iter(wav_bytes) if isinstance(wav_bytes, SpeechStream) else iter([wav_bytes])
+                for chunk in chunks:
+                    with wave.open(BytesIO(chunk)) as wav_file:
+                        if wav_file.getsampwidth() != 2:
+                            raise ValueError("Speech audio must use 16-bit PCM.")
+                        samples = np.frombuffer(wav_file.readframes(wav_file.getnframes()), dtype="<i2")
+                        samples = samples.reshape(-1, wav_file.getnchannels()).mean(axis=1) / 32768.0
+                        source_rate = wav_file.getframerate()
+                    if rate != source_rate:
+                        size = round(len(samples) * rate / source_rate)
+                        samples = np.interp(np.arange(size) * source_rate / rate, np.arange(len(samples)), samples)
+                    yield np.ascontiguousarray(np.repeat(samples[:, None], channels, axis=1) * volume, dtype="float32")
+
+            chunks = iter(decoded())
+            if callback_mode:
+                # These hosts cannot use blocking writes. Preserve their native
+                # callback path with a fully buffered utterance.
+                pcm = np.concatenate(list(chunks))
+                chunks = iter(())
+            else:
+                pcm = next(chunks)
             done = threading.Event()
             cursor = 0
             callback_underruns = 0
@@ -150,7 +238,9 @@ class PCMPlayer(QObject):
                     raise sd.CallbackStop
 
             options = {"callback": render, "finished_callback": done.set} if callback_mode else {}
-            stream = sd.OutputStream(samplerate=rate, channels=channels, dtype="float32", latency="high", **options)
+            stream = sd.OutputStream(
+                device=device["index"], samplerate=rate, channels=channels, dtype="float32", latency=0.06, **options
+            )
             with self._lock:
                 if token != self._generation or self._closed:
                     return
@@ -162,6 +252,7 @@ class PCMPlayer(QObject):
             # Bounded writes keep explicit cancellation responsive without a
             # GUI timer or callback supplying audio.
             underrun = False
+            total_samples = len(pcm)
             if callback_mode:
                 # WDM-KS/ASIO do not implement PortAudio's blocking API. Feed
                 # the already generated PCM from their native audio callback;
@@ -179,25 +270,37 @@ class PCMPlayer(QObject):
                     raise RuntimeError("Audio driver stopped before all samples were delivered.")
                 underrun = callback_underruns
             else:
-                block = max(1, rate // 20)
-                for offset in range(0, len(pcm), block):
-                    with self._lock:
-                        cancelled = token != self._generation or self._closed
-                    if cancelled:
-                        stream.abort()
-                        return
-                    underrun |= stream.write(pcm[offset : offset + block])
+                block = max(1, rate // 50)
+                while True:
+                    for offset in range(0, len(pcm), block):
+                        with self._lock:
+                            cancelled = token != self._generation or self._closed
+                        if cancelled:
+                            stream.abort()
+                            return
+                        underrun |= stream.write(pcm[offset : offset + block])
+                    try:
+                        pcm = next(chunks)
+                        total_samples += len(pcm)
+                    except StopIteration:
+                        break
             stream.stop()  # Drain all queued samples before reporting completion.
             report = dict(
                 sample_rate=rate,
-                duration_seconds=len(pcm) / rate,
-                processed_seconds=len(pcm) / rate,
+                duration_seconds=total_samples / rate,
+                processed_seconds=total_samples / rate,
                 elapsed_seconds=time.monotonic() - start,
                 underruns=int(underrun),
                 host_api=host,
                 callback_mode=callback_mode,
+                streaming=isinstance(wav_bytes, SpeechStream) and not callback_mode,
+                requested_latency_ms=60,
+                output_device=device["index"],
+                device_latency_ms=stream.latency * 1000,
                 buffer_active=False,
             )
+        except CancelledError:
+            return
         except Exception as exc:
             report = {"error": f"Audio playback failed: {exc}", "buffer_active": False}
         finally:
@@ -224,6 +327,9 @@ class PCMPlayer(QObject):
     def stop(self):
         with self._lock:
             self._generation += 1
+            audio = getattr(self, "_audio", None)
+            if isinstance(audio, SpeechStream):
+                audio.cancel()
             # The writer notices within one 50 ms block plus device buffering.
             # Native stop/abort/close must all run on the writer's own thread.
         self.diagnostics["buffer_active"] = False
@@ -335,7 +441,7 @@ class VieneuSynthesizer:
             self._audio_cache.clear()
         return self._engine
 
-    def synthesize(self, text, model_path, speaker_id=0, rate=1.0, reference_audio="", cancelled=None):
+    def _voice_settings(self, model_path, speaker_id, reference_audio):
         engine = self.prepare(model_path)
         reference_key = None
         if reference_audio:
@@ -362,6 +468,31 @@ class VieneuSynthesizer:
             if not 0 <= speaker_id < len(speakers):
                 raise ValueError("Selected speaker does not exist in this voice model.")
             voice = speakers[speaker_id][0]
+        return engine, voice, reference_key
+
+    def iter_audio(
+        self, text, model_path, speaker_id=0, rate=1.0, reference_audio="", cancelled=lambda: False, chunk_chars=48
+    ):
+        engine, voice, reference_key = self._voice_settings(model_path, speaker_id, reference_audio)
+        key = (text, speaker_id, rate, reference_key)
+        if key in self._audio_cache:
+            yield self._audio_cache[key]
+            return
+        cached = []
+        for samples in engine.infer_stream(text, voice=voice, speed=rate, sway=-1.0, max_chars=chunk_chars):
+            if cancelled():
+                raise CancelledError()
+            audio = _wav_bytes(samples, engine.sample_rate)
+            cached.append(np.asarray(samples, dtype=np.float32))
+            yield audio
+        if not cached:
+            raise ValueError("Local voice synthesis returned no audio.")
+        self._audio_cache[key] = _wav_bytes(np.concatenate(cached), engine.sample_rate)
+        while len(self._audio_cache) > 16 or sum(map(len, self._audio_cache.values())) > 8 * 1024 * 1024:
+            self._audio_cache.popitem(last=False)
+
+    def synthesize(self, text, model_path, speaker_id=0, rate=1.0, reference_audio="", cancelled=None):
+        engine, voice, reference_key = self._voice_settings(model_path, speaker_id, reference_audio)
         key = (text, speaker_id, rate, reference_key)
         if key in self._audio_cache:
             self._audio_cache.move_to_end(key)
@@ -425,6 +556,16 @@ class OfflineSynthesizer:
             return self._vieneu.synthesize(text, model_path, speaker_id, rate, reference_audio, cancelled)
         return self._piper.synthesize(text, model_path, speaker_id, rate)
 
+    def iter_audio(
+        self, text, model_path, speaker_id=0, rate=1.0, reference_audio="", cancelled=lambda: False, chunk_chars=48
+    ):
+        if Path(model_path).expanduser().is_dir():
+            yield from self._vieneu.iter_audio(
+                text, model_path, speaker_id, rate, reference_audio, cancelled, chunk_chars
+            )
+        else:
+            yield self._piper.synthesize(text, model_path, speaker_id, rate)
+
 
 class SpeechController(QObject):
     """Prefetch the latest translation while playing; don't interrupt a spoken line."""
@@ -432,6 +573,7 @@ class SpeechController(QObject):
     status_changed = Signal(str)
     _synthesized = Signal(int, int, object)
     _voice_ready = Signal(int, str)
+    _stream_ready = Signal(int, int, object)
 
     def __init__(self, parent=None, synthesizer=None, player=None):
         super().__init__(parent)
@@ -442,6 +584,7 @@ class SpeechController(QObject):
         self._player.error.connect(self._playback_error)
         self._synthesized.connect(self._on_synthesized)
         self._voice_ready.connect(self._on_voice_ready)
+        self._stream_ready.connect(self._on_stream_ready)
         self._enabled = True
         self._closed = self._working = self._playing = False
         self._generation = self._request = 0
@@ -449,6 +592,7 @@ class SpeechController(QObject):
         self._playing_text = ""
         self._pending = self._ready = None
         self._warm_key = None
+        self._playing_audio = self._input_stream = None
 
     @property
     def _busy(self):
@@ -479,19 +623,28 @@ class SpeechController(QObject):
             self.status_changed.emit(status)
 
     def submit(self, text, model_path, speaker_id=0, rate=1.0, reference_audio=""):
-        text = clean_speech_text(text)
-        normalized = " ".join(re.findall(r"\w+", text.casefold()))
+        if isinstance(text, SpeechStream):
+            normalized = ("source", text.key)
+        else:
+            text = clean_speech_text(text)
+            normalized = " ".join(re.findall(r"\w+", text.casefold()))
         if self._closed or not self._enabled or not normalized or normalized == self._last_text:
+            if isinstance(text, SpeechStream):
+                text.cancel()
             return
         if self._playing and normalized == self._playing_text:
             # OCR can oscillate A -> B -> A while A is still being read. Keep
             # the current audio and discard the obsolete variant/prefetch.
             self._last_text = normalized
             self._request += 1
+            if isinstance(text, SpeechStream):
+                text.cancel()
+            self._cancel_waiting_streams()
             self._pending = self._ready = None
             return
         self._last_text = normalized
         self._request += 1
+        self._cancel_waiting_streams()
         self._ready = None
         self._pending = (self._request, text, model_path or DEFAULT_VOICE_PATH, speaker_id, rate, reference_audio)
         self._start_pending()
@@ -514,7 +667,13 @@ class SpeechController(QObject):
         options = {"reference_audio": reference_audio} if reference_audio else {}
         if isinstance(self._synthesizer, OfflineSynthesizer):
             options["cancelled"] = lambda: (self._closed or generation != self._generation or request != self._request)
-        future = self._executor.submit(self._synthesizer.synthesize, text, model_path, speaker_id, rate, **options)
+        if isinstance(text, SpeechStream):
+            self._input_stream = text
+            future = self._executor.submit(
+                self._produce_stream, generation, request, text, model_path, speaker_id, rate, reference_audio
+            )
+        else:
+            future = self._executor.submit(self._synthesizer.synthesize, text, model_path, speaker_id, rate, **options)
 
         def done(result):
             try:
@@ -526,6 +685,64 @@ class SpeechController(QObject):
 
         future.add_done_callback(done)
 
+    def _cancel_waiting_streams(self):
+        if self._pending and isinstance(self._pending[1], SpeechStream):
+            self._pending[1].cancel()
+        if self._ready and isinstance(self._ready[0], SpeechStream):
+            self._ready[0].cancel()
+        current_source = self._playing_audio.source if isinstance(self._playing_audio, SpeechStream) else None
+        if self._input_stream is not None and self._input_stream is not current_source:
+            self._input_stream.cancel()
+
+    def _produce_stream(self, generation, request, source, model_path, speaker_id, rate, reference_audio):
+        audio = SpeechStream(capacity=2, source=source)
+        first = True
+
+        def cancelled():
+            return (
+                self._closed
+                or generation != self._generation
+                or (request != self._request and audio is not self._playing_audio)
+            )
+
+        try:
+            for text in source:
+                if cancelled():
+                    raise CancelledError()
+                text = clean_speech_text(text)
+                if not text:
+                    continue
+                for chunk in self._synthesizer.iter_audio(
+                    text,
+                    model_path,
+                    speaker_id,
+                    rate,
+                    reference_audio=reference_audio,
+                    cancelled=cancelled,
+                    chunk_chars=40 if first else 80,
+                ):
+                    audio.put(chunk, cancelled)
+                    if first:
+                        first = False
+                        self._stream_ready.emit(generation, request, audio)
+            audio.finish()
+        except Exception as exc:
+            audio.finish(exc)
+            if first:
+                raise
+        finally:
+            if cancelled():
+                source.cancel()
+        return audio
+
+    def _on_stream_ready(self, generation, request, audio):
+        if generation != self._generation or request != self._request or self._closed:
+            audio.cancel()
+        elif self._playing:
+            self._ready = (audio, self._last_text)
+        else:
+            self._play(audio, self._last_text)
+
     def _on_synthesized(self, generation, request, result):
         self._working = False
         if generation != self._generation or request != self._request or self._closed:
@@ -533,6 +750,9 @@ class SpeechController(QObject):
             return
         if isinstance(result, str):
             self.status_changed.emit(result)
+        elif isinstance(result, SpeechStream):
+            if not self._busy:
+                self.status_changed.emit("Ready")
         elif self._playing:
             self._ready = (result, self._last_text)
         else:
@@ -541,12 +761,14 @@ class SpeechController(QObject):
 
     def _play(self, audio, text_key):
         self._playing = True
+        self._playing_audio = audio
         self._playing_text = text_key
         self.status_changed.emit("Reading Vietnamese translation")
         self._player.play(audio)
 
     def _on_finished(self):
         self._playing = False
+        self._playing_audio = None
         self._playing_text = ""
         if self._ready is not None:
             (audio, text_key), self._ready = self._ready, None
@@ -557,6 +779,10 @@ class SpeechController(QObject):
     def _playback_error(self, message):
         self._playing = False
         self._playing_text = ""
+        if isinstance(self._playing_audio, SpeechStream):
+            self._playing_audio.cancel()
+        self._playing_audio = None
+        self._cancel_waiting_streams()
         self._pending = self._ready = None
         self._generation += 1
         self.status_changed.emit(message)
@@ -569,6 +795,10 @@ class SpeechController(QObject):
     def stop(self, reset=False, reason="user"):
         logger.debug("speech stopped", reason=reason)
         self._generation += 1
+        self._cancel_waiting_streams()
+        if isinstance(self._playing_audio, SpeechStream):
+            self._playing_audio.cancel()
+        self._playing_audio = None
         self._pending = self._ready = None
         self._playing = False
         self._playing_text = ""

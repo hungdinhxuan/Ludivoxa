@@ -3,6 +3,11 @@
 Ludivoxa's first version is **1.0.0**, tagged **v1.0.0**. Upstream Interpreter
 version numbers do not define this fork's release sequence.
 
+Version **1.1.0** adds compatible features: the updater,
+streaming speech and latency improvements. Use patch
+versions such as 1.1.1 for fixes afterward. The published v1.0.0 has no updater;
+its users must install the first updater-enabled version manually once.
+
 1. Update the project version in `pyproject.toml`, its editable entry in
    `uv.lock`, and `AppVersion` in `packaging/windows_installer.iss`.
 2. Refresh `CHANGELOG.md`, public guides and `docs/releases/vX.Y.Z.md`.
@@ -18,10 +23,11 @@ version numbers do not define this fork's release sequence.
 ```powershell
 $releaseCommit = git rev-parse HEAD
 uv run python packaging/package_release.py `
-  --installer dist/installer-v1.0.0 `
-  --output dist/releases/v1.0.0 `
+  --installer dist/installer-v1.1.0 `
+  --output dist/releases/v1.1.0 `
   --source-commit $releaseCommit `
-  --local-zip dist/Ludivoxa-1.0.0-Full-Offline-Setup.zip
+  --app-update dist/app-update/Ludivoxa-1.1.0-App-Update.exe `
+  --local-zip dist/Ludivoxa-1.1.0-Full-Offline-Setup.zip
 ```
 
 The helper validates contiguous data slices and the per-file upload limit,
@@ -37,20 +43,56 @@ Create the release as a draft, upload all assets, check their reported byte
 counts/digests, then publish it for the existing tag. With GitHub CLI:
 
 ```powershell
-git tag -a v1.0.0 -m 'Ludivoxa v1.0.0'
-git push origin v1.0.0
-gh release create v1.0.0 --draft --verify-tag --title 'Ludivoxa v1.0.0' --notes-file docs/releases/v1.0.0.md
-gh release upload v1.0.0 dist/releases/v1.0.0/*
-gh release edit v1.0.0 --draft=false --latest
+git tag -a v1.1.0 -m 'Ludivoxa v1.1.0'
+git push origin v1.1.0
+gh release create v1.1.0 --draft --verify-tag --title 'Ludivoxa v1.1.0' --notes-file docs/releases/v1.1.0.md
+gh release upload v1.1.0 dist/releases/v1.1.0/*
+gh release edit v1.1.0 --draft=false --latest
 ```
 
 GitHub's automatic source archives exclude the binary/model distribution.
 The release workflow builds Python source distributions as Actions artifacts;
 it does **not** publish this fork to upstream's PyPI package.
 
+## In-app update assets
+
+The updater checks stable tags in `hungdinhxuan/Ludivoxa`; draft,
+prerelease, equal/older or malformed versions are never installed. Publish a
+strictly newer stable tag to offer an update. Do not replace the immutable
+v1.0.0 or v1.1.0 release to deliver later changes under the same version number.
+
+Build the optional app-only installer after validating the new EXE:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1
+```
+
+This reuses the existing Inno installer and AppId, with only the EXE/native
+libraries/license/runtime-stop helper. It excludes config, runtime and model
+files, and refuses a fresh empty installation. Publish it only when those
+existing model/runtime formats remain compatible; otherwise publish only the
+full offline installer so the client uses that fallback.
+
+Pass its versioned EXE to `package_release.py --app-update PATH` alongside
+the full installer directory. The helper includes it in both
+`release-manifest.json` and `SHA256SUMS.txt`; upload **all returned files**.
+The client prefers `Ludivoxa-X.Y.Z-App-Update.exe`, or downloads the full
+setup plus every numbered BIN when app-only is absent. Checksums and expected
+byte counts are required and verified again immediately before launch.
+
+Use `/LUDIVOXARESTART=1` only for user-requested in-app installation; the
+installer's extra Run entry restarts the app after a successful silent
+upgrade. Normal setup/uninstall behavior and configuration retention remain.
+Update checks and asset downloads use the public repository anonymously.
+The application does not read Git credentials, environment tokens or the
+Windows credential vault. GitHub rate-limit errors are shown with a retry
+message. Keep releases public and upload a higher stable version tag for the
+application to offer a new update. Startup checks remain optional and do not
+automatically download or install anything.
+
 Keep repository visibility unchanged unless its owner explicitly requests a
 change. Retain upstream attribution and third-party license/model-card files.
-The private GitHub credential is supplied by Git/GitHub authentication tooling,
-never committed to the repository or embedded in app defaults.
+Release publishing still uses the maintainer's Git/GitHub authentication
+tooling; credentials must never be committed or embedded in app defaults.
 
 Reference: [GitHub release size limits](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases).

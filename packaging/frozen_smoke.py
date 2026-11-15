@@ -28,7 +28,14 @@ def run_smoke(report_path):
         from interpreter.llm_translate import LLMTranslator
         from interpreter.ocr import create_ocr
         from interpreter.paddle_ocr import IsolatedPaddleOCR
-        from interpreter.speech import OfflineSynthesizer, PCMPlayer, available_voices, voice_details
+        from interpreter.speech import (
+            OfflineSynthesizer,
+            PCMPlayer,
+            SpeechController,
+            SpeechStream,
+            available_voices,
+            voice_details,
+        )
 
         report["frozen"] = bool(getattr(sys, "frozen", False))
         report["executable"] = sys.executable
@@ -145,6 +152,41 @@ def run_smoke(report_path):
         report["voice_cloning_ms"] = (time.perf_counter() - start) * 1000
         report["clone_reference_kind"] = "synthetic diagnostic audio, not a human similarity evaluation"
 
+        # Real Nano synthesis and one native device stream must finish every
+        # chunk even while Qt stalls. TTFA audits intentionally stop early;
+        # this separate diagnostic verifies complete, uninterrupted playback.
+        player = PCMPlayer()
+        player.setVolume(0)
+        speech = SpeechController(synthesizer=synthesizer, player=player)
+        source = SpeechStream(key="native streaming diagnostic")
+        source.put("Chúng ta nên rời đi trước khi các vệ sĩ quay lại. Mang theo chìa khóa và đợi tôi ở cổng.")
+        source.put("Hãy nói chuyện tiếp khi chúng ta đến nơi an toàn.")
+        source.finish()
+        loop = QEventLoop()
+        errors = []
+        player.finished.connect(loop.quit)
+        player.error.connect(lambda error: (errors.append(error), loop.quit()))
+        blocker = QTimer()
+        blocker.timeout.connect(lambda: time.sleep(0.35))
+        blocker.start(400)
+        timeout = QTimer()
+        timeout.setSingleShot(True)
+        timeout.timeout.connect(loop.quit)
+        timeout.start(30000)
+        try:
+            speech.submit(source, "models/VieNeu-TTS-v3-Nano", config.tts_speaker_id)
+            loop.exec()
+            if errors or player.diagnostics.get("processed_seconds", 0) < 4:
+                raise AssertionError(f"Streaming playback failed: {errors}, {player.diagnostics}")
+            if player.diagnostics["underruns"] or not player.diagnostics["streaming"]:
+                raise AssertionError(f"Streaming playback underrun: {player.diagnostics}")
+            report["streaming_playback_under_ui_stall"] = player.diagnostics.copy()
+        finally:
+            blocker.stop()
+            timeout.stop()
+            speech.close()
+            speech._executor.shutdown(wait=True, cancel_futures=True)
+
         # The real worker must wait for the source to settle and emit speech
         # once across repeated frames, using real OCR and the local translator.
         pipeline_config = copy.deepcopy(config)
@@ -155,6 +197,7 @@ def run_smoke(report_path):
         worker._ocr, worker._translator = ocr, translator
         spoken = []
         worker.speech_ready.connect(lambda text, generation: spoken.append(text))
+        worker.speech_stream_ready.connect(lambda stream, generation: spoken.append(stream.key))
         image = Image.new("RGB", (900, 100), "white")
         ImageDraw.Draw(image).text(
             (15, 10), "Welcome brave hero", fill="black", font=ImageFont.truetype("C:/Windows/Fonts/arial.ttf", 36)

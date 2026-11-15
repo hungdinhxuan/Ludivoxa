@@ -65,6 +65,8 @@ def test_frozen_ocr_local_translation_and_speech(tmp_path):
     assert report["selected_box_input_shape"] == [100, 900, 4]
     assert report["selected_box_origin"] == [100, 300]
     assert report["playback_under_ui_stall"]["elapsed_seconds"] < report["audio_seconds"] + 0.8
+    assert report["streaming_playback_under_ui_stall"]["processed_seconds"] >= 4
+    assert report["streaming_playback_under_ui_stall"]["underruns"] == 0
     assert all(address[0] in ("127.0.0.1", "::1") for address in report["network_destinations"])
     if private and not was_running:
         import time

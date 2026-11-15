@@ -58,3 +58,14 @@ def test_release_refuses_overlapping_directories_and_invalid_commit(package):
         helper.prepare(source, source / "release")
     with pytest.raises(ValueError, match="full Git commit"):
         helper.prepare(source, output, source_commit="main")
+
+
+def test_release_can_include_checksummed_app_only_installer(package, tmp_path):
+    helper, source, output, _base = package
+    update = tmp_path / f"Ludivoxa-{helper.VERSION}-App-Update.exe"
+    update.write_bytes(b"app update")
+    helper.prepare(source, output, app_update=update)
+    checksums = (output / "SHA256SUMS.txt").read_text()
+    assert f"{helper.sha256(update)}  {update.name}\n" in checksums
+    manifest = json.loads((output / "release-manifest.json").read_text())
+    assert any(asset["name"] == update.name for asset in manifest["assets"])

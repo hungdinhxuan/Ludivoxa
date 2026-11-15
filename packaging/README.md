@@ -7,6 +7,8 @@ instructions, and [tagged releases](../docs/RELEASING.md) for publishing.
 - `prepare_offline_bundle.py`: verify the selected Hauhau store, stage the
   runtime/model payload and apply the public `config.release.yml` defaults.
 - `build_installer.ps1`: compile the full Windows x64 installer using Inno Setup 7.
+- `build_app_update.ps1`: compile an app-only installer for existing installations;
+  preserve config, OCR/TTS models, LLM weights and the Ollama runtime.
 - `package_release.py`: prepare separate upload assets, checksums, a source
   commit manifest and an optional local ZIP.
 - `local_runtime.py`: ownership-checked Windows job leases for private Ollama.

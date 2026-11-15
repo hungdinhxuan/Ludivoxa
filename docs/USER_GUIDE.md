@@ -4,10 +4,10 @@
 
 Từ [Releases](https://github.com/hungdinhxuan/Ludivoxa/releases), tải cùng phiên bản:
 
-- `Ludivoxa-1.0.0-Full-Offline-Setup.exe`
-- `Ludivoxa-1.0.0-Full-Offline-Setup-1.bin`
-- `Ludivoxa-1.0.0-Full-Offline-Setup-2.bin`
-- `Ludivoxa-1.0.0-Full-Offline-Setup-3.bin`
+- `Ludivoxa-1.1.0-Full-Offline-Setup.exe`
+- `Ludivoxa-1.1.0-Full-Offline-Setup-1.bin`
+- `Ludivoxa-1.1.0-Full-Offline-Setup-2.bin`
+- `Ludivoxa-1.1.0-Full-Offline-Setup-3.bin`
 - `SHA256SUMS.txt`, `README.txt` và `release-manifest.json` nếu cần đối chiếu.
 
 Đặt EXE và cả ba BIN trong cùng thư mục, rồi chạy EXE. Không chạy từng BIN.
@@ -64,9 +64,15 @@ voice** để nghe thử. Bản đầy đủ có 11 preset VieNeu Nano và 67 l�
 Với Nano, **Clone from audio** nhận một file ghi âm sạch trên máy; không cần
 transcript. Để trống thì dùng preset. File tham chiếu không được upload.
 
-Âm thanh của cả câu được tạo trước khi phát để tránh hụt giữa câu. Vì vậy đoạn
-dài vẫn mất thời gian chuẩn bị; câu mới cũng có thể chờ câu đang đọc kết thúc.
-App chỉ giữ bản dịch chờ mới nhất và hủy phần tổng hợp đã lỗi thời khi có thể.
+Từ v1.1.0, app nhận từng câu dịch hoàn chỉnh và phát các đoạn audio
+ngay khi sẵn sàng, đồng thời tổng hợp phần tiếp theo. Ưu tiên **TTS only** hoặc
+overlay **Banner** cho đường xử lý này; chế độ overlay in-place vẫn dùng đường
+đọc đã đệm. App vẫn chờ OCR xác nhận chữ ổn định, giữ nguyên giọng hiện tại và
+đọc hết câu đang phát. Chỉ hội thoại chờ mới nhất được giữ lại.
+
+Với game tiếng Anh, **English + Only selected box + TTS only** là cấu hình
+đã đo để ưu tiên TTFA. Model cần nạp xong trước khi đo; chữ còn đang chạy và
+câu đọc trước chưa kết thúc vẫn làm tăng thời gian chờ.
 
 ## Ollama local và GPU server LAN
 
@@ -87,6 +93,40 @@ giữ service hoạt động. Runtime không thuộc quyền quản lý của ap
 Chạy server đó trước, cấu hình để máy này truy cập được qua mạng riêng, rồi
 **Test** và **Apply**. App không tự tắt server LAN hoặc server local dùng chung.
 Prompt và số dòng context có thể chỉnh/cấu hình theo engine hiện có.
+Prompt mặc định giữ sát ý nghĩa, cảm xúc, cách xưng hô và mức độ thô tục của
+nguyên bản; không tự làm nhẹ, tăng nặng hay thêm chi tiết. Prompt tự nhập vẫn
+được ưu tiên nếu bạn đã cấu hình riêng.
+
+## Cập nhật ứng dụng
+
+Từ v1.1.0, mở **Updates** ở thanh bên:
+
+1. Chọn **Check for updates** để kiểm tra release ổn định mới hơn trên GitHub.
+2. Đọc release notes và dung lượng, rồi chọn **Download update**. Có thể hủy
+   tải; app vẫn dịch/đọc bình thường trong lúc kiểm tra hoặc tải.
+3. Khi file được xác minh SHA-256, chọn **Install and restart** lúc thuận tiện.
+   App đóng, bộ cài cập nhật đúng thư mục hiện tại rồi mở lại ứng dụng.
+
+**Check for updates when Ludivoxa starts** bật kiểm tra tự động và thông báo
+trong UI; tải/cài vẫn do bạn chọn. Mặc định tùy chọn này tắt để giữ cách chạy
+offline. Tính năng cập nhật dùng mạng GitHub, độc lập với OCR/LLM/TTS local.
+
+Nếu release có gói **App-Update**, app ưu tiên gói đó: không tải lại hay ghi đè
+model OCR/TTS, kho model LLM, runtime Ollama hoặc `config.yml`. Gói này chỉ cài
+vào một thư mục Ludivoxa đã có `Interpreter.exe` và `config.yml`. Release cũ
+chỉ có bộ cài offline đầy đủ vẫn được hỗ trợ; khi đó phải tải cả EXE và BIN,
+và UI hiển thị toàn bộ dung lượng trước khi tải.
+
+Repo Ludivoxa đã public. Kiểm tra và tải cập nhật không cần nhập key, token
+hay đăng nhập GitHub. App không đọc thông tin đăng nhập Git hoặc Windows
+Credential Manager. Nếu không truy cập được release hoặc bị giới hạn lượt
+truy cập GitHub, app sẽ báo lỗi để thử lại sau, không xem là “đã mới nhất”.
+
+Tải cache nằm ở `%USERPROFILE%/.interpreter/updates`; nếu cài đặt lỗi, xem
+`install.log` trong thư mục phiên bản đó. Cài tự động dành cho EXE Windows;
+bản chạy từ source cần dùng bộ cài hoặc cập nhật mã nguồn thủ công. Bộ cài
+hiện vẫn chưa ký số. Bản v1.0.0 đã phát hành trước đó chưa có trang Updates;
+cần chạy gói `Ludivoxa-1.1.0-App-Update.exe` thủ công một lần vào thư mục app cũ.
 
 ## Xử lý sự cố
 

@@ -145,7 +145,7 @@ class Loopback:
         }
 
 
-def audit(config_path, tools_path, repeats, report_path=None):
+def audit(config_path, tools_path, repeats, report_path=None, streaming=False, selected_box=False):
     app = QCoreApplication.instance() or QCoreApplication([])
     config_path = Path(config_path).resolve()
     root = Path(__file__).resolve().parents[1]
@@ -188,7 +188,10 @@ def audit(config_path, tools_path, repeats, report_path=None):
         "audio_measurement": "Windows WASAPI loopback with reference correlation; callback delivery time, not acoustic/microphone latency",
         "output_volume": 0.25,
         "nano_steps": 8,
-        "speech_synthesis_mode": "complete buffered audio; cancel obsolete work between Nano chunks",
+        "speech_synthesis_mode": "sentence/audio streaming" if streaming else "complete buffered audio",
+        "tts_ms_definition": "first playable chunk" if streaming else "complete waveform",
+        "selected_box": selected_box,
+        "playback_truncated_for_ttfa": True,
         "matching": "normalized waveform correlation in 80-2000 Hz speech band; 650 ms reference segment",
     }
     real_connect = socket.socket.connect
@@ -214,6 +217,22 @@ def audit(config_path, tools_path, repeats, report_path=None):
         start = time.perf_counter()
         warmup.load()
         report["resident_llm_warmup_ms"] = (time.perf_counter() - start) * 1000
+        # Remove first-inference kernel/phonemizer costs from warm TTFA.
+        voice.synthesize(
+            "Xin chào. Bạn có thể giúp tôi không?", config.tts_model_path, config.tts_speaker_id, config.tts_rate
+        )
+        if selected_box:
+            cropped = []
+            for name, frame in cases:
+                boxes = [r.bbox for r in ocr.extract_text_regions(frame) if r.bbox]
+                if not boxes:
+                    raise ValueError("No dialogue to crop for " + name)
+                left = max(0, min(b["x"] for b in boxes) - 16)
+                top = max(0, min(b["y"] for b in boxes) - 16)
+                right = min(frame.shape[1], max(b["x"] + b["width"] for b in boxes) + 16)
+                bottom = min(frame.shape[0], max(b["y"] + b["height"] for b in boxes) + 16)
+                cropped.append((name, frame[top:bottom, left:right].copy()))
+            cases = cropped
 
         def run_trial(name, frame, run):
             trace = {"case": name, "run": run + 1, "ocr": [], "poll_phase_ms": [25, 75, 125][run % 3]}
@@ -255,12 +274,30 @@ def audit(config_path, tools_path, repeats, report_path=None):
                     pass
 
             class TimedTranslator:
+                def preview_translation(self, text):
+                    start = time.perf_counter()
+                    result = translator.preview_translation(text)
+                    trace["preview_llm_ms"] = (time.perf_counter() - start) * 1000
+                    return result
+
                 def translate(self, text):
                     trace["llm_start"] = time.perf_counter()
                     result = translator.translate(text)
                     trace["llm_end"] = time.perf_counter()
                     trace["translation"] = result[0]
                     trace["llm_cache_hit"] = result[1]
+                    return result
+
+                def translate_stream(self, text, callback):
+                    trace["llm_start"] = time.perf_counter()
+
+                    def sentence(value):
+                        trace.setdefault("first_sentence", time.perf_counter())
+                        callback(value)
+
+                    result = translator.translate_stream(text, sentence)
+                    trace["llm_end"] = time.perf_counter()
+                    trace["translation"], trace["llm_cache_hit"] = result
                     return result
 
             class TimedVoice(OfflineSynthesizer):
@@ -273,6 +310,14 @@ def audit(config_path, tools_path, repeats, report_path=None):
                     trace["tts_end"] = time.perf_counter()
                     trace["wav"] = wav
                     return wav
+
+                def iter_audio(self, *args, **kwargs):
+                    trace.setdefault("tts_start", time.perf_counter())
+                    for wav in voice.iter_audio(*args, **kwargs):
+                        trace.setdefault("tts_first_chunk", time.perf_counter())
+                        trace.setdefault("wav_chunks", []).append(wav)
+                        yield wav
+                    trace["tts_end"] = time.perf_counter()
 
             loop = QEventLoop()
             feed = QTimer()
@@ -292,12 +337,13 @@ def audit(config_path, tools_path, repeats, report_path=None):
             errors = []
             player.error.connect(lambda error: (errors.append(error), loop.quit()))
             worker = ProcessWorker(copy.deepcopy(config))
+            worker.stream_speech = streaming
             worker._ocr = TimedOCR()
             worker._translator = TimedTranslator()
             worker._load_ocr = worker._load_translator = lambda: None
 
             class SpeechReceiver(QObject):
-                @Slot(str, int)
+                @Slot(object, int)
                 def receive(self, text, generation):
                     controller.submit(
                         text,
@@ -309,6 +355,8 @@ def audit(config_path, tools_path, repeats, report_path=None):
 
             receiver = SpeechReceiver()
             worker.speech_ready.connect(receiver.receive)
+            if streaming:
+                worker.speech_stream_ready.connect(receiver.receive)
             feed.timeout.connect(lambda: worker.submit_frame(frame, 1))
             heartbeat.timeout.connect(lambda: ticks.append(time.perf_counter()))
             recorder = Loopback(tools_path)
@@ -330,7 +378,18 @@ def audit(config_path, tools_path, repeats, report_path=None):
             deadline.stop()
             worker.stop()
             controller.close()
+            controller._executor.shutdown(wait=True, cancel_futures=True)
             recorder.stop()
+            if streaming and trace.get("wav_chunks"):
+                chunks = trace.pop("wav_chunks")
+                pcm_chunks = [wav_pcm(chunk) for chunk in chunks]
+                data = BytesIO()
+                with wave.open(data, "wb") as output:
+                    output.setnchannels(1)
+                    output.setsampwidth(2)
+                    output.setframerate(pcm_chunks[0][1])
+                    output.writeframes((np.concatenate([p[0] for p in pcm_chunks]) * 32768).astype("<i2").tobytes())
+                trace["wav"] = data.getvalue()
             if errors or "wav" not in trace:
                 raise RuntimeError(f"Audit failed: {errors}")
             pcm, rate = wav_pcm(trace["wav"])
@@ -342,8 +401,9 @@ def audit(config_path, tools_path, repeats, report_path=None):
             trace["settle_and_repeat_observation_ms"] = (trace["llm_start"] - first["end"]) * 1000
             trace["llm_ms"] = (trace["llm_end"] - trace["llm_start"]) * 1000
             trace["llm_to_tts_dispatch_ms"] = (trace["tts_start"] - trace["llm_end"]) * 1000
-            trace["tts_ms"] = (trace["tts_end"] - trace["tts_start"]) * 1000
-            trace["tts_to_play_dispatch_ms"] = (trace["play_request"] - trace["tts_end"]) * 1000
+            tts_ready = trace["tts_first_chunk"] if streaming else trace["tts_end"]
+            trace["tts_ms"] = (tts_ready - trace["tts_start"]) * 1000
+            trace["tts_to_play_dispatch_ms"] = (trace["play_request"] - tts_ready) * 1000
             trace["frame_to_play_request_ms"] = (trace["play_request"] - trace["t0"]) * 1000
             trace["play_request_to_observed_audio_ms"] = (located["observed"] - trace["play_request"]) * 1000
             trace["ttfa_loopback_observed_ms"] = (located["observed"] - trace["t0"]) * 1000
@@ -409,6 +469,20 @@ if __name__ == "__main__":
     parser.add_argument("--tools", default=".test-results/audit-tools")
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--report", default=".test-results/current-ttfa-audit.json")
+    parser.add_argument("--streaming", action="store_true")
+    parser.add_argument("--selected-box", action="store_true")
+    parser.add_argument(
+        "--managed-runtime", action="store_true", help="Lease this bundle's private Ollama for the audit"
+    )
     args = parser.parse_args()
-    result = audit(args.config, args.tools, args.repeats, args.report)
-    Path(args.report).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    lease = None
+    try:
+        if args.managed_runtime:
+            from local_runtime import ensure_bundled_ollama
+
+            lease = ensure_bundled_ollama(Path(args.config).resolve().parent)
+        result = audit(args.config, args.tools, args.repeats, args.report, args.streaming, args.selected_box)
+        Path(args.report).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    finally:
+        if lease is not None:
+            lease.close()

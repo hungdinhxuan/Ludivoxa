@@ -251,8 +251,10 @@ class Config:
         tts_rate: float = 1.0,
         tts_reference_audio: str = "",
         ocr_regions: dict | None = None,
+        update_check_on_startup: bool = False,
     ):
         self.window_title = window_title
+        self.update_check_on_startup = update_check_on_startup is True
         # Video device (capture card, webcam) captured last; empty means a window was captured last.
         # The name is what the user sees and what keys exclusion zones; the id tells two devices
         # of the same model apart (it is matched first, the name is the fallback).
@@ -369,6 +371,7 @@ class Config:
 
             return cls(
                 window_title=data.get("window_title", cls.DEFAULT_WINDOW_TITLE),
+                update_check_on_startup=data.get("update_check_on_startup",False) is True,
                 ocr_confidence=float(data.get("ocr_confidence", cls.DEFAULT_OCR_CONFIDENCE)),
                 overlay_mode=overlay_mode,
                 font_family=data.get("font_family"),  # None = system default
@@ -589,6 +592,7 @@ hotkeys:
         if self.ocr_backend == OCRBackend.OWOCR or self.owocr != OwocrSettings():
             data["owocr"] = self.owocr.to_dict()
         data["source_language"] = str(self.source_language)
+        data["update_check_on_startup"] = self.update_check_on_startup
         data["tts_enabled"] = self.tts_enabled
         data["tts_model_path"] = self.tts_model_path
         data["tts_reference_audio"] = self.tts_reference_audio
