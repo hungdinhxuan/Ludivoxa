@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "metric": "ttfa_loopback_observed_ms",
+  "definition": "Complete saved frame available to first matching speech observed in Windows audio loopback.",
+  "statistic": "median of three warm trials per case",
+  "hardware": {
+    "os": "Windows 11",
+    "cpu": "Intel Core i7-13700F",
+    "gpu": "NVIDIA RTX 4090 24 GB"
+  },
+  "conditions": {
+    "source_language": "English",
+    "target_language": "Vietnamese",
+    "llm_model": "qwen3-hauhau-aggressive:4b-q4_k_m",
+    "llm_context_pairs": 3,
+    "tts": "VieNeu-TTS-v3-Nano",
+    "speaker_id": 7,
+    "nano_steps": 8,
+    "tts_cpu_threads": 2,
+    "speech_rate": 1.0,
+    "selected_dialogue_box": true,
+    "capture_poll_ms": 150,
+    "prior_speech_queued": false,
+    "audio_path": "Buffered/MME baseline versus streaming/WASAPI on the same speaker endpoint."
+  },
+  "case_descriptions": {
+    "short_game": "Short saved game dialogue crop",
+    "medium_synthetic": "Two synthetic English sentences",
+    "long_game": "Long saved game dialogue crop"
+  },
+  "profiles": [
+    {
+      "version": "v1.0.0",
+      "profile": "buffered baseline",
+      "measurement_status": "tagged_source",
+      "source_report_filename": "streaming-ttfa-before.json",
+      "source_report_sha256": "dc07d362b24d89bf10574e8e465bd0e80dfc26f2b7605b2235bb305594115f1c",
+      "measurements": {
+        "short_game": {
+          "samples_ms": [
+            1413.6345000006258,
+            1390.2308999968227,
+            1548.9264999923762
+          ],
+          "median_ms": 1413.6
+        },
+        "medium_synthetic": {
+          "samples_ms": [
+            1739.0813999809325,
+            1743.5865000006743,
+            1788.3954999851994
+          ],
+          "median_ms": 1743.6
+        },
+        "long_game": {
+          "samples_ms": [
+            4465.163200016832,
+            4438.182899990352,
+            4506.214799999725
+          ],
+          "median_ms": 4465.2
+        }
+      }
+    },
+    {
+      "version": "v1.1.0",
+      "profile": "streaming profile",
+      "measurement_status": "pre_release_profile",
+      "source_report_filename": "streaming-ttfa-wasapi.json",
+      "source_report_sha256": "e0e911db609fdf1fa325e75a4680166da79a3c7ed5b27ea3faf2aba109041b95",
+      "measurements": {
+        "short_game": {
+          "samples_ms": [
+            922.1318000054453,
+            860.9449999930803,
+            912.5971000175923
+          ],
+          "median_ms": 912.6
+        },
+        "medium_synthetic": {
+          "samples_ms": [
+            994.4115000253078,
+            1013.6493000027258,
+            1016.3886000227649
+          ],
+          "median_ms": 1013.6
+        },
+        "long_game": {
+          "samples_ms": [
+            1436.8818000075407,
+            1415.889399999287,
+            1440.9191000158899
+          ],
+          "median_ms": 1436.9
+        }
+      }
+    }
+  ],
+  "reduction_percent_vs_v1_0_0": {
+    "short_game": 35.4,
+    "medium_synthetic": 41.9,
+    "long_game": 67.8
+  },
+  "limitations": [
+    "The v1.1.0 streaming profile was measured before the final prompt/updater changes; the published installer was not separately re-benchmarked.",
+    "Model loading, native capture phase, game typewriter reveal, prior speech queueing and live gameplay resource contention are excluded.",
+    "Loopback callback observation is not acoustic speaker or microphone latency.",
+    "Three trials per case do not establish p95 latency.",
+    "Playback was truncated 2.2 seconds after the play request; these trials do not establish full-utterance playback continuity.",
+    "Saved input images and complete local reports are not included; published samples omit dialogue, translations, user paths and device identifiers."
+  ]
+}

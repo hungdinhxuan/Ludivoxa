@@ -30,6 +30,37 @@ starts at **v1.0.0**; see [attribution and licenses](NOTICE.md).
   verified background downloads and explicit install/restart, with app-only
   update packages that keep local models and settings.
 
+## TTFA benchmarks by version
+
+**TTFA (time to first audio)** runs from a complete saved frame becoming
+available to the first matching speech observed in Windows audio loopback.
+It includes OCR, text stabilization, translation, synthesis and output delay.
+Values below are **medians of three warm trials per case**, in milliseconds;
+lower is faster.
+
+| Version / measured profile | Short game dialogue | Two English sentences (synthetic) | Long game paragraph |
+| --- | ---: | ---: | ---: |
+| v1.0.0 — buffered baseline | 1,413.6 ms | 1,743.6 ms | 4,465.2 ms |
+| v1.1.0 — streaming profile¹ | 912.6 ms | 1,013.6 ms | 1,436.9 ms |
+| Reduction versus v1.0.0 | **35.4%** | **41.9%** | **67.8%** |
+
+Measured on Windows 11, Core i7-13700F and RTX 4090 24 GB, using the same saved
+dialogue crops, English OCR → Vietnamese, local HauhauCS Qwen3 4B Q4_K_M,
+three seeded context pairs, and VieNeu Nano speaker 7 at eight steps/two CPU
+threads. No previous speech was queued. The comparison includes the move
+from buffered/MME output to streaming/WASAPI output on the same speaker endpoint.
+
+¹ The streaming measurements were collected during v1.1.0 development, before
+the final prompt/updater changes; the published installer was not separately
+re-benchmarked. These trials exclude model loading, native capture phase,
+game typewriter reveal and waiting for earlier speech. They do not measure
+live game FPS, acoustic speaker latency or p95 latency.
+
+See [measurement details and reproduction](docs/PERFORMANCE.md#v110-streaming-profile)
+and the [public timing samples](docs/benchmarks/ttfa.json). New versions will
+get new rows when comparable measurements are available; unmeasured versions
+will not inherit earlier results.
+
 ## Install on Windows
 
 The packaged release targets **Windows x64**. Download its setup EXE and **all

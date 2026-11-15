@@ -32,11 +32,23 @@ upgrade a production installation or establish live game performance.
 ## v1.1.0 streaming profile
 
 The following is an A/B comparison against the tracked v1.0.0 source, using
-the same local model, three seeded context pairs, English OCR, Nano speaker 4,
+the same local model, three seeded context pairs, English OCR, Nano speaker 7,
 eight steps and two CPU threads. Both runs use the same saved frames cropped
 to their detected dialogue areas. Each case has **three warm trials**; no
 previous speech is queued. These are Windows WASAPI loopback measurements,
 not estimated sums of independent component medians.
+
+The streaming measurements were taken during v1.1.0 development, before the
+final prompt/updater changes. They describe that streaming profile, not a
+separate benchmark of the published v1.1.0 installer. Only the versions and
+profiles listed here have comparable A/B data. A future release needs a new
+measurement row; it must not reuse the previous version's timing results.
+
+The [public timing samples](benchmarks/ttfa.json) retain each valid trial's
+`ttfa_loopback_observed_ms`, rounded medians and reductions. They omit source
+dialogue, translations, user paths and audio device identifiers. Hardware:
+Windows 11, Core i7-13700F, RTX 4090 24 GB. Short/long cases use saved game
+dialogue crops; the two-sentence case uses synthetic English input.
 
 | Saved input | v1.0.0 median TTFA | Streaming median TTFA | Reduction |
 | --- | ---: | ---: | ---: |

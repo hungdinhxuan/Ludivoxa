@@ -26,6 +26,35 @@ của qube/bquenin, giữ pipeline và giao diện Qt hiện có. Dự án này 
 - Đóng app cuối cùng tự tắt Ollama riêng cùng model runners; giữ nguyên server
   local/LAN dùng chung. Mở lại app phải tải model lại.
 
+## Benchmark TTFA theo phiên bản
+
+**TTFA (time to first audio)** là thời gian từ khi có sẵn một khung hình hoàn
+chỉnh đến khi nhận được tiếng nói tương ứng qua Windows audio loopback, gồm
+OCR, chờ chữ ổn định, dịch, tổng hợp giọng và độ trễ đầu ra. Số liệu dưới đây
+là **trung vị của ba lần đo khi model đã nóng cho mỗi trường hợp**, tính bằng
+mili giây; càng thấp càng nhanh.
+
+| Phiên bản / cấu hình đo | Hội thoại game ngắn | Hai câu tiếng Anh (mẫu tổng hợp) | Đoạn game dài |
+| --- | ---: | ---: | ---: |
+| v1.0.0 — đệm toàn bộ audio | 1.413,6 ms | 1.743,6 ms | 4.465,2 ms |
+| v1.1.0 — cấu hình streaming¹ | 912,6 ms | 1.013,6 ms | 1.436,9 ms |
+| Giảm so với v1.0.0 | **35,4%** | **41,9%** | **67,8%** |
+
+Máy đo: Windows 11, Core i7-13700F, RTX 4090 24 GB. Hai lượt dùng cùng ảnh
+hội thoại đã khoanh box, OCR Anh → dịch Việt, HauhauCS Qwen3 4B Q4_K_M local,
+ba cặp context cố định và Nano speaker 7, tám bước/hai luồng CPU. Không có
+câu trước đang chờ đọc. So sánh gồm cả chuyển đầu ra từ đệm/MME sang
+streaming/WASAPI trên cùng thiết bị loa.
+
+¹ Số streaming được đo trong giai đoạn phát triển v1.1.0, trước thay đổi
+prompt/updater cuối cùng; chưa đo lại riêng bộ cài đã phát hành. Phép đo chưa
+tính thời gian tải model, chờ capture, chữ chạy trong game hoặc chờ đọc hết
+câu trước. Đây không phải phép đo FPS game, độ trễ âm thanh qua loa thực hay p95.
+
+Xem [phương pháp và cách đo lại](docs/PERFORMANCE.md#v110-streaming-profile)
+và [các mẫu thời gian công khai](docs/benchmarks/ttfa.json). Mỗi bản mới sẽ có
+dòng riêng khi có số đo tương đương; không dùng lại số bản cũ cho bản chưa đo.
+
 ## Cài Windows offline
 
 Trong [Releases](https://github.com/hungdinhxuan/Ludivoxa/releases), tải EXE và
