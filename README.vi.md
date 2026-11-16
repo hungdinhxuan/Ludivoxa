@@ -49,9 +49,6 @@ mili giây; càng thấp càng nhanh.
 | v1.0.0 — đệm toàn bộ audio | 1.413,6 ms | 1.743,6 ms | 4.465,2 ms |
 | v1.1.0 — cấu hình streaming¹ | 912,6 ms | 1.013,6 ms | 1.436,9 ms |
 | Giảm so với v1.0.0 | **35,4%** | **41,9%** | **67,8%** |
-| v1.1.1 — vá OCR lặp/âm thanh² | Chưa đo | Chưa đo | Chưa đo |
-| v1.1.2-rc.1 — vá giọng đọc/RDP | Chưa đo | Chưa đo | Chưa đo |
-| v1.1.2 — stable, vá giọng đọc/RDP | Chưa đo | Chưa đo | Chưa đo |
 
 Máy đo: Windows 11, Core i7-13700F, RTX 4090 24 GB. Hai lượt dùng cùng ảnh
 hội thoại đã khoanh box, OCR Anh → dịch Việt, HauhauCS Qwen3 4B Q4_K_M local,
@@ -64,14 +61,36 @@ prompt/updater cuối cùng; chưa đo lại riêng bộ cài đã phát hành. 
 tính thời gian tải model, chờ capture, chữ chạy trong game hoặc chờ đọc hết
 câu trước. Đây không phải phép đo FPS game, độ trễ âm thanh qua loa thực hay p95.
 
-² Chạy lại OCR thật trên 10 ảnh GBA đã lưu cho kết quả **10 → 1 yêu cầu đọc**,
+**Đo lại đúng các tag ngày 16/11/2026 — từ frame tới callback PCM của driver.**
+Ba bản còn thiếu đã được đo cùng ảnh, cấu hình Qwen/Nano và đầu ra WDM-KS.
+Mỗi ô là trung vị ba lượt khi model đã nóng; đo thêm v1.1.0 trên cùng đường
+âm thanh để đối chứng.
+
+| Mã nguồn theo tag / WDM-KS | Hội thoại game ngắn | Hai câu tiếng Anh (mẫu tổng hợp) | Đoạn game dài |
+| --- | ---: | ---: | ---: |
+| v1.1.0 — đối chứng | 3.914,3 ms | 4.448,3 ms | 15.644,1 ms |
+| v1.1.1 | 3.515,8 ms | 4.450,3 ms | 15.404,5 ms |
+| v1.1.2-rc.1 | 3.984,6 ms | 4.240,7 ms | 15.543,2 ms |
+| v1.1.2 stable | 3.987,0 ms | 4.332,1 ms | 15.585,3 ms |
+
+**Đây là mốc PCM tới driver, chưa phải TTFA loopback.** Phiên Windows đang
+ngắt kết nối nên không có WASAPI loopback. Đường WDM-KS hiện phải đệm toàn bộ
+câu đã tổng hợp, gồm mọi đoạn streaming, rồi mới phát; buffer thiết bị khoảng
+61 ms chỉ là một phần thời gian chờ. Bản v1.1.0 đối chứng cũng chờ lâu trên
+đường này. Không so trực tiếp bảng này với bảng streaming/WASAPI phía trên,
+hoặc kết luận chênh lệch nhỏ giữa các bản từ ba lượt đo. TTFA loopback của ba
+bản mới vẫn cần phiên âm thanh Windows hoạt động. Xem
+[phương pháp và mốc yêu cầu phát](docs/PERFORMANCE.md#tagged-version-native-callback-audit)
+và [đủ 36 mẫu thời gian](docs/benchmarks/ttfa-native-callback.json).
+
+Chạy lại OCR thật trên 10 ảnh GBA đã lưu cho kết quả **10 → 1 yêu cầu đọc**,
 với thời gian phát lại được kiểm soát, bản dịch mô phỏng và không phát giọng.
 Đây là kiểm chứng chống lặp, không phải TTFA. Chữ đang hiện dần được chờ thích
-ứng; chưa đo lại TTFA riêng cho v1.1.1 và không dùng số bản cũ để đại diện.
+ứng; không dùng số TTFA cũ hoặc phép phát lại này để đại diện cho v1.1.1.
 
 Xem [phương pháp và cách đo lại](docs/PERFORMANCE.md#v110-streaming-profile)
 và [các mẫu thời gian công khai](docs/benchmarks/ttfa.json). Mỗi bản mới sẽ có
-dòng riêng khi có số đo tương đương; không dùng lại số bản cũ cho bản chưa đo.
+dòng riêng khi có số đo tương đương; các cách quan sát khác nhau được ghi riêng.
 
 ## Cài Windows offline
 

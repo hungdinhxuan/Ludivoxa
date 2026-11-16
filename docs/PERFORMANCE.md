@@ -1,5 +1,90 @@
 # Validation and performance
 
+## Tagged-version native callback audit
+
+On **2026-11-16**, the exact source tags v1.1.1, v1.1.2-rc.1 and v1.1.2 were
+measured in separate processes. v1.1.0 was rerun as a control. Each tag used
+the same three saved inputs and three warm trials per input: **36 valid trials**.
+The source commit, raw report SHA-256, individual samples and medians are in
+[the public data](benchmarks/ttfa-native-callback.json); dialogue, translations,
+user paths and device identifiers are excluded.
+
+**This run could not measure loopback TTFA.** The current Windows user session
+was disconnected, Audio services were running, and PortAudio exposed only
+WDM-KS devices. WASAPI/MME/DirectSound had no endpoints; PyAudioWPatch exposed
+zero devices and its default-loopback query returned `-9996`. No existing
+loopback value has been copied into the unmeasured tags.
+
+The measured metric is **complete saved frame available → first real native
+driver callback containing voiced PCM**, with absolute sample threshold 1e-5.
+It includes polling phase, OCR, stability waiting, translation and synthesis.
+It stops before DAC/mixer/speaker output and is not acoustic or loopback TTFA.
+On WDM-KS the production player consumes the entire audio stream before
+playback. Waiting after the first play request therefore includes remaining
+synthesis, not just driver/device latency. The requested buffer was 60 ms;
+the native stream reported 61.0 ms.
+
+| Tag | Short frame → PCM callback | Two-sentence frame → PCM callback | Long frame → PCM callback |
+| --- | ---: | ---: | ---: |
+| v1.1.0 control | 3,914.3 ms | 4,448.3 ms | 15,644.1 ms |
+| v1.1.1 | 3,515.8 ms | 4,450.3 ms | 15,404.5 ms |
+| v1.1.2-rc.1 | 3,984.6 ms | 4,240.7 ms | 15,543.2 ms |
+| v1.1.2 | 3,987.0 ms | 4,332.1 ms | 15,585.3 ms |
+
+For comparison within this run, the first play-request medians were:
+
+| Tag | Short frame → play request | Two-sentence frame → play request | Long frame → play request |
+| --- | ---: | ---: | ---: |
+| v1.1.0 control | 1,814.4 ms | 1,721.5 ms | 2,366.8 ms |
+| v1.1.1 | 1,408.0 ms | 1,702.5 ms | 2,410.8 ms |
+| v1.1.2-rc.1 | 1,913.1 ms | 1,634.1 ms | 2,274.3 ms |
+| v1.1.2 | 1,926.9 ms | 1,607.0 ms | 2,484.0 ms |
+
+**A play request is not first audio.** In the stable long-paragraph trials,
+the median frame-to-request time was 2.48 seconds, but the first voiced callback
+was at 15.59 seconds. The v1.1.0 control also needed 15.64 seconds on WDM-KS;
+the difference from the historical streaming/WASAPI results is not evidence
+of a 10× code regression between releases. Three trials with fixed version
+order also cannot establish small speed differences or production p95.
+
+Conditions: Windows 11, i7-13700F, RTX 4090 24 GB, local Qwen3 HauhauCS 4B
+Q4_K_M, Ollama context 2048, three seeded history pairs, per-tag default system
+prompt, temperature 0/seed 42, English Paddle mobile OCR (two CPU threads,
+max-side 640), selected dialogue crop, Nano speaker 7/eight steps/two CPU
+threads/rate 1.0, stereo 44.1 kHz WDM-KS. Frame polling used 150 ms, with
+25/75/125 ms initial phases. OCR/translation/audio caches were cleared between
+trials; confirmed preview translation could still be reused within a trial.
+All inference connections were loopback-only. The managed runtime stopped
+afterward and the installed app configuration stayed unchanged.
+
+The old audit's 2.2-second recording cutoff from the play request can expire
+before buffered WDM-KS playback begins. Native observation instead stops
+500 ms after its first voiced callback, with a 45-second safety deadline.
+The early incomplete run was discarded. Native status flags were empty in
+all 36 valid trials. This does not establish full-utterance audio continuity.
+
+To reproduce with local models and an already running local Ollama, prepare
+an isolated benchmark config matching the public conditions and import each
+tag's source while using the current audit helper:
+
+```powershell
+$env:PYTHONPATH = 'C:/path/to/exported-v1.1.2/src'
+.venv/Scripts/python.exe packaging/audit_latency.py --config C:/path/to/benchmark-config.yml --streaming --selected-box --audio-observation native-callback --repeats 3 --report .test-results/v1.1.2-native-callback.json
+Remove-Item Env:PYTHONPATH
+```
+
+Provision the audit's saved input paths locally as described in the script.
+For true loopback TTFA, reconnect to an active Windows desktop with a WASAPI
+loopback endpoint and run `--audio-observation loopback` with PyAudioWPatch.
+Do not combine the two observation methods in one comparison. Models are warm,
+no prior speech is queued, and model loading, native capture, typewriter
+reveal and live game contention are excluded. Packaged installers were not
+independently benchmarked in this run.
+
+The audit-helper change passes seven focused tests and the full Windows source
+suite passes **656 tests, one platform skip** (69.06 seconds). No application
+pipeline code or release artifacts changed for this documentation update.
+
 ## v1.1.2 stable qualification
 
 No new end-to-end TTFA or game FPS benchmark is available for v1.1.2.

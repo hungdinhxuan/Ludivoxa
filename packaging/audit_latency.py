@@ -145,7 +145,68 @@ class Loopback:
         }
 
 
-def audit(config_path, tools_path, repeats, report_path=None, streaming=False, selected_box=False):
+class NativeCallbackObserver:
+    """Observe real voiced PCM handed to a callback driver, not audible output."""
+
+    def __init__(self):
+        import sounddevice as sd
+
+        self.sd = sd
+        self.original = sd.OutputStream
+        self.first = None
+        self.latency_ms = None
+        self.statuses = []
+
+    def start(self):
+        def output_stream(*args, **kwargs):
+            callback = kwargs.get("callback")
+            if callback is None:
+                raise RuntimeError("Native callback observation requires a callback output driver (WDM-KS/ASIO).")
+            rate = kwargs["samplerate"]
+
+            def render(outdata, frames, clock, status):
+                observed = time.perf_counter()
+                try:
+                    return callback(outdata, frames, clock, status)
+                finally:
+                    active = np.flatnonzero(np.max(np.abs(outdata), axis=1) > 1e-5)
+                    if len(active) and self.first is None:
+                        self.first = (observed, int(active[0]) / rate * 1000)
+                    if status:
+                        self.statuses.append(str(status))
+
+            stream = self.original(*args, **dict(kwargs, callback=render))
+            self.latency_ms = float(stream.latency) * 1000
+            return stream
+
+        self.sd.OutputStream = output_stream
+
+    def stop(self):
+        self.sd.OutputStream = self.original
+
+    def locate(self):
+        if self.first is None:
+            raise RuntimeError("No voiced PCM observed at the native output callback.")
+        return {
+            "callback_observed": self.first[0],
+            "first_nonzero_offset_ms": self.first[1],
+            "reported_native_latency_ms": self.latency_ms,
+        }
+
+
+def audit(
+    config_path,
+    tools_path,
+    repeats,
+    report_path=None,
+    streaming=False,
+    selected_box=False,
+    audio_observation="loopback",
+):
+    if audio_observation not in ("loopback", "native-callback"):
+        raise ValueError("Unknown audio observation mode")
+    if repeats < 1:
+        raise ValueError("At least one trial is required")
     app = QCoreApplication.instance() or QCoreApplication([])
     config_path = Path(config_path).resolve()
     root = Path(__file__).resolve().parents[1]
@@ -185,14 +246,23 @@ def audit(config_path, tools_path, repeats, report_path=None, streaming=False, s
         "capture_poll_ms": PROCESS_INTERVAL_MS,
         "native_capture_period_ms": 250,
         "input": "complete saved frame available at t0; game reveal/typewriter time excluded",
-        "audio_measurement": "Windows WASAPI loopback with reference correlation; callback delivery time, not acoustic/microphone latency",
+        "audio_measurement": (
+            "Windows WASAPI loopback with reference correlation; callback delivery time, not acoustic/microphone latency"
+            if audio_observation == "loopback"
+            else "First voiced PCM in the native driver callback; not measured loopback or acoustic TTFA"
+        ),
+        "audio_observation": audio_observation,
         "output_volume": 0.25,
         "nano_steps": 8,
         "speech_synthesis_mode": "sentence/audio streaming" if streaming else "complete buffered audio",
         "tts_ms_definition": "first playable chunk" if streaming else "complete waveform",
         "selected_box": selected_box,
         "playback_truncated_for_ttfa": True,
-        "matching": "normalized waveform correlation in 80-2000 Hz speech band; 650 ms reference segment",
+        "matching": (
+            "normalized waveform correlation in 80-2000 Hz speech band; 650 ms reference segment"
+            if audio_observation == "loopback"
+            else "first actual driver callback containing voiced PCM (absolute sample > 1e-5)"
+        ),
     }
     real_connect = socket.socket.connect
     addresses = []
@@ -331,7 +401,8 @@ def audit(config_path, tools_path, repeats, report_path=None, streaming=False, s
             def play(wav):
                 trace["play_request"] = time.perf_counter()
                 original_play(wav)
-                QTimer.singleShot(2200, loop.quit)
+                if audio_observation == "loopback":
+                    QTimer.singleShot(2200, loop.quit)
 
             player.play = play
             errors = []
@@ -359,27 +430,37 @@ def audit(config_path, tools_path, repeats, report_path=None, streaming=False, s
                 worker.speech_stream_ready.connect(receiver.receive)
             feed.timeout.connect(lambda: worker.submit_frame(frame, 1))
             heartbeat.timeout.connect(lambda: ticks.append(time.perf_counter()))
-            recorder = Loopback(tools_path)
-            recorder.start()
-            report.setdefault("loopback_device", recorder.device)
-            trace["t0"] = time.perf_counter()
-            QTimer.singleShot(
-                trace["poll_phase_ms"], lambda: (worker.submit_frame(frame, 1), feed.start(PROCESS_INTERVAL_MS))
-            )
-            heartbeat.start(10)
+            recorder = Loopback(tools_path) if audio_observation == "loopback" else NativeCallbackObserver()
+            if audio_observation == "native-callback":
+                # Callback-only drivers consume the complete synthesized stream
+                # before playback. A timeout from play() can cut that off before
+                # any PCM reaches the driver; stop only after actual observation.
+                heartbeat.timeout.connect(
+                    lambda: loop.quit() if recorder.first and time.perf_counter() - recorder.first[0] > 0.5 else None
+                )
             deadline = QTimer()
             deadline.setSingleShot(True)
             deadline.timeout.connect(loop.quit)
-            deadline.start(45000)
-            worker.start(config.ocr_confidence)
-            loop.exec()
-            feed.stop()
-            heartbeat.stop()
-            deadline.stop()
-            worker.stop()
-            controller.close()
-            controller._executor.shutdown(wait=True, cancel_futures=True)
-            recorder.stop()
+            try:
+                recorder.start()
+                if audio_observation == "loopback":
+                    report.setdefault("loopback_device", recorder.device)
+                trace["t0"] = time.perf_counter()
+                QTimer.singleShot(
+                    trace["poll_phase_ms"], lambda: (worker.submit_frame(frame, 1), feed.start(PROCESS_INTERVAL_MS))
+                )
+                heartbeat.start(10)
+                deadline.start(45000)
+                worker.start(config.ocr_confidence)
+                loop.exec()
+            finally:
+                feed.stop()
+                heartbeat.stop()
+                deadline.stop()
+                worker.stop()
+                controller.close()
+                controller._executor.shutdown(wait=True, cancel_futures=True)
+                recorder.stop()
             if streaming and trace.get("wav_chunks"):
                 chunks = trace.pop("wav_chunks")
                 pcm_chunks = [wav_pcm(chunk) for chunk in chunks]
@@ -394,7 +475,11 @@ def audit(config_path, tools_path, repeats, report_path=None, streaming=False, s
                 raise RuntimeError(f"Audit failed: {errors}")
             pcm, rate = wav_pcm(trace["wav"])
             trace["audio_duration_seconds"] = len(pcm) / rate
-            located = recorder.locate(trace.pop("wav"), trace["play_request"] - 0.05)
+            if audio_observation == "loopback":
+                located = recorder.locate(trace.pop("wav"), trace["play_request"] - 0.05)
+            else:
+                trace.pop("wav")
+                located = recorder.locate()
             first = trace["ocr"][0]
             trace["first_poll_and_dispatch_ms"] = (first["start"] - trace["t0"]) * 1000
             trace["first_ocr_ms"] = (first["end"] - first["start"]) * 1000
@@ -405,13 +490,22 @@ def audit(config_path, tools_path, repeats, report_path=None, streaming=False, s
             trace["tts_ms"] = (tts_ready - trace["tts_start"]) * 1000
             trace["tts_to_play_dispatch_ms"] = (trace["play_request"] - tts_ready) * 1000
             trace["frame_to_play_request_ms"] = (trace["play_request"] - trace["t0"]) * 1000
-            trace["play_request_to_observed_audio_ms"] = (located["observed"] - trace["play_request"]) * 1000
-            trace["ttfa_loopback_observed_ms"] = (located["observed"] - trace["t0"]) * 1000
-            trace["ttfa_loopback_sample_estimate_ms"] = (located["sample_estimate"] - trace["t0"]) * 1000
-            trace["visible_text_ttfa_mean_phase_estimate_ms"] = trace["ttfa_loopback_observed_ms"] + 125
-            trace["audio_match_correlation"] = located["correlation"]
-            trace["reference_leading_silence_ms"] = located["reference_leading_silence_ms"]
-            trace["loopback_status_flags"] = recorder.statuses
+            if audio_observation == "loopback":
+                trace["play_request_to_observed_audio_ms"] = (located["observed"] - trace["play_request"]) * 1000
+                trace["ttfa_loopback_observed_ms"] = (located["observed"] - trace["t0"]) * 1000
+                trace["ttfa_loopback_sample_estimate_ms"] = (located["sample_estimate"] - trace["t0"]) * 1000
+                trace["visible_text_ttfa_mean_phase_estimate_ms"] = trace["ttfa_loopback_observed_ms"] + 125
+                trace["audio_match_correlation"] = located["correlation"]
+                trace["reference_leading_silence_ms"] = located["reference_leading_silence_ms"]
+                trace["loopback_status_flags"] = recorder.statuses
+            else:
+                trace["frame_to_native_callback_ms"] = (located["callback_observed"] - trace["t0"]) * 1000
+                trace["play_request_to_native_callback_ms"] = (
+                    located["callback_observed"] - trace["play_request"]
+                ) * 1000
+                trace["first_nonzero_offset_ms"] = located["first_nonzero_offset_ms"]
+                trace["reported_native_latency_ms"] = located["reported_native_latency_ms"]
+                trace["native_statuses"] = recorder.statuses
             trace["max_qt_pause_ms"] = float(max(np.diff(ticks)) * 1000) if len(ticks) > 1 else None
             return trace
 
@@ -431,8 +525,14 @@ def audit(config_path, tools_path, repeats, report_path=None, streaming=False, s
                                 "first_ocr_ms",
                                 "llm_ms",
                                 "tts_ms",
-                                "ttfa_loopback_observed_ms",
-                                "audio_match_correlation",
+                            )
+                        }
+                        | {
+                            key: trace[key]
+                            for key in (
+                                ("ttfa_loopback_observed_ms", "audio_match_correlation")
+                                if audio_observation == "loopback"
+                                else ("frame_to_native_callback_ms", "reported_native_latency_ms")
                             )
                         }
                     ),
@@ -445,15 +545,18 @@ def audit(config_path, tools_path, repeats, report_path=None, streaming=False, s
         import sounddevice as sd
 
         output = sd.query_devices(kind="output")
-        probe = sd.OutputStream(
-            samplerate=int(output["default_samplerate"]),
-            channels=min(2, int(output["max_output_channels"])),
-            dtype="float32",
-            latency="high",
-        )
         report["output_device"] = output
-        report["reported_output_stream_latency_ms"] = probe.latency * 1000
-        probe.close()
+        if audio_observation == "loopback":
+            probe = sd.OutputStream(
+                samplerate=int(output["default_samplerate"]),
+                channels=min(2, int(output["max_output_channels"])),
+                dtype="float32",
+                latency="high",
+            )
+            report["reported_output_stream_latency_ms"] = probe.latency * 1000
+            probe.close()
+        else:
+            report["reported_output_stream_latency_ms"] = report["samples"][-1]["reported_native_latency_ms"]
         report["context_lines"] = config.llm.context_lines
         report["history"] = "three seeded neutral English/Vietnamese context pairs"
         report["complete"] = True
@@ -471,6 +574,7 @@ if __name__ == "__main__":
     parser.add_argument("--report", default=".test-results/current-ttfa-audit.json")
     parser.add_argument("--streaming", action="store_true")
     parser.add_argument("--selected-box", action="store_true")
+    parser.add_argument("--audio-observation", choices=("loopback", "native-callback"), default="loopback")
     parser.add_argument(
         "--managed-runtime", action="store_true", help="Lease this bundle's private Ollama for the audit"
     )
@@ -481,7 +585,15 @@ if __name__ == "__main__":
             from local_runtime import ensure_bundled_ollama
 
             lease = ensure_bundled_ollama(Path(args.config).resolve().parent)
-        result = audit(args.config, args.tools, args.repeats, args.report, args.streaming, args.selected_box)
+        result = audit(
+            args.config,
+            args.tools,
+            args.repeats,
+            args.report,
+            args.streaming,
+            args.selected_box,
+            args.audio_observation,
+        )
         Path(args.report).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     finally:
         if lease is not None:

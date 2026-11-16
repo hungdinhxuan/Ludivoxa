@@ -1,0 +1,280 @@
+{
+  "schema_version": 1,
+  "measured_on": "2026-11-16",
+  "metric": "frame_to_native_callback_ms",
+  "definition": "Complete saved frame available to first native output callback containing nonzero generated speech PCM. This is not loopback TTFA or audible onset.",
+  "statistic": "median of three warm trials per case; all individual samples retained",
+  "hardware": {
+    "os": "Windows 11",
+    "cpu": "Intel Core i7-13700F",
+    "gpu": "NVIDIA RTX 4090 24 GB"
+  },
+  "conditions": {
+    "source_language": "English",
+    "target_language": "Vietnamese",
+    "llm_model": "qwen3-hauhau-aggressive:4b-q4_k_m",
+    "llm_context_pairs": 3,
+    "ollama_num_ctx": 2048,
+    "temperature": 0,
+    "seed": 42,
+    "system_prompt": "each tagged version default",
+    "ocr_cpu_threads": 2,
+    "ocr_max_side": 640,
+    "tts": "VieNeu-TTS-v3-Nano",
+    "speaker_id": 7,
+    "nano_steps": 8,
+    "tts_cpu_threads": 2,
+    "speech_rate": 1.0,
+    "selected_dialogue_box": true,
+    "capture_poll_ms": 150,
+    "poll_phase_samples_ms": [
+      25,
+      75,
+      125
+    ],
+    "prior_speech_queued": false,
+    "audio_host": "Windows WDM-KS",
+    "audio_sample_rate": 44100,
+    "audio_channels": 2,
+    "output_volume": 0.25,
+    "requested_native_latency_ms": 60,
+    "reported_native_latency_ms": 60.997732426303855,
+    "playback_policy": "Production callback driver fallback buffers the complete generated utterance before playback.",
+    "observation_threshold": "first callback with any absolute output sample > 1e-5",
+    "playback_truncation": "stop 500 ms after first voiced native callback; full synthesis is still required by the buffered driver path",
+    "execution_order": [
+      "v1.1.1",
+      "v1.1.2-rc.1",
+      "v1.1.2",
+      "v1.1.0"
+    ],
+    "loopback_available": false,
+    "inference_network": "loopback only"
+  },
+  "auditor_sha256": "e429660fb2c356dffdca625933a828ce8b46a06246b54a2f828aec0824ef34c1",
+  "benchmark_config_sha256": "e46e139f10424b946d338d9b82e53e41bd708dbf95035841e15a73f525f5a268",
+  "case_descriptions": {
+    "short_game": "Short saved game dialogue crop",
+    "medium_synthetic": "Two synthetic English sentences",
+    "long_game": "Long saved game dialogue crop"
+  },
+  "input_file_sha256": {
+    "fast-ocr-frame.npy": "5b1e5844a36e70bda7ffb8e02cf7059a0c9d5f3e5bd2d2c2c294bbe25bd4569e",
+    "ocr-latency-live.npy": "0415f244a3aa024f6ef2d1e734d551dc70ac2d8ee09b2465be0e49d44c0f8294"
+  },
+  "profiles": [
+    {
+      "version": "v1.1.0",
+      "measurement_status": "tagged_source",
+      "source_commit": "4e50ac1571b8e96d90ec464c84889c73f4c26245",
+      "source_report_filename": "v1.1.0-native-callback.json",
+      "source_report_sha256": "0aeab2fd8671e7e21bbee43fb5a679a4a11451d75e5991bee43e84fb127f1e16",
+      "measurements": {
+        "short_game": {
+          "samples_ms": [
+            3334.204300001147,
+            4097.491599997738,
+            3914.2699999974866
+          ],
+          "median_ms": 3914.3,
+          "frame_to_play_request_samples_ms": [
+            1185.200400002941,
+            2040.617899998324,
+            1814.4487999998091
+          ],
+          "frame_to_play_request_median_ms": 1814.4
+        },
+        "medium_synthetic": {
+          "samples_ms": [
+            3938.613799997256,
+            4448.31239999985,
+            4575.72970000183
+          ],
+          "median_ms": 4448.3,
+          "frame_to_play_request_samples_ms": [
+            1392.6305999993929,
+            1721.4787999982946,
+            1815.9359000019322
+          ],
+          "frame_to_play_request_median_ms": 1721.5
+        },
+        "long_game": {
+          "samples_ms": [
+            15644.130399999995,
+            15735.514399999374,
+            15276.389099999506
+          ],
+          "median_ms": 15644.1,
+          "frame_to_play_request_samples_ms": [
+            2360.449099996913,
+            2366.7664999993576,
+            2630.813700001454
+          ],
+          "frame_to_play_request_median_ms": 2366.8
+        }
+      }
+    },
+    {
+      "version": "v1.1.1",
+      "measurement_status": "tagged_source",
+      "source_commit": "2adc8f9d5199050cc18a375299b093c3f707aa04",
+      "source_report_filename": "v1.1.1-native-callback.json",
+      "source_report_sha256": "5821094d412bdaf8517c7f12242f66f30e1314b3b7aefa8537f4086d59b62eb0",
+      "measurements": {
+        "short_game": {
+          "samples_ms": [
+            3191.170800000691,
+            3515.815200000361,
+            4122.180899998057
+          ],
+          "median_ms": 3515.8,
+          "frame_to_play_request_samples_ms": [
+            1241.7141999976593,
+            1408.037000001059,
+            2102.24979999839
+          ],
+          "frame_to_play_request_median_ms": 1408.0
+        },
+        "medium_synthetic": {
+          "samples_ms": [
+            4454.291900001408,
+            4450.266699997883,
+            3718.6542999988887
+          ],
+          "median_ms": 4450.3,
+          "frame_to_play_request_samples_ms": [
+            1702.5113000017882,
+            1770.0513999989198,
+            1439.5858999996562
+          ],
+          "frame_to_play_request_median_ms": 1702.5
+        },
+        "long_game": {
+          "samples_ms": [
+            15242.310399997223,
+            15485.458899998775,
+            15404.533299999457
+          ],
+          "median_ms": 15404.5,
+          "frame_to_play_request_samples_ms": [
+            2402.8001999977278,
+            2689.9999999986903,
+            2410.770099999354
+          ],
+          "frame_to_play_request_median_ms": 2410.8
+        }
+      }
+    },
+    {
+      "version": "v1.1.2-rc.1",
+      "measurement_status": "tagged_source",
+      "source_commit": "ea2542d65873370abd9d2d39ffe647fe43d722a1",
+      "source_report_filename": "v1.1.2-rc.1-native-callback.json",
+      "source_report_sha256": "31f39d0aba9e4b51020eb92f4e87b60570d035a7389a1224355df4b4036a381e",
+      "measurements": {
+        "short_game": {
+          "samples_ms": [
+            3720.922199998313,
+            3984.5924000001105,
+            4150.57539999907
+          ],
+          "median_ms": 3984.6,
+          "frame_to_play_request_samples_ms": [
+            1633.7851999996928,
+            1913.1302000023425,
+            2006.18349999786
+          ],
+          "frame_to_play_request_median_ms": 1913.1
+        },
+        "medium_synthetic": {
+          "samples_ms": [
+            4023.9626000002318,
+            4240.693899999314,
+            4264.967899998737
+          ],
+          "median_ms": 4240.7,
+          "frame_to_play_request_samples_ms": [
+            1443.590500002756,
+            1729.313200001343,
+            1634.0530999987095
+          ],
+          "frame_to_play_request_median_ms": 1634.1
+        },
+        "long_game": {
+          "samples_ms": [
+            15371.661099998164,
+            15547.25380000309,
+            15543.190400003368
+          ],
+          "median_ms": 15543.2,
+          "frame_to_play_request_samples_ms": [
+            2274.263499999506,
+            2270.769900002051,
+            2421.1602000032144
+          ],
+          "frame_to_play_request_median_ms": 2274.3
+        }
+      }
+    },
+    {
+      "version": "v1.1.2",
+      "measurement_status": "tagged_source",
+      "source_commit": "0470fc2dfe1883a60012a3cacbdd22b29c4dda63",
+      "source_report_filename": "v1.1.2-native-callback.json",
+      "source_report_sha256": "81370d3a033633818652c653242dc948d0402640cd2a160ac8918d8c380dbd5a",
+      "measurements": {
+        "short_game": {
+          "samples_ms": [
+            3656.063800000993,
+            3986.9816999998875,
+            4149.440900000627
+          ],
+          "median_ms": 3987.0,
+          "frame_to_play_request_samples_ms": [
+            1617.7993000019342,
+            1926.9236000000092,
+            2114.479100000608
+          ],
+          "frame_to_play_request_median_ms": 1926.9
+        },
+        "medium_synthetic": {
+          "samples_ms": [
+            4332.066700000723,
+            4273.466599999665,
+            4549.080599997978
+          ],
+          "median_ms": 4332.1,
+          "frame_to_play_request_samples_ms": [
+            1607.029999999213,
+            1463.9170999980706,
+            1773.2366999989608
+          ],
+          "frame_to_play_request_median_ms": 1607.0
+        },
+        "long_game": {
+          "samples_ms": [
+            15470.049199997447,
+            15688.80839999838,
+            15585.33030000035
+          ],
+          "median_ms": 15585.3,
+          "frame_to_play_request_samples_ms": [
+            2493.2415999974182,
+            2451.280199999019,
+            2484.0049000013096
+          ],
+          "frame_to_play_request_median_ms": 2484.0
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "The Windows user session was disconnected; WASAPI/MME/DirectSound and PyAudioWPatch loopback endpoints were unavailable.",
+    "Native callback timing is before DAC/mixer/speaker output and must not fill loopback TTFA cells or be directly compared to historical WASAPI TTFA.",
+    "The first play request is not audio onset; on this path synthesis continues while the native player buffers the complete utterance.",
+    "Model loading, native window capture, typewriter reveal, prior speech queueing and live game resource contention are excluded.",
+    "Three trials per case with fixed version order do not establish p95 or small inter-version performance differences.",
+    "Source tags were imported in separate processes; packaged installers were not independently re-benchmarked.",
+    "Saved input images, full reports, dialogue, translations, user paths and device identifiers are omitted."
+  ]
+}

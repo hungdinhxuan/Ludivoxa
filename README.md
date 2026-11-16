@@ -48,9 +48,6 @@ lower is faster.
 | v1.0.0 — buffered baseline | 1,413.6 ms | 1,743.6 ms | 4,465.2 ms |
 | v1.1.0 — streaming profile¹ | 912.6 ms | 1,013.6 ms | 1,436.9 ms |
 | Reduction versus v1.0.0 | **35.4%** | **41.9%** | **67.8%** |
-| v1.1.1 — OCR repeat/audio fixes² | Not measured | Not measured | Not measured |
-| v1.1.2-rc.1 — speech/RDP fixes | Not measured | Not measured | Not measured |
-| v1.1.2 — stable speech/RDP fixes | Not measured | Not measured | Not measured |
 
 Measured on Windows 11, Core i7-13700F and RTX 4090 24 GB, using the same saved
 dialogue crops, English OCR → Vietnamese, local HauhauCS Qwen3 4B Q4_K_M,
@@ -64,17 +61,40 @@ re-benchmarked. These trials exclude model loading, native capture phase,
 game typewriter reveal and waiting for earlier speech. They do not measure
 live game FPS, acoustic speaker latency or p95 latency.
 
-² v1.1.1 fixes repeated speech from OCR word-box jitter, animated dialogue
+**Tagged-version measurements, 2026-11-16 — frame to native PCM callback.**
+The three later versions have now been measured with the same saved inputs,
+Qwen/Nano settings and WDM-KS output. Each value is a median of three warm
+trials. v1.1.0 was rerun on this output path as a control.
+
+| Tagged source / WDM-KS | Short game dialogue | Two English sentences (synthetic) | Long game paragraph |
+| --- | ---: | ---: | ---: |
+| v1.1.0 — control | 3,914.3 ms | 4,448.3 ms | 15,644.1 ms |
+| v1.1.1 | 3,515.8 ms | 4,450.3 ms | 15,404.5 ms |
+| v1.1.2-rc.1 | 3,984.6 ms | 4,240.7 ms | 15,543.2 ms |
+| v1.1.2 stable | 3,987.0 ms | 4,332.1 ms | 15,585.3 ms |
+
+**These are driver-side observations, not loopback TTFA.** The Windows session
+was disconnected and exposed no WASAPI loopback endpoint. Production WDM-KS
+playback buffers the complete synthesized utterance, including all streamed
+chunks, before output; its roughly 61 ms device buffer is only part of that wait.
+The v1.1.0 control shows the same long wait on this path. Do not compare these
+numbers directly with the earlier streaming/WASAPI table or infer small version
+speed differences from three trials. Loopback TTFA for the three later versions
+still requires an active Windows audio session. See the
+[method and play-request timings](docs/PERFORMANCE.md#tagged-version-native-callback-audit)
+and [all 36 timing samples](docs/benchmarks/ttfa-native-callback.json).
+
+v1.1.1 fixes repeated speech from OCR word-box jitter, animated dialogue
 cursors and streamed translation aliases, and negotiates supported audio
 channel formats. A controlled replay with real OCR on ten saved GBA images
 reduced speech requests from 10 to 1; it did not measure TTFA or synthesize
 audio. Revealing text now waits adaptively, so earlier TTFA results are not
-reused for this version. See the [patch validation](docs/PERFORMANCE.md#v111-live-gba-repeat-reproduction).
+reused as measurements of this version. See the [patch validation](docs/PERFORMANCE.md#v111-live-gba-repeat-reproduction).
 
 See [measurement details and reproduction](docs/PERFORMANCE.md#v110-streaming-profile)
 and the [public timing samples](docs/benchmarks/ttfa.json). New versions will
-get new rows when comparable measurements are available; unmeasured versions
-will not inherit earlier results.
+get new rows when comparable measurements are available; different observation
+methods are reported separately.
 
 ## Install on Windows
 

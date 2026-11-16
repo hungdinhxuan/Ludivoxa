@@ -60,3 +60,69 @@ def test_loopback_onset_maps_to_observation_clock_instead_of_sample_count_only(a
     result = loopback.locate(data.getvalue(), earliest=0)
     assert result["observed"] == pytest.approx(100.6)
     assert 100.59 < result["sample_estimate"] < result["observed"]
+
+
+def test_native_observation_measures_rendered_pcm_and_restores_output(audit_helper, monkeypatch):
+    from types import SimpleNamespace
+
+    import sounddevice as sd
+
+    outputs = []
+
+    def output(**kwargs):
+        outputs.append(kwargs)
+        return SimpleNamespace(latency=0.06)
+
+    monkeypatch.setattr(sd, "OutputStream", output)
+    observer = audit_helper.NativeCallbackObserver()
+    now = [12.0]
+    monkeypatch.setattr(audit_helper.time, "perf_counter", lambda: now[0])
+    rendered = [np.zeros((8, 2), dtype=np.float32)]
+
+    def render(outdata, *_):
+        outdata[:] = rendered[0]
+
+    observer.start()
+    try:
+        sd.OutputStream(samplerate=8000, callback=render)
+        callback = outputs[0]["callback"]
+        # Preexisting buffer contents must not count as generated speech.
+        callback(np.ones((8, 2)), 8, None, False)
+        with pytest.raises(RuntimeError, match="No voiced PCM"):
+            observer.locate()
+        rendered[0][3, 1] = 0.1
+        now[0] = 13.0
+        callback(np.zeros((8, 2)), 8, None, "underflow")
+        now[0] = 14.0
+        callback(np.zeros((8, 2)), 8, None, False)
+        result = observer.locate()
+        assert result == {
+            "callback_observed": 13.0,
+            "first_nonzero_offset_ms": 0.375,
+            "reported_native_latency_ms": 60.0,
+        }
+        assert "observed" not in result and "ttfa_loopback_observed_ms" not in result
+        assert observer.statuses == ["underflow"]
+    finally:
+        observer.stop()
+    assert sd.OutputStream is output
+
+
+def test_native_observation_rejects_non_callback_output(audit_helper):
+    import sounddevice as sd
+
+    original = sd.OutputStream
+    observer = audit_helper.NativeCallbackObserver()
+    observer.start()
+    try:
+        with pytest.raises(RuntimeError, match="requires a callback"):
+            sd.OutputStream(samplerate=8000)
+    finally:
+        observer.stop()
+    assert sd.OutputStream is original
+
+
+@pytest.mark.parametrize("mode,repeats", [("estimated-loopback", 3), ("loopback", 0)])
+def test_invalid_benchmark_arguments_fail_before_loading_models(audit_helper, mode, repeats):
+    with pytest.raises(ValueError):
+        audit_helper.audit("unused", "unused", repeats, audio_observation=mode)
