@@ -48,7 +48,11 @@ mili giây; càng thấp càng nhanh.
 | --- | ---: | ---: | ---: |
 | v1.0.0 — đệm toàn bộ audio | 1.413,6 ms | 1.743,6 ms | 4.465,2 ms |
 | v1.1.0 — cấu hình streaming¹ | 912,6 ms | 1.013,6 ms | 1.436,9 ms |
-| Giảm so với v1.0.0 | **35,4%** | **41,9%** | **67,8%** |
+| Mức giảm trong phép so sánh cũ với v1.0.0 | **35,4%** | **41,9%** | **67,8%** |
+| v1.1.0 — đúng tag phát hành² | 896,1 ms | 1.038,6 ms | 1.439,5 ms |
+| v1.1.1 — đúng tag phát hành² | 888,0 ms | 971,2 ms | 1.433,6 ms |
+| v1.1.2-rc.1 — đúng tag phát hành² | 866,5 ms | 849,3 ms | 1.364,3 ms |
+| v1.1.2 stable — đúng tag phát hành² | **867,7 ms** | **966,3 ms** | **1.355,9 ms** |
 
 Máy đo: Windows 11, Core i7-13700F, RTX 4090 24 GB. Hai lượt dùng cùng ảnh
 hội thoại đã khoanh box, OCR Anh → dịch Việt, HauhauCS Qwen3 4B Q4_K_M local,
@@ -60,6 +64,15 @@ streaming/WASAPI trên cùng thiết bị loa.
 prompt/updater cuối cùng; chưa đo lại riêng bộ cài đã phát hành. Phép đo chưa
 tính thời gian tải model, chờ capture, chữ chạy trong game hoặc chờ đọc hết
 câu trước. Đây không phải phép đo FPS game, độ trễ âm thanh qua loa thực hay p95.
+
+² Đo ngày 16/11/2026 bằng mã nguồn chính xác từng tag, trong phiên console
+Windows hoạt động và đã tạm dừng âm thanh khác: **36 lượt loopback hợp lệ**,
+ba lượt cho mỗi đầu vào/tag. Cùng streaming/WASAPI shared 48 kHz, cấu hình
+Qwen/Nano, context Ollama 2048 và prompt mặc định từng tag. Hệ số khớp waveform
+0,958–1,000. Model đã nóng, frame đã có đầy đủ chữ; chênh lệch nhỏ từ ba lượt
+không đủ kết luận bản nào luôn nhanh hơn. Dòng phần trăm chỉ áp dụng cho hai
+cấu hình lịch sử đầu bảng. Xem [phương pháp đo theo tag](docs/PERFORMANCE.md#tagged-version-loopback-ttfa)
+và [từng mẫu thời gian](docs/benchmarks/ttfa.json). Chưa benchmark riêng bộ cài EXE.
 
 **Đo lại đúng các tag ngày 16/11/2026 — từ frame tới callback PCM của driver.**
 Ba bản còn thiếu đã được đo cùng ảnh, cấu hình Qwen/Nano và đầu ra WDM-KS.
@@ -78,8 +91,9 @@ ngắt kết nối nên không có WASAPI loopback. Đường WDM-KS hiện ph�
 câu đã tổng hợp, gồm mọi đoạn streaming, rồi mới phát; buffer thiết bị khoảng
 61 ms chỉ là một phần thời gian chờ. Bản v1.1.0 đối chứng cũng chờ lâu trên
 đường này. Không so trực tiếp bảng này với bảng streaming/WASAPI phía trên,
-hoặc kết luận chênh lệch nhỏ giữa các bản từ ba lượt đo. TTFA loopback của ba
-bản mới vẫn cần phiên âm thanh Windows hoạt động. Xem
+hoặc kết luận chênh lệch nhỏ giữa các bản từ ba lượt đo. TTFA loopback trong
+phiên console hoạt động đã có ở bảng đầu; giữ bảng WDM-KS cũ để tham khảo
+riêng đường đầu ra khi ngắt kết nối. Xem
 [phương pháp và mốc yêu cầu phát](docs/PERFORMANCE.md#tagged-version-native-callback-audit)
 và [đủ 36 mẫu thời gian](docs/benchmarks/ttfa-native-callback.json).
 

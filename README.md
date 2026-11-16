@@ -47,7 +47,11 @@ lower is faster.
 | --- | ---: | ---: | ---: |
 | v1.0.0 — buffered baseline | 1,413.6 ms | 1,743.6 ms | 4,465.2 ms |
 | v1.1.0 — streaming profile¹ | 912.6 ms | 1,013.6 ms | 1,436.9 ms |
-| Reduction versus v1.0.0 | **35.4%** | **41.9%** | **67.8%** |
+| Historical reduction versus v1.0.0 | **35.4%** | **41.9%** | **67.8%** |
+| v1.1.0 — released tag² | 896.1 ms | 1,038.6 ms | 1,439.5 ms |
+| v1.1.1 — released tag² | 888.0 ms | 971.2 ms | 1,433.6 ms |
+| v1.1.2-rc.1 — released tag² | 866.5 ms | 849.3 ms | 1,364.3 ms |
+| v1.1.2 stable — released tag² | **867.7 ms** | **966.3 ms** | **1,355.9 ms** |
 
 Measured on Windows 11, Core i7-13700F and RTX 4090 24 GB, using the same saved
 dialogue crops, English OCR → Vietnamese, local HauhauCS Qwen3 4B Q4_K_M,
@@ -60,6 +64,17 @@ the final prompt/updater changes; the published installer was not separately
 re-benchmarked. These trials exclude model loading, native capture phase,
 game typewriter reveal and waiting for earlier speech. They do not measure
 live game FPS, acoustic speaker latency or p95 latency.
+
+² Measured on 2026-11-16 from the exact release-tag sources in an active
+Windows console session, with unrelated audio paused: **36 valid loopback
+trials**, three per input/tag. All used streaming/shared WASAPI at 48 kHz,
+the same Qwen/Nano profile, Ollama context 2048 and the per-tag default prompt.
+Waveform correlations were 0.958–1.000. These are warm, complete-frame results;
+small differences across three trials do not establish a version speed ranking.
+The historical percentage row applies only to the first two historical profiles.
+See the [tagged-run method](docs/PERFORMANCE.md#tagged-version-loopback-ttfa)
+and [individual samples](docs/benchmarks/ttfa.json). Installers were not
+independently benchmarked.
 
 **Tagged-version measurements, 2026-11-16 — frame to native PCM callback.**
 The three later versions have now been measured with the same saved inputs,
@@ -79,8 +94,9 @@ playback buffers the complete synthesized utterance, including all streamed
 chunks, before output; its roughly 61 ms device buffer is only part of that wait.
 The v1.1.0 control shows the same long wait on this path. Do not compare these
 numbers directly with the earlier streaming/WASAPI table or infer small version
-speed differences from three trials. Loopback TTFA for the three later versions
-still requires an active Windows audio session. See the
+speed differences from three trials. The active-console loopback results are
+now available in the first table; this earlier disconnected-session run is
+retained as a separate output-path measurement. See the
 [method and play-request timings](docs/PERFORMANCE.md#tagged-version-native-callback-audit)
 and [all 36 timing samples](docs/benchmarks/ttfa-native-callback.json).
 

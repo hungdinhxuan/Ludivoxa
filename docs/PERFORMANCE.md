@@ -1,5 +1,67 @@
 # Validation and performance
 
+## Tagged-version loopback TTFA
+
+On **2026-11-16**, after restoring an active Windows console and pausing
+unrelated audio, **36 valid trials** measured the exact v1.1.0, v1.1.1,
+v1.1.2-rc.1 and v1.1.2 source tags. Each tag ran in a separate process with
+three warm trials per input. The previous incomplete/noisy attempts were
+discarded. Every accepted trial matched its actual generated first audio
+chunk in Windows WASAPI loopback; correlations ranged from **0.958 to 1.000**,
+with no loopback input status flags. The acceptance threshold stayed at 0.4.
+
+| Exact tag | Short game dialogue | Two synthetic English sentences | Long game paragraph |
+| --- | ---: | ---: | ---: |
+| v1.1.0 | 896.1 ms | 1,038.6 ms | 1,439.5 ms |
+| v1.1.1 | 888.0 ms | 971.2 ms | 1,433.6 ms |
+| v1.1.2-rc.1 | 866.5 ms | 849.3 ms | 1,364.3 ms |
+| v1.1.2 | **867.7 ms** | **966.3 ms** | **1,355.9 ms** |
+
+Each value is a median of the measured **complete saved frame available →
+first matching speech observed in loopback** interval, not a sum of component
+medians or a timestamp of the first play request. The public
+[TTFA data](benchmarks/ttfa.json) retain individual samples, correlations, exact
+source commits, report hashes and the new measurement cohort. The earlier
+v1.1.0 development-profile data and their historical reductions are retained
+separately; they are not substituted for the newly measured release tag.
+
+Conditions: Windows 11, i7-13700F, RTX 4090 24 GB, English Paddle mobile OCR
+(two CPU threads/max-side 640), Vietnamese output, local Qwen3 HauhauCS 4B
+Q4_K_M, Ollama context 2048, three seeded context pairs, per-tag default prompt,
+temperature 0/seed 42, Nano speaker 7/eight steps/two CPU threads/rate 1.0.
+Production output selected shared WASAPI on the same speaker, stereo 48 kHz,
+requested buffer 60 ms, application volume 0.25; loopback callbacks were 10 ms.
+Frame polling was 150 ms with initial phases 25/75/125 ms. Caches were reset
+between trials, with confirmed preview reuse within a trial preserved. Only
+loopback inference connections occurred; installed configuration was retained
+and the temporary managed Ollama lease was released after each run.
+
+The helper uses up to 650 ms from the **actual first generated audio chunk**
+as its reference. Concatenating later chunks would invent continuous audio
+across real streaming gaps. Near-silent candidate windows are excluded from
+correlation to avoid numerical false peaks; unrelated audio is never treated
+as a successful first-speech match. Playback still stops 2.2 seconds after the
+play request, so these trials do not establish complete-paragraph continuity.
+
+The execution order was v1.1.1, RC, stable, then v1.1.0 as control. Three trials
+in fixed order do not establish small inter-version speed differences or p95.
+Model loading, native window capture, typewriter reveal, prior speech and live
+game contention are excluded. This is loopback observation rather than acoustic
+speaker latency. These are Qwen results, not Gemma measurements, and packaged
+installers were not independently benchmarked.
+
+Reproduce using the existing audit with the exact tag on `PYTHONPATH`, the same
+local config/models/saved frames, a running local Ollama and PyAudioWPatch:
+
+```powershell
+$env:PYTHONPATH = 'C:/path/to/exported-v1.1.2/src'
+.venv/Scripts/python.exe packaging/audit_latency.py --config C:/path/to/benchmark-config.yml --streaming --selected-box --audio-observation loopback --repeats 3 --report .test-results/v1.1.2-loopback.json
+Remove-Item Env:PYTHONPATH
+```
+
+The older disconnected-session WDM-KS observations below use another metric
+and remain separate. They are not the current active-console TTFA results.
+
 ## Tagged-version native callback audit
 
 On **2026-11-16**, the exact source tags v1.1.1, v1.1.2-rc.1 and v1.1.2 were
@@ -93,11 +155,13 @@ later streamed chunks can invent continuous audio across real playback gaps.
 It also excludes effectively silent correlation windows whose near-zero
 variance can produce numerical false peaks. The minimum match correlation
 remains 0.4. The follow-up passes **eight focused tests** and **657 full-suite
-tests, one platform skip** (68.64 seconds); a clean loopback run is still pending.
+tests, one platform skip** (68.64 seconds). The subsequent clean loopback run
+is documented above; the incomplete attempts remain excluded.
 
 ## v1.1.2 stable qualification
 
-No new end-to-end TTFA or game FPS benchmark is available for v1.1.2.
+The original stable qualification did not measure end-to-end TTFA or game FPS;
+the subsequent tagged-source TTFA measurements are documented above.
 The stable qualification used synthetic dialogue frames with real English
 PaddleOCR, local Ollama translation and Nano speech synthesis/native playback
 (muted), through the production Qt worker and speech controller.
@@ -129,7 +193,8 @@ and real numeric/negative text changes remain covered. A replay of ten saved
 GBA states with controlled fast OCR alternation changed from zero speech
 requests to one; stable-first then alternating input still produced one.
 This replay used simulated translations/audio and is not a live error rate or
-TTFA benchmark. **No new end-to-end TTFA result is available for this RC.**
+TTFA benchmark. The later tagged-source loopback run above measures this RC
+separately from that regression replay.
 
 Twenty-four offline Nano preset-4 waveform trials produced non-silent audio
 (RMS 0.0994–0.1886). Native audio diagnostics record the endpoint, volume,
