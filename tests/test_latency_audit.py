@@ -63,9 +63,8 @@ def test_loopback_onset_maps_to_observation_clock_instead_of_sample_count_only(a
 
 
 def test_native_observation_measures_rendered_pcm_and_restores_output(audit_helper, monkeypatch):
+    import sys
     from types import SimpleNamespace
-
-    import sounddevice as sd
 
     outputs = []
 
@@ -73,7 +72,8 @@ def test_native_observation_measures_rendered_pcm_and_restores_output(audit_help
         outputs.append(kwargs)
         return SimpleNamespace(latency=0.06)
 
-    monkeypatch.setattr(sd, "OutputStream", output)
+    sd = SimpleNamespace(OutputStream=output)
+    monkeypatch.setitem(sys.modules, "sounddevice", sd)
     observer = audit_helper.NativeCallbackObserver()
     now = [12.0]
     monkeypatch.setattr(audit_helper.time, "perf_counter", lambda: now[0])
@@ -108,9 +108,12 @@ def test_native_observation_measures_rendered_pcm_and_restores_output(audit_help
     assert sd.OutputStream is output
 
 
-def test_native_observation_rejects_non_callback_output(audit_helper):
-    import sounddevice as sd
+def test_native_observation_rejects_non_callback_output(audit_helper, monkeypatch):
+    import sys
+    from types import SimpleNamespace
 
+    sd = SimpleNamespace(OutputStream=object())
+    monkeypatch.setitem(sys.modules, "sounddevice", sd)
     original = sd.OutputStream
     observer = audit_helper.NativeCallbackObserver()
     observer.start()
