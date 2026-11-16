@@ -85,6 +85,16 @@ The audit-helper change passes seven focused tests and the full Windows source
 suite passes **656 tests, one platform skip** (69.06 seconds). No application
 pipeline code or release artifacts changed for this documentation update.
 
+A later active-console check restored WASAPI loopback, but unrelated output
+audio prevented reliable waveform matching in the attempted run. Those
+incomplete trials are not published as TTFA results. The loopback helper now
+matches the actual first generated chunk (up to 650 ms), since concatenating
+later streamed chunks can invent continuous audio across real playback gaps.
+It also excludes effectively silent correlation windows whose near-zero
+variance can produce numerical false peaks. The minimum match correlation
+remains 0.4. The follow-up passes **eight focused tests** and **657 full-suite
+tests, one platform skip** (68.64 seconds); a clean loopback run is still pending.
+
 ## v1.1.2 stable qualification
 
 No new end-to-end TTFA or game FPS benchmark is available for v1.1.2.

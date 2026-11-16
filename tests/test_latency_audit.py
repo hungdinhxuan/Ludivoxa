@@ -62,6 +62,29 @@ def test_loopback_onset_maps_to_observation_clock_instead_of_sample_count_only(a
     assert 100.59 < result["sample_estimate"] < result["observed"]
 
 
+def test_short_first_chunk_matches_with_a_later_streaming_gap(audit_helper):
+    rate = 8000
+    rng = np.random.default_rng(21)
+    first = rng.normal(0, 0.1, 2000).astype(np.float32)
+    later = rng.normal(0, 0.1, 6000).astype(np.float32)
+    recording = np.concatenate((np.zeros(3200), first * 0.25, np.zeros(4000), later * 0.25))
+    data = BytesIO()
+    with wave.open(data, "wb") as stream:
+        stream.setnchannels(1)
+        stream.setsampwidth(2)
+        stream.setframerate(rate)
+        stream.writeframes((first * 32768).astype("<i2").tobytes())
+    loopback = audit_helper.Loopback.__new__(audit_helper.Loopback)
+    loopback.rate = rate
+    loopback.chunks = [
+        (100 + (offset + 800) / rate, recording[offset : offset + 800]) for offset in range(0, len(recording), 800)
+    ]
+    result = loopback.locate(data.getvalue(), earliest=0)
+    assert result["correlation"] > 0.9
+    assert result["observed"] == pytest.approx(100.5)
+    assert result["sample_estimate"] == pytest.approx(100.4, abs=1 / rate)
+
+
 def test_native_observation_measures_rendered_pcm_and_restores_output(audit_helper, monkeypatch):
     import sys
     from types import SimpleNamespace

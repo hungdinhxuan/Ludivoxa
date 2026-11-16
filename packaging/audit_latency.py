@@ -67,6 +67,10 @@ def match_audio(recorded, reference, sample_rate):
     squares = np.concatenate(([0.0], np.cumsum(signal * signal)))
     variance = squares[length:] - squares[:-length] - (sums[length:] - sums[:-length]) ** 2 / length
     scores = correlation[: len(signal) - length + 1] / np.sqrt(np.maximum(variance * np.dot(template, template), 1e-20))
+    # Cancellation error in cumulative sums can give silent windows a tiny
+    # denominator and an impossible correlation above one. Only correlate
+    # windows with measurable energy relative to the actual recording.
+    scores[variance < max(float(variance.max()) * 1e-8, 1e-12)] = -1
     index = int(np.argmax(scores))
     score = float(scores[index])
     if score < 0.4:
@@ -259,7 +263,7 @@ def audit(
         "selected_box": selected_box,
         "playback_truncated_for_ttfa": True,
         "matching": (
-            "normalized waveform correlation in 80-2000 Hz speech band; 650 ms reference segment"
+            "normalized waveform correlation in 80-2000 Hz speech band; up to 650 ms from the actual first audio chunk"
             if audio_observation == "loopback"
             else "first actual driver callback containing voiced PCM (absolute sample > 1e-5)"
         ),
@@ -463,6 +467,11 @@ def audit(
                 recorder.stop()
             if streaming and trace.get("wav_chunks"):
                 chunks = trace.pop("wav_chunks")
+                if audio_observation == "loopback":
+                    # Later chunks may arrive with real playback gaps. Matching
+                    # their concatenation invents continuous PCM that the mixer
+                    # never received; use the first actually generated chunk.
+                    trace["first_chunk_wav"] = chunks[0]
                 pcm_chunks = [wav_pcm(chunk) for chunk in chunks]
                 data = BytesIO()
                 with wave.open(data, "wb") as output:
@@ -476,7 +485,8 @@ def audit(
             pcm, rate = wav_pcm(trace["wav"])
             trace["audio_duration_seconds"] = len(pcm) / rate
             if audio_observation == "loopback":
-                located = recorder.locate(trace.pop("wav"), trace["play_request"] - 0.05)
+                full_wav = trace.pop("wav")
+                located = recorder.locate(trace.pop("first_chunk_wav", full_wav), trace["play_request"] - 0.05)
             else:
                 trace.pop("wav")
                 located = recorder.locate()
