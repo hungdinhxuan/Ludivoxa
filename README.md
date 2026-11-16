@@ -9,9 +9,10 @@ Ludivoxa extends [Interpreter](https://github.com/bquenin/interpreter), retainin
 its capture → OCR → translation → overlay pipeline and Qt interface. This fork
 starts at **v1.0.0**; see [attribution and licenses](NOTICE.md).
 
-**Testing release:** [v1.1.2-rc.1](docs/releases/v1.1.2-rc.1.md) fixes first-read
-OCR starvation, white-cursor repeats and Remote Desktop capture recovery. It is
-a manual app-only update for existing installations; **v1.1.1 remains stable**.
+**Latest stable:** [v1.1.2](docs/releases/v1.1.2.md) fixes speech starvation,
+repeated dialogue and Remote Desktop capture recovery. Existing installations
+can use **Updates**; new users install the full offline v1.1.1 package first,
+then this app-only update. Models and configuration are preserved.
 
 ## Features
 
@@ -49,6 +50,7 @@ lower is faster.
 | Reduction versus v1.0.0 | **35.4%** | **41.9%** | **67.8%** |
 | v1.1.1 — OCR repeat/audio fixes² | Not measured | Not measured | Not measured |
 | v1.1.2-rc.1 — speech/RDP fixes | Not measured | Not measured | Not measured |
+| v1.1.2 — stable speech/RDP fixes | Not measured | Not measured | Not measured |
 
 Measured on Windows 11, Core i7-13700F and RTX 4090 24 GB, using the same saved
 dialogue crops, English OCR → Vietnamese, local HauhauCS Qwen3 4B Q4_K_M,
@@ -77,7 +79,7 @@ will not inherit earlier results.
 ## Install on Windows
 
 The packaged release targets **Windows x64**. Download its setup EXE and **all
-three BIN files** from [Releases](https://github.com/hungdinhxuan/Ludivoxa/releases),
+three BIN files** from [the full v1.1.1 release](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1),
 place them in one folder and run the EXE. Compare the files with `SHA256SUMS.txt`.
 The complete offline download is approximately 4.9 GB, with about 6.4 GB installed.
 
@@ -85,8 +87,9 @@ Python, English/Japanese OCR models, Vietnamese speech, Ollama 0.40.16 and
 HauhauCS Qwen3 4B Aggressive Q4_K_M are included. No separate model download is
 needed for that profile. The installer preserves an existing `config.yml`.
 
-Already using v1.1.0? Open **Updates** to install v1.1.1. For v1.0.0, or to
-update manually, run **Ludivoxa-1.1.1-App-Update.exe** and select the existing
+Then open **Updates** to install v1.1.2 (also supported from v1.1.2rc1).
+For v1.0.0, or to update manually, run **Ludivoxa-1.1.2-App-Update.exe** from
+[v1.1.2](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.2) and select the existing
 installation directory. This smaller package preserves your models, runtime
 and settings. Public release checks and downloads need no GitHub token or sign-in.
 

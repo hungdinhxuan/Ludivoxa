@@ -207,6 +207,7 @@ class MainWindow(QMainWindow):
         worker.regions_ready.connect(self._on_regions_ready)
         worker.speech_ready.connect(self._on_speech_ready)
         worker.speech_stream_ready.connect(self._on_speech_ready)
+        worker.speech_scene_reset.connect(self._on_speech_scene_reset)
         worker.ocr_results_ready.connect(self._on_ocr_results_ready)
         worker.models_ready.connect(self._on_models_ready)
         worker.models_failed.connect(self._on_models_failed)
@@ -1980,7 +1981,9 @@ class MainWindow(QMainWindow):
                 if isinstance(self._capture, VideoDeviceCapture):
                     self.statusBar().showMessage(f"Waiting for a video signal from '{self._capture.name[:40]}'...")
                 else:
-                    self.statusBar().showMessage("Waiting for window frames. Keep the game visible; capture will retry.")
+                    self.statusBar().showMessage(
+                        "Waiting for window frames. Keep the game visible; capture will retry."
+                    )
             return
 
         if self._waiting_for_signal:
@@ -2095,6 +2098,10 @@ class MainWindow(QMainWindow):
             and self._config.output_mode != OutputMode.TTS
         ):
             self._banner_overlay.set_text(translated)
+
+    def _on_speech_scene_reset(self, generation: int):
+        if self._capturing and generation == self._capture_generation and hasattr(self, "_speech"):
+            self._speech.reset_repeat_guard()
 
     def _on_speech_ready(self, translated: str, generation: int):
         if (

@@ -889,6 +889,12 @@ class SpeechController(QObject):
         if not enabled:
             self.stop()
 
+    def reset_repeat_guard(self):
+        """Allow an identical line in a new scene without interrupting speech."""
+        self._last_text = ""
+        self._last_spoken_translation = None
+        self._playing_text = ""
+
     def stop(self, reset=False, reason="user"):
         logger.debug("speech stopped", reason=reason)
         self._generation += 1

@@ -386,8 +386,8 @@ def _get_client_bounds(window_id: int) -> dict | None:
     }
 
 
-def is_remote_session() -> bool:
-    """Query the current session's protocol, including RemoteFX sessions."""
+def _session_value(kind, value_type):
+    """Read current-session WTS information and always release its buffer."""
     try:
         wts = ctypes.WinDLL("wtsapi32", use_last_error=True)
         query = wts.WTSQuerySessionInformationW
@@ -403,16 +403,31 @@ def is_remote_session() -> bool:
         wts.WTSFreeMemory.restype = None
         buffer = ctypes.c_void_p()
         size = wintypes.DWORD()
-        # WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION, WTSClientProtocolType.
-        if query(None, 0xFFFFFFFF, 16, ctypes.byref(buffer), ctypes.byref(size)):
+        # WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION.
+        if query(None, 0xFFFFFFFF, kind, ctypes.byref(buffer), ctypes.byref(size)):
             try:
-                if buffer.value and size.value >= ctypes.sizeof(ctypes.c_ushort):
-                    return ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ushort)).contents.value != 0
+                if buffer.value and size.value >= ctypes.sizeof(value_type):
+                    return ctypes.cast(buffer, ctypes.POINTER(value_type)).contents.value
             finally:
                 wts.WTSFreeMemory(buffer)
     except (OSError, AttributeError):
         pass
+    return None
+
+
+def is_remote_session() -> bool:
+    """Query the current session's protocol, including RemoteFX sessions."""
+    protocol = _session_value(16, ctypes.c_ushort)  # WTSClientProtocolType
+    if protocol is not None:
+        return protocol != 0
     return bool(ctypes.windll.user32.GetSystemMetrics(0x1000))  # SM_REMOTESESSION
+
+
+def is_session_active() -> bool:
+    # Starting WGC on a disconnected desktop can block the native start call
+    # until the user reconnects. Wait without holding a native session instead.
+    state = _session_value(8, ctypes.c_int)  # WTSConnectState; WTSActive == 0
+    return state is None or state == 0
 
 
 def capture_window(window_id: int, *, render_full_content: bool = False) -> NDArray[np.uint8] | None:
@@ -661,6 +676,12 @@ class WindowsCaptureStream:
                     if not ctypes.windll.user32.IsWindow(self._window_id):
                         self._window_invalid = True
                         break
+                    if not is_session_active():
+                        self._stop_graphics()
+                        self.error = "Waiting for an active Windows session."
+                        remote, retry_at = None, 0.0
+                        self._stop_event.wait(CAPTURE_INTERVAL)
+                        continue
                     current_remote = is_remote_session()
                     if current_remote != remote:
                         self._stop_graphics()

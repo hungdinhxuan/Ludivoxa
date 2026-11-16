@@ -1,5 +1,30 @@
 # Validation and performance
 
+## v1.1.2 stable qualification
+
+No new end-to-end TTFA or game FPS benchmark is available for v1.1.2.
+The stable qualification used synthetic dialogue frames with real English
+PaddleOCR, local Ollama translation and Nano speech synthesis/native playback
+(muted), through the production Qt worker and speech controller.
+
+- Gemma E4B Q4_K_M: 40 scenes in 186.7 seconds; exactly 40 playbacks and 40
+  confirmed scene resets, including identical consecutive dialogue scenes.
+- Qwen3 4B Q4_K_M: 20 scenes in 95.6 seconds; exactly 20 playbacks and 20 resets.
+- Cases included typewriter reveal, changed numbers/negation and all speech
+  output modes. Deliberate 150 ms UI stalls occurred every two seconds; maximum
+  observed Qt timer gaps were 168.6/167.6 ms. This is not a gameplay lag metric.
+- Parent-process RSS growth after six warm-up scenes was 8.2/4.0 MiB. These
+  short runs do not establish a long-term memory bound.
+- Model requests used only loopback. Windows' real disconnected-session state
+  was verified to defer native capture startup and permit clean shutdown.
+- Regression tests distinguish real scene breaks from brief blank frames,
+  unpositioned OCR and OCR misses over unchanged visible text, including while
+  the first utterance is still playing.
+
+No fresh live game/phone RDP session was available for this stable run. The
+earlier RC's live RDP check below remains useful, but does not cover every
+game, font, driver, endpoint or user-reported scene.
+
 ## v1.1.2-rc.1 speech starvation and RDP recovery
 
 The pending first-read candidate now reuses the existing strict glyph-image

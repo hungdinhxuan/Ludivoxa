@@ -79,6 +79,121 @@ def test_capture_feeds_latest_frames_without_repainting_every_poll(capture_windo
     assert win._last_frame is frame
 
 
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("gap", ["scene", "ocr_miss", "brief_blank", "unpositioned_ocr_miss"])
+@pytest.mark.parametrize("finish_first", [False, True])
+def test_scene_break_and_ocr_miss_preserve_audio_repeat_contract(
+    capture_window, monkeypatch, streaming, gap, finish_first
+):
+    import time
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import numpy as np
+    from PySide6.QtCore import QObject, Signal
+
+    from interpreter.config import OutputMode, TranslationBackend
+    from interpreter.gui import workers
+    from interpreter.ocr import OCRResult
+    from interpreter.speech import SpeechController, SpeechStream
+
+    win = capture_window
+    win._capturing = True
+    win._config.output_mode = OutputMode.TTS
+    win._config.translation_backend = TranslationBackend.LLM
+    win._config.source_language = "English"
+    win._config.llm.target_language = "Vietnamese"
+    worker = win._process_worker
+    worker.stream_speech = streaming
+    worker._ocr = MagicMock()
+
+    class Translator:
+        def translate(self, text):
+            return "Xin chào.", False
+
+        def translate_stream(self, text, callback):
+            callback("Xin chào.")
+            return "Xin chào.", False
+
+    class Player(QObject):
+        finished = Signal()
+        error = Signal(str)
+
+        def __init__(self):
+            super().__init__()
+            self.play, self.stop = MagicMock(), MagicMock()
+
+    player = Player()
+    synth = MagicMock()
+    synth.synthesize.return_value = b"speech"
+    synth.iter_audio.side_effect = lambda *_args, **_kwargs: iter([b"speech"])
+    controller = win._speech = SpeechController(synthesizer=synth, player=player)
+    reset = MagicMock(wraps=controller.reset_repeat_guard)
+    monkeypatch.setattr(controller, "reset_repeat_guard", reset)
+    worker._translator = Translator()
+    clock = [0.0]
+    monkeypatch.setattr(workers, "time", SimpleNamespace(monotonic=lambda: clock[0], perf_counter=time.perf_counter))
+    image = np.zeros((80, 300, 4), dtype=np.uint8)
+    image[20:40, 20:240, :3] = 230
+    box = dict(x=20, y=20, width=220, height=20)
+
+    def observe(text, at, pixels):
+        clock[0] = at
+        position = None if gap == "unpositioned_ocr_miss" else box
+        worker._ocr.extract_text_regions.return_value = [OCRResult(text, position)] if text else []
+        worker._process_frame(pixels, win._capture_generation)
+        QApplication.processEvents()
+
+    def wait_for(predicate):
+        deadline = time.monotonic() + 2
+        while not predicate() and time.monotonic() < deadline:
+            QApplication.processEvents()
+            time.sleep(0.002)
+        assert predicate()
+
+    try:
+        observe("Hello world.", 0, image)
+        observe("Hello world.", 0.4, image)
+        wait_for(lambda: player.play.call_count == 1)
+        if streaming:
+            assert list(player.play.call_args.args[0]) == [b"speech"]
+        wait_for(lambda: not controller._working)
+        if finish_first:
+            player.finished.emit()
+        blank = np.zeros_like(image)
+        gap_image = image if gap in ("ocr_miss", "unpositioned_ocr_miss") else blank
+        observe("", 0.5, gap_image)
+        if gap != "brief_blank":
+            observe("", 2.1, gap_image)
+            observe("", 2.15, gap_image)
+        assert reset.call_count == (1 if gap == "scene" else 0)
+        observe("Hello world.", 2.2, image)
+        observe("Hello world.", 2.6, image)
+        if gap == "scene" and not finish_first:
+            wait_for(lambda: controller._ready is not None)
+            assert player.play.call_count == 1
+            player.finished.emit()
+        expected = 2 if gap == "scene" else 1
+        wait_for(lambda: not controller._working)
+        assert player.play.call_count == expected
+        if expected == 2 and isinstance(player.play.call_args.args[0], SpeechStream):
+            assert list(player.play.call_args.args[0]) == [b"speech"]
+    finally:
+        controller.close()
+
+
+@pytest.mark.parametrize("capturing,generation,expected", [(True, 4, 1), (True, 3, 0), (False, 4, 0)])
+def test_scene_reset_ignores_old_or_stopped_capture(capture_window, capturing, generation, expected):
+    from unittest.mock import MagicMock
+
+    win = capture_window
+    win._speech = MagicMock()
+    win._capture_generation = 4
+    win._capturing = capturing
+    win._on_speech_scene_reset(generation)
+    assert win._speech.reset_repeat_guard.call_count == expected
+
+
 def test_window_capture_interruption_reports_waiting_and_resumes_processing(capture_window, monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import MagicMock

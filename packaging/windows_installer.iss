@@ -5,7 +5,7 @@
   #define OutputDir "..\dist\installer"
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.1.2rc1"
+  #define AppVersion "1.1.2"
 #endif
 #ifndef AppNumericVersion
   #define AppNumericVersion "1.1.2.0"

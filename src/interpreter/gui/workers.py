@@ -80,6 +80,7 @@ class ProcessWorker(QObject):
     text_ready = Signal(str, int)
     speech_ready = Signal(str, int)  # Successful translations only; never speak source/error fallback text
     speech_stream_ready = Signal(object, int)
+    speech_scene_reset = Signal(int)  # A confirmed visible scene break, not an OCR-only miss.
 
     # Inplace mode: list of (text, bbox) regions
     regions_ready = Signal(list, int)
@@ -835,10 +836,13 @@ class ProcessWorker(QObject):
             since = self._speech_candidate_since
         speech_stable = bool(source_key) and now - since >= settle_seconds
         source_complete = self._speech_candidate_cursor or bool(re.search(r"[.!?。！？…][\"'”’)]*\s*$", captured_text))
-        if not source_key and now - self._speech_candidate_since >= 1.5:
+        if not source_key and self._spoken_source and now - self._speech_candidate_since >= 1.5:
+            had_visible_baseline = self._spoken_snapshot is not None
             self._spoken_source = ""  # A sustained scene break can start a new identical line.
             self._spoken_snapshot = None
             self._spoken_complete = False
+            if had_visible_baseline:
+                self._emit(self.speech_scene_reset, generation)
 
         if not text:
             if self._mode == OverlayMode.INPLACE:

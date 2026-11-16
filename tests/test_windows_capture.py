@@ -23,6 +23,7 @@ def desktop(monkeypatch):
     monkeypatch.setattr(capture, "time", SimpleNamespace(monotonic=lambda: clock[0]))
     remote = Mock(return_value=False)
     monkeypatch.setattr(capture, "is_remote_session", remote)
+    monkeypatch.setattr(capture, "is_session_active", lambda: True)
     gdi = Mock(side_effect=lambda *args, **kwargs: np.full((2, 3, 4), 20, np.uint8))
     monkeypatch.setattr(capture, "capture_window", gdi)
     return SimpleNamespace(clock=clock, user32=user32, remote=remote, gdi=gdi)
@@ -78,6 +79,27 @@ def test_starting_inside_rdp_never_initializes_graphics_capture(desktop, monkeyp
     monkeypatch.setattr(stream, "_start_graphics_capture", native)
     assert pump(stream, desktop, 3) == [20, 20, 20]
     native.assert_not_called()
+
+
+@pytest.mark.parametrize("states", [[False, False, True, True], [True, False, True, True]])
+def test_disconnected_session_waits_before_native_start_and_recovers(desktop, monkeypatch, states):
+    stream = capture.WindowsCaptureStream(42)
+    controls = native_sessions(stream, monkeypatch)
+    monkeypatch.setattr(capture, "is_session_active", Mock(side_effect=states))
+    frames = pump(stream, desktop, 4)
+    assert frames[:2] == ([None, None] if not states[0] else [1, None])
+    assert frames[2:] == ([1, 1] if not states[0] else [2, 2])
+    assert all(c.stop.call_count == 1 for c in controls)
+    assert not stream.window_invalid
+    desktop.gdi.assert_not_called()
+
+
+@pytest.mark.parametrize("state,active", [(0, True), (4, False), (1, False), (None, True)])
+def test_capture_session_activity_uses_wts_connection_state(monkeypatch, state, active):
+    query = Mock(return_value=state)
+    monkeypatch.setattr(capture, "_session_value", query)
+    assert capture.is_session_active() is active
+    query.assert_called_once_with(8, ctypes.c_int)
 
 
 @pytest.mark.parametrize("failure", ["closed", "no_first_frame", "start_error"])

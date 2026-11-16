@@ -2,7 +2,7 @@
 
 ## Cài bản Windows offline
 
-Từ [Releases](https://github.com/hungdinhxuan/Ludivoxa/releases), tải cùng phiên bản:
+Người dùng mới: từ [bộ offline v1.1.1](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1), tải cùng phiên bản:
 
 - `Ludivoxa-1.1.1-Full-Offline-Setup.exe`
 - `Ludivoxa-1.1.1-Full-Offline-Setup-1.bin`
@@ -14,7 +14,8 @@ Từ [Releases](https://github.com/hungdinhxuan/Ludivoxa/releases), tải cùng 
 Không dùng nút **Source code** để cài app: đó là mã nguồn, không chứa runtime
 và model. Bản offline có dung lượng khoảng 4,9 GB; app cài xong khoảng 6,4 GB.
 Python và Ollama đã có sẵn trong bộ cài. Cài đặt mặc định theo tài khoản người
-dùng; nâng cấp giữ `config.yml` hiện có.
+dùng; nâng cấp giữ `config.yml` hiện có. Sau đó cài **v1.1.2 App-Update** qua
+tab **Updates** hoặc [release stable](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.2).
 
 ## Dịch hội thoại
 
@@ -74,15 +75,19 @@ Với game tiếng Anh, **English + Only selected box + TTS only** là cấu hì
 đã đo để ưu tiên TTFA. Model cần nạp xong trước khi đo; chữ còn đang chạy và
 câu đọc trước chưa kết thúc vẫn làm tăng thời gian chờ.
 
-Từ v1.1.2-rc.1, app đối chiếu ảnh chữ ngay từ trước lần đọc đầu
+Từ v1.1.2, app đối chiếu ảnh chữ ngay từ trước lần đọc đầu
 để OCR dao động hoặc mất kết quả tạm thời không làm TTS chờ mãi. Bộ lọc cũng
 nhận mũi tên tiếp tục màu trắng. Chỉ tái dùng chữ khi ảnh xác nhận glyph không
 đổi; số, phủ định và chữ mới thực sự vẫn được xử lý. Log phát audio ghi thiết
 bị đầu ra cùng mức peak/RMS để phân biệt chờ OCR với vấn đề âm thanh.
 
+Câu giống hệt ở cảnh mới được đọc lại sau khi vùng chữ có tọa độ thực sự
+trống liên tục ít nhất 1,5 giây. Chớp ảnh ngắn hoặc OCR mất kết quả trên ảnh
+còn chữ không xóa bộ nhớ chống lặp; câu đang phát không bị ngắt.
+
 ## Remote Desktop trên Windows
 
-Từ v1.1.2-rc.1, app tự nhận phiên Remote Desktop và chụp riêng
+Từ v1.1.2, app tự nhận phiên Remote Desktop và chụp riêng
 cửa sổ game bằng PrintWindow. Khi quay lại máy, app tự tạo lại Windows Graphics
 Capture. Việc chuyển phiên và thử lại chạy nền; không cần Stop/Start capture.
 Ảnh chụp chỉ chứa cửa sổ game, tránh đọc ngược bản dịch overlay vào OCR.
@@ -91,7 +96,8 @@ Giữ game mở, không minimize; ưu tiên windowed/borderless. Nếu Windows t
 cấp ảnh khi đổi phiên hoặc độ phân giải, thanh trạng thái báo **Waiting for
 window frames** và tự tiếp tục khi có ảnh. Game dùng cách render không hỗ trợ
 PrintWindow vẫn có thể trả ảnh đen; không phải mọi game/driver đều được hỗ trợ.
-Bản v1.1.1 đã phát hành chưa có phần sửa này.
+Khi phiên Windows ngắt kết nối, app chờ phiên hoạt động trước khi mở capture
+native và tự tiếp tục sau khi kết nối lại. Bản v1.1.1 chưa có phần sửa này.
 
 ## Ollama local và GPU server LAN
 
@@ -118,12 +124,12 @@ nguyên bản; không tự làm nhẹ, tăng nặng hay thêm chi tiết. Prompt
 
 ## Cập nhật ứng dụng
 
-**v1.1.2-rc.1 là bản thử:** tải `Ludivoxa-1.1.2rc1-App-Update.exe` từ
-[release RC](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.2-rc.1)
-và chọn thư mục Ludivoxa đang cài. Người dùng mới cần cài bộ offline v1.1.1
-ở đầu hướng dẫn trước. RC giữ model/runtime/cấu hình; updater không tự đề xuất
-prerelease. Python/UI hiển thị `1.1.2rc1`, tương ứng tag `v1.1.2-rc.1`.
-Khi bản stable v1.1.2 phát hành, RC có thể cập nhật lên stable qua tab Updates.
+**v1.1.2 là bản stable:** dùng tab **Updates**, hoặc tải
+`Ludivoxa-1.1.2-App-Update.exe` từ
+[release stable](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.2)
+và chọn thư mục Ludivoxa đang cài. Gói cập nhật giữ model/runtime/cấu hình.
+Người dùng mới cần cài bộ offline v1.1.1 ở đầu hướng dẫn trước.
+Cả v1.1.1 và v1.1.2-rc.1 đều cập nhật được lên stable qua tab Updates.
 
 Từ v1.1.0, mở **Updates** ở thanh bên:
 

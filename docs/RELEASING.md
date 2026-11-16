@@ -8,7 +8,21 @@ streaming speech and latency improvements. Use patch
 version **1.1.1** fixes OCR/TTS repeats and audio formats. The published v1.0.0 has no updater;
 its users must install the first updater-enabled version manually once.
 
-For the **v1.1.2-rc.1** prerelease, Python metadata uses `1.1.2rc1` and Windows
+The **v1.1.2 stable** release uses Python/AppVersion `1.1.2` and Windows numeric
+version `1.1.2.0`. Build a fresh app stage, test it, then package only the app
+update (existing models/runtime remain compatible):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1 -AppDirectory build/v1.1.2-app/Interpreter -OutputDirectory dist/app-update/v1.1.2
+uv run python packaging/package_release.py --output dist/releases/v1.1.2 --source-commit $releaseCommit --app build/v1.1.2-app/Interpreter/Interpreter.exe --app-update dist/app-update/v1.1.2/Ludivoxa-1.1.2-App-Update.exe
+```
+
+Publish `v1.1.2` with `prerelease=false` and `make_latest=true`. Verify that
+anonymous v1.1.1 and v1.1.2rc1 clients can download and verify the stable
+update. Retain the existing RC tag and assets unchanged. New users install
+the full offline v1.1.1 package before this update.
+
+For the earlier **v1.1.2-rc.1** prerelease, Python metadata uses `1.1.2rc1` and Windows
 numeric resources use `1.1.2.0`. Keep `AppVersion` and `AppNumericVersion` in
 the Inno defaults aligned. Publish with `prerelease=true` and `make_latest=false`.
 Stable users do not receive RCs automatically; RC installations can upgrade

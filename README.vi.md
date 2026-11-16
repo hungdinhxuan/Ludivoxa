@@ -9,15 +9,17 @@ Ludivoxa được phát triển từ [Interpreter](https://github.com/bquenin/in
 của qube/bquenin, giữ pipeline và giao diện Qt hiện có. Dự án này bắt đầu bằng
 **v1.0.0**, độc lập với phiên bản của upstream.
 
-**Bản thử:** [v1.1.2-rc.1](docs/releases/v1.1.2-rc.1.md) sửa chờ OCR gây im
-tiếng, con trỏ trắng làm nhiễu và phục hồi capture khi dùng Remote Desktop.
-Cài thủ công gói cập nhật app vào bản đã có; **v1.1.1 vẫn là bản stable**.
+**Bản stable mới nhất:** [v1.1.2](docs/releases/v1.1.2.md) sửa chờ OCR gây im
+tiếng, đọc lặp và phục hồi capture khi dùng Remote Desktop. Bản đã cài có thể
+cập nhật qua **Updates**; người dùng mới cài bộ offline v1.1.1 rồi cập nhật app.
+Giữ nguyên model, runtime và cấu hình hiện có.
 
-## Có gì trong v1.1.1?
+## Có gì trong v1.1.2?
 
-Bản vá này sửa đọc lặp khi OCR tách/gộp từ, mũi tên hội thoại nhấp nháy hoặc
-chữ đang hiện dần; đồng thời xử lý lỗi thiết bị âm thanh báo sai số kênh.
-Xem [ghi chú bản vá](docs/releases/v1.1.1.md). Các tính năng hiện có:
+Bản vá này xử lý OCR dao động gây im tiếng/đọc lặp, cho phép đọc lại câu
+giống nhau ở cảnh mới và phục hồi capture khi đổi phiên Remote Desktop.
+Giữ các sửa lỗi âm thanh và OCR của v1.1.1.
+Xem [ghi chú bản vá](docs/releases/v1.1.2.md). Các tính năng hiện có:
 
 - OCR Anh/Nhật offline, phát hiện ngôn ngữ hoặc chọn thủ công.
 - Khoanh box hội thoại để chỉ quét phần cần dịch; lưu riêng theo game. Cách
@@ -49,6 +51,7 @@ mili giây; càng thấp càng nhanh.
 | Giảm so với v1.0.0 | **35,4%** | **41,9%** | **67,8%** |
 | v1.1.1 — vá OCR lặp/âm thanh² | Chưa đo | Chưa đo | Chưa đo |
 | v1.1.2-rc.1 — vá giọng đọc/RDP | Chưa đo | Chưa đo | Chưa đo |
+| v1.1.2 — stable, vá giọng đọc/RDP | Chưa đo | Chưa đo | Chưa đo |
 
 Máy đo: Windows 11, Core i7-13700F, RTX 4090 24 GB. Hai lượt dùng cùng ảnh
 hội thoại đã khoanh box, OCR Anh → dịch Việt, HauhauCS Qwen3 4B Q4_K_M local,
@@ -72,14 +75,15 @@ dòng riêng khi có số đo tương đương; không dùng lại số bản c�
 
 ## Cài Windows offline
 
-Trong [Releases](https://github.com/hungdinhxuan/Ludivoxa/releases), tải EXE và
+Từ [bộ offline v1.1.1](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1), tải EXE và
 **cả ba file BIN** của cùng phiên bản, đặt chung thư mục rồi chạy EXE. Có
 `SHA256SUMS.txt` để kiểm tra. Tổng khoảng 4,9 GB; app cài xong khoảng 6,4 GB.
 Python, Ollama, OCR/TTS models và HauhauCS Qwen3 4B Aggressive Q4_K_M đã có sẵn.
 Bản build chưa ký số. Các file Source code tự động của GitHub không chứa model.
 
-Nếu đang dùng v1.1.0, vào tab **Updates** để cập nhật v1.1.1. Nếu dùng
-v1.0.0 hoặc muốn cập nhật thủ công, tải **Ludivoxa-1.1.1-App-Update.exe**, chạy
+Sau đó vào tab **Updates** để cập nhật v1.1.2 (cũng hỗ trợ từ v1.1.2rc1).
+Nếu dùng v1.0.0 hoặc muốn cập nhật thủ công, tải **Ludivoxa-1.1.2-App-Update.exe**
+từ [v1.1.2](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.2), chạy
 và chọn đúng thư mục app đang dùng. Gói nhỏ giữ nguyên cấu hình, Ollama và
 model; v1.0.0 chưa có updater nên cần nâng cấp thủ công một lần.
 

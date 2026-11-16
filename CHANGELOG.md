@@ -3,6 +3,22 @@
 All notable Ludivoxa changes are recorded here. This project uses version tags
 such as `v1.0.0`; numbering is independent of the upstream Interpreter project.
 
+## [1.1.2] - 2026-11-16
+
+Stable app-only update, including the RC's speech and Remote Desktop fixes.
+
+- Reset the audio repeat guard once a positioned dialogue box has genuinely
+  cleared for a sustained scene break. Identical dialogue in a new scene can
+  play again without interrupting current speech. Brief blanks, OCR misses and
+  unpositioned OCR results retain duplicate suppression.
+- Wait while the Windows session is disconnected before starting native
+  Graphics Capture, and resume when the session becomes active.
+- Qualify the complete OCR/local translation/native speech pipeline with
+  60 controlled scenes across Gemma and Qwen. These checks do not constitute
+  a new TTFA benchmark or exhaustive live gameplay validation.
+- Publish a stable update for v1.1.1 and v1.1.2-rc.1 installations, preserving
+  existing models, runtime and configuration.
+
 ## [1.1.2-rc.1] - 2026-11-16
 
 This prerelease is an app-only update for an existing v1.1.1 installation.
