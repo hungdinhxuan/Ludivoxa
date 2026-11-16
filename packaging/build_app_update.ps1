@@ -14,7 +14,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $appPath '_internal'))) { throw 'The
 $outputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
 $releaseVersion = & $Python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"
 if ($LASTEXITCODE -ne 0) { throw 'Cannot read the application version.' }
+$numericVersion = ($releaseVersion -split 'rc', 2)[0] + '.0'
 New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
-& $compilerPath '/DAppUpdateOnly=1' ("/DAppVersion=" + $releaseVersion) ("/DPayloadDir=" + $appPath) ("/DOutputDir=" + $outputPath) packaging/windows_installer.iss *> build/app-update-compile.log
+& $compilerPath '/DAppUpdateOnly=1' ("/DAppVersion=" + $releaseVersion) ("/DAppNumericVersion=" + $numericVersion) ("/DPayloadDir=" + $appPath) ("/DOutputDir=" + $outputPath) packaging/windows_installer.iss *> build/app-update-compile.log
 if ($LASTEXITCODE -ne 0) { throw 'App-update installer failed; see build/app-update-compile.log.' }
 Write-Host "App-only update written to $outputPath. OCR/TTS/Ollama model files and user config are excluded."

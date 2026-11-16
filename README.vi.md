@@ -9,6 +9,10 @@ Ludivoxa được phát triển từ [Interpreter](https://github.com/bquenin/in
 của qube/bquenin, giữ pipeline và giao diện Qt hiện có. Dự án này bắt đầu bằng
 **v1.0.0**, độc lập với phiên bản của upstream.
 
+**Bản thử:** [v1.1.2-rc.1](docs/releases/v1.1.2-rc.1.md) sửa chờ OCR gây im
+tiếng, con trỏ trắng làm nhiễu và phục hồi capture khi dùng Remote Desktop.
+Cài thủ công gói cập nhật app vào bản đã có; **v1.1.1 vẫn là bản stable**.
+
 ## Có gì trong v1.1.1?
 
 Bản vá này sửa đọc lặp khi OCR tách/gộp từ, mũi tên hội thoại nhấp nháy hoặc
@@ -44,6 +48,7 @@ mili giây; càng thấp càng nhanh.
 | v1.1.0 — cấu hình streaming¹ | 912,6 ms | 1.013,6 ms | 1.436,9 ms |
 | Giảm so với v1.0.0 | **35,4%** | **41,9%** | **67,8%** |
 | v1.1.1 — vá OCR lặp/âm thanh² | Chưa đo | Chưa đo | Chưa đo |
+| v1.1.2-rc.1 — vá giọng đọc/RDP | Chưa đo | Chưa đo | Chưa đo |
 
 Máy đo: Windows 11, Core i7-13700F, RTX 4090 24 GB. Hai lượt dùng cùng ảnh
 hội thoại đã khoanh box, OCR Anh → dịch Việt, HauhauCS Qwen3 4B Q4_K_M local,

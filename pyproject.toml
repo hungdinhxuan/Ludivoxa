@@ -1,6 +1,6 @@
 [project]
 name = "interpreter-v2"
-version = "1.1.1"
+version = "1.1.2rc1"
 description = "Ludivoxa: offline game OCR, local LLM translation and Vietnamese speech"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"

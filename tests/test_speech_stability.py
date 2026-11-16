@@ -180,6 +180,65 @@ def test_empty_ocr_on_unchanged_text_pixels_does_not_reset_spoken_guard(visual_d
     assert len(spoken) == 1
 
 
+@pytest.mark.parametrize("text", ["Wait by the gate.", "ここで待っていて。"])
+@pytest.mark.parametrize("mode", [OutputMode.TTS, OutputMode.BOTH])
+def test_ocr_oscillation_before_first_read_does_not_starve_visible_dialogue(visual_dialogue, text, mode):
+    worker, observe, spoken, _, _ = visual_dialogue
+    worker._config.output_mode = mode
+    worker._config.source_language = "English" if text.isascii() else "Japanese"
+    for i in range(25):
+        observe(text if i % 2 == 0 else text + "V", i * 0.15)
+    assert spoken == ["VI: " + text]
+
+
+def test_missing_ocr_after_one_good_read_can_speak_unchanged_visible_text(visual_dialogue):
+    _, observe, spoken, _, _ = visual_dialogue
+    observe("Wait by the gate.", 0)
+    observe("", 0.15)
+    observe("", 0.5)
+    observe("", 2.0)
+    assert spoken == ["VI: Wait by the gate."]
+
+
+def test_real_blank_before_settle_does_not_speak_removed_text(visual_dialogue):
+    _, observe, spoken, image, _ = visual_dialogue
+    observe("Wait by the gate.", 0)
+    blank = np.zeros_like(image)
+    observe("", 0.15, blank)
+    observe("", 0.5, blank)
+    observe("", 2.0, blank)
+    assert spoken == []
+
+
+def test_white_completion_arrow_does_not_starve_or_replay_dialogue(visual_dialogue):
+    worker, observe, spoken, image, box = visual_dialogue
+    plain = np.full_like(image, 20)
+    cv2.putText(plain, "Wait by the gate.", (25, 43), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (235,) * 3, 2)
+    arrow = plain.copy()
+    cv2.fillPoly(arrow, [np.array([[398, 29], [414, 29], [406, 41]])], (255,) * 4)
+    assert worker._cursor_rectangles(arrow, {**box, "width": 400})
+    for i in range(25):
+        box["width"] = 400 if i % 2 else 360
+        observe("Wait by the gate.V" if i % 2 else "Wait by the gate.", i * 0.15, arrow if i % 2 else plain)
+    assert spoken == ["VI: Wait by the gate."]
+
+
+@pytest.mark.parametrize("next_text", ["You need 20 gold.", "You do not need gold."])
+def test_real_changed_dialogue_before_first_read_is_not_pinned_to_old_candidate(visual_dialogue, next_text):
+    _, observe, spoken, image, _ = visual_dialogue
+
+    def render(text):
+        pixels = np.full_like(image, 20)
+        cv2.putText(pixels, text, (25, 43), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (235,) * 3, 2)
+        return pixels
+
+    observe("You need 10 gold.", 0, render("You need 10 gold."))
+    changed = render(next_text)
+    observe(next_text, 0.15, changed)
+    observe(next_text, 0.6, changed)
+    assert spoken == [f"VI: {next_text}"]
+
+
 def test_real_single_character_change_in_visible_text_is_read(visual_dialogue):
     _, observe, spoken, image, _ = visual_dialogue
     observe("You need 10 gold to open this gate.", 0)
@@ -250,10 +309,11 @@ def test_merged_red_cursor_does_not_repeat_whole_line(visual_dialogue, arrow_fir
     assert len(spoken) == 1
 
 
-def test_colored_letter_is_not_treated_as_filled_cursor(visual_dialogue):
+@pytest.mark.parametrize("color", [(0, 0, 255, 255), (255,) * 4])
+def test_colored_letter_is_not_treated_as_filled_cursor(visual_dialogue, color):
     worker, _, _, image, box = visual_dialogue
     letter = image.copy()
-    cv2.polylines(letter, [np.array([[398, 29], [406, 41], [414, 29]])], False, (0, 0, 255, 255), 2)
+    cv2.polylines(letter, [np.array([[398, 29], [406, 41], [414, 29]])], False, color, 2)
     assert worker._cursor_rectangles(letter, box) == []
 
 

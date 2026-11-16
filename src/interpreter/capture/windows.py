@@ -1,7 +1,4 @@
-"""Windows-specific window capture using Win32 API.
-
-Uses PrintWindow API to capture window content even when obscured by other windows.
-"""
+"""Windows Graphics Capture with a window-only GDI path for Remote Desktop."""
 
 import ctypes
 import sys
@@ -16,6 +13,8 @@ from .convert import bgra_to_rgb_pil
 
 # Fixed capture interval (4 FPS) - throttle Windows Graphics Capture API
 CAPTURE_INTERVAL = 0.25
+GRAPHICS_START_TIMEOUT = 5.0
+GRAPHICS_RETRY_INTERVAL = 10.0
 
 # Windows build number requirements for Graphics Capture API features
 # - Build 18362 (Win10 1903): Basic Windows Graphics Capture API
@@ -138,6 +137,7 @@ except ImportError:
 DIB_RGB_COLORS = 0
 BI_RGB = 0
 PW_RENDERFULLCONTENT = 2  # Capture even if window is layered/composited
+PW_CLIENTONLY = 1
 
 # System metrics constants
 SM_CYCAPTION = 4  # Title bar height
@@ -386,14 +386,45 @@ def _get_client_bounds(window_id: int) -> dict | None:
     }
 
 
-def capture_window(window_id: int) -> NDArray[np.uint8] | None:
+def is_remote_session() -> bool:
+    """Query the current session's protocol, including RemoteFX sessions."""
+    try:
+        wts = ctypes.WinDLL("wtsapi32", use_last_error=True)
+        query = wts.WTSQuerySessionInformationW
+        query.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            ctypes.c_int,
+            ctypes.POINTER(ctypes.c_void_p),
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        query.restype = wintypes.BOOL
+        wts.WTSFreeMemory.argtypes = [ctypes.c_void_p]
+        wts.WTSFreeMemory.restype = None
+        buffer = ctypes.c_void_p()
+        size = wintypes.DWORD()
+        # WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION, WTSClientProtocolType.
+        if query(None, 0xFFFFFFFF, 16, ctypes.byref(buffer), ctypes.byref(size)):
+            try:
+                if buffer.value and size.value >= ctypes.sizeof(ctypes.c_ushort):
+                    return ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ushort)).contents.value != 0
+            finally:
+                wts.WTSFreeMemory(buffer)
+    except (OSError, AttributeError):
+        pass
+    return bool(ctypes.windll.user32.GetSystemMetrics(0x1000))  # SM_REMOTESESSION
+
+
+def capture_window(window_id: int, *, render_full_content: bool = False) -> NDArray[np.uint8] | None:
     """Capture a screenshot of a specific window's client area.
 
-    Uses BitBlt from the window's DC (same approach as the Go 'captured' library).
-    This captures the window content regardless of whether it's in the foreground.
+    Remote Desktop uses PrintWindow to render this HWND alone. Capturing the
+    desktop would also read our translated overlay back into OCR. PrintWindow
+    is synchronous and must only be used on the background capture thread.
 
     Args:
         window_id: The window handle (HWND).
+        render_full_content: Ask the app to render its client area with PrintWindow.
 
     Returns:
         Numpy array (H, W, 4) in BGRA format, or None if capture failed.
@@ -412,6 +443,36 @@ def capture_window(window_id: int) -> NDArray[np.uint8] | None:
     # Get API functions
     user32 = ctypes.windll.user32
     gdi32 = ctypes.windll.gdi32
+    # GDI handles are pointer-sized on 64-bit Windows; ctypes defaults to int.
+    user32.GetDC.argtypes, user32.GetDC.restype = [wintypes.HWND], wintypes.HDC
+    user32.ReleaseDC.argtypes, user32.ReleaseDC.restype = [wintypes.HWND, wintypes.HDC], ctypes.c_int
+    user32.PrintWindow.argtypes = [wintypes.HWND, wintypes.HDC, wintypes.UINT]
+    user32.PrintWindow.restype = wintypes.BOOL
+    gdi32.CreateCompatibleDC.argtypes, gdi32.CreateCompatibleDC.restype = [wintypes.HDC], wintypes.HDC
+    gdi32.CreateCompatibleBitmap.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
+    gdi32.CreateCompatibleBitmap.restype = wintypes.HBITMAP
+    gdi32.SelectObject.argtypes, gdi32.SelectObject.restype = [wintypes.HDC, wintypes.HANDLE], wintypes.HANDLE
+    gdi32.BitBlt.argtypes = [
+        wintypes.HDC,
+        *([ctypes.c_int] * 4),
+        wintypes.HDC,
+        ctypes.c_int,
+        ctypes.c_int,
+        wintypes.DWORD,
+    ]
+    gdi32.BitBlt.restype = wintypes.BOOL
+    gdi32.GetDIBits.argtypes = [
+        wintypes.HDC,
+        wintypes.HBITMAP,
+        wintypes.UINT,
+        wintypes.UINT,
+        ctypes.c_void_p,
+        ctypes.POINTER(BITMAPINFO),
+        wintypes.UINT,
+    ]
+    gdi32.GetDIBits.restype = ctypes.c_int
+    gdi32.DeleteObject.argtypes, gdi32.DeleteObject.restype = [wintypes.HANDLE], wintypes.BOOL
+    gdi32.DeleteDC.argtypes, gdi32.DeleteDC.restype = [wintypes.HDC], wintypes.BOOL
 
     # Get the window's client area DC (not screen DC)
     # GetDC with hwnd returns DC for client area only
@@ -436,10 +497,13 @@ def capture_window(window_id: int) -> NDArray[np.uint8] | None:
 
                 # BitBlt from window DC (copies from client area origin 0,0)
                 SRCCOPY = 0x00CC0020
-                result = gdi32.BitBlt(mem_dc, 0, 0, width, height, hwnd_dc, 0, 0, SRCCOPY)
+                if render_full_content:
+                    result = user32.PrintWindow(window_id, mem_dc, PW_CLIENTONLY | PW_RENDERFULLCONTENT)
+                else:
+                    result = gdi32.BitBlt(mem_dc, 0, 0, width, height, hwnd_dc, 0, 0, SRCCOPY)
+                gdi32.SelectObject(mem_dc, old_bitmap)
 
                 if not result:
-                    gdi32.SelectObject(mem_dc, old_bitmap)
                     return None
 
                 # Prepare bitmap info for GetDIBits
@@ -457,8 +521,6 @@ def capture_window(window_id: int) -> NDArray[np.uint8] | None:
 
                 # Get bitmap bits
                 result = gdi32.GetDIBits(mem_dc, bitmap, 0, height, buffer, ctypes.byref(bmi), DIB_RGB_COLORS)
-
-                gdi32.SelectObject(mem_dc, old_bitmap)
 
                 if result == 0:
                     return None
@@ -541,15 +603,118 @@ class WindowsCaptureStream:
         self._latest_frame: NDArray[np.uint8] | None = None
         self._frame_lock = threading.Lock()
         self._capture = None
+        self._control = None
+        self._thread = None
+        self._stop_event = threading.Event()
+        self._graphics_generation = 0
+        self._graphics_closed = False
+        self._window_invalid = False
+        self.error: str | None = None
         self._running = False
         self._last_frame_time: float = 0.0  # For 4 FPS throttling
 
     def start(self):
-        """Start the capture stream in background.
+        """Start asynchronously; display/session recovery never blocks Qt."""
+        if self._running:
+            return
+        self._running = True
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._run, name="interpreter-capture", daemon=True)
+        self._thread.start()
 
-        Raises:
-            RuntimeError: If Windows version doesn't support Graphics Capture API.
-        """
+    @property
+    def window_invalid(self) -> bool:
+        return self._window_invalid
+
+    def _clear_frame(self):
+        with self._frame_lock:
+            self._latest_frame = None
+
+    def _stop_graphics(self):
+        # Invalidate callbacks before stopping: an old on_closed must not stop
+        # the replacement session, nor may it publish its last cached frame.
+        self._graphics_generation += 1
+        self._clear_frame()
+        control, self._control = self._control, None
+        capture, self._capture = self._capture, None
+        if control is not None:
+            try:
+                control.stop()
+            except Exception as exc:
+                from .. import log
+
+                log.get_logger().warning("failed to stop graphics capture", error=str(exc))
+        del capture
+
+    def _run(self):
+        from .. import log
+
+        logger = log.get_logger()
+        remote = None
+        retry_at = 0.0
+        graphics_started = 0.0
+        last_error_log = float("-inf")
+        try:
+            while not self._stop_event.is_set():
+                tick = time.monotonic()
+                try:
+                    if not ctypes.windll.user32.IsWindow(self._window_id):
+                        self._window_invalid = True
+                        break
+                    current_remote = is_remote_session()
+                    if current_remote != remote:
+                        self._stop_graphics()
+                        self._clear_frame()
+                        remote, retry_at = current_remote, 0.0
+                        logger.info(
+                            "capture session changed",
+                            remote=remote,
+                            backend="PrintWindow" if remote else "Windows Graphics Capture",
+                        )
+                    if ctypes.windll.user32.IsIconic(self._window_id):
+                        self._clear_frame()
+                    elif remote or tick < retry_at:
+                        # This renders only the target HWND, so inplace overlay
+                        # text cannot feed back into OCR as with desktop capture.
+                        frame = capture_window(self._window_id, render_full_content=True)
+                        with self._frame_lock:
+                            if self._running:
+                                self._latest_frame = frame
+                        self.error = None if frame is not None else "Waiting for window frames. Keep the game visible."
+                    else:
+                        if self._control is None:
+                            self._graphics_closed = False
+                            try:
+                                self._start_graphics_capture()
+                                graphics_started = time.monotonic()
+                            except Exception:
+                                self._stop_graphics()
+                                self._clear_frame()
+                                retry_at = tick + GRAPHICS_RETRY_INTERVAL
+                                raise
+                        if (
+                            self._graphics_closed
+                            or self._control.is_finished()
+                            or (self.get_frame() is None and tick - graphics_started >= GRAPHICS_START_TIMEOUT)
+                        ):
+                            logger.warning("graphics capture interrupted, using window rendering until retry")
+                            self._stop_graphics()
+                            self._clear_frame()
+                            retry_at = tick + GRAPHICS_RETRY_INTERVAL
+                except Exception as exc:
+                    self.error = str(exc)
+                    self._clear_frame()
+                    if tick - last_error_log >= GRAPHICS_RETRY_INTERVAL:
+                        logger.warning("waiting for window capture", error=self.error)
+                        last_error_log = tick
+                self._stop_event.wait(max(0.01, CAPTURE_INTERVAL - (time.monotonic() - tick)))
+        finally:
+            self._running = False
+            self._stop_graphics()
+            self._clear_frame()
+
+    def _start_graphics_capture(self):
+        """Create one native session, called only by the capture thread."""
         from windows_capture import Frame, InternalCaptureControl, WindowsCapture
 
         # Check Windows version for Graphics Capture API support
@@ -569,9 +734,10 @@ class WindowsCaptureStream:
         else:
             draw_border = None  # Skip border config (yellow border will appear)
 
-        self._running = True
         self._last_frame_time = 0.0  # Reset throttling
         self._first_frame_logged = False  # Track if we've logged first frame
+        self._graphics_generation += 1
+        generation = self._graphics_generation
 
         # Log capture configuration
         from .. import log
@@ -598,12 +764,12 @@ class WindowsCaptureStream:
         # Set up frame handler
         @self._capture.event
         def on_frame_arrived(frame: Frame, capture_control: InternalCaptureControl):
-            if not stream._running:
+            if not stream._running or generation != stream._graphics_generation:
                 capture_control.stop()
                 return
 
             # Throttle to 4 FPS - skip frames that arrive too quickly
-            now = time.time()
+            now = time.monotonic()
             if now - stream._last_frame_time < CAPTURE_INTERVAL:
                 return
             stream._last_frame_time = now
@@ -628,8 +794,10 @@ class WindowsCaptureStream:
                         fullscreen=is_fullscreen,
                     )
 
-                # Crop out title bar only if not fullscreen
-                if not is_fullscreen:
+                # Borderless games (and RDP windows one pixel shorter than the
+                # monitor) have no title bar to crop. Keep their client pixels
+                # aligned with PrintWindow when switching session backends.
+                if not is_fullscreen and "CAPTION" in get_window_style_flags(stream._window_id):
                     # Get title bar height in screen pixels
                     title_bar_screen = get_title_bar_height()
                     # Get window bounds to calculate the actual scale
@@ -663,7 +831,9 @@ class WindowsCaptureStream:
 
                 # Store raw BGRA numpy array (consumers convert on demand)
                 with stream._frame_lock:
-                    stream._latest_frame = arr.copy()
+                    if stream._running and generation == stream._graphics_generation:
+                        stream._latest_frame = arr.copy()
+                        stream.error = None
             except Exception as e:
                 from .. import log
 
@@ -671,11 +841,13 @@ class WindowsCaptureStream:
 
         @self._capture.event
         def on_closed():
-            stream._running = False
+            if generation == stream._graphics_generation:
+                stream._graphics_closed = True
+                stream._clear_frame()
 
         # Start capture in free-threaded mode (non-blocking)
         try:
-            self._capture.start_free_threaded()
+            self._control = self._capture.start_free_threaded()
         except Exception as e:
             error_msg = str(e).strip()
             if not error_msg:
@@ -695,13 +867,6 @@ class WindowsCaptureStream:
                     f"Failed to start screen capture for window {hex(self._window_id)}: {error_msg}"
                 ) from e
 
-        # Wait for first frame to arrive (up to 5 seconds)
-        for _ in range(100):
-            with self._frame_lock:
-                if self._latest_frame is not None:
-                    break
-            time.sleep(0.05)
-
     def get_frame(self) -> NDArray[np.uint8] | None:
         """Get the latest captured frame.
 
@@ -714,4 +879,5 @@ class WindowsCaptureStream:
     def stop(self):
         """Stop the capture stream."""
         self._running = False
-        # The capture will stop on next frame via capture_control.stop()
+        self._stop_event.set()
+        self._clear_frame()

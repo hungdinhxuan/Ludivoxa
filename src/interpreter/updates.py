@@ -35,6 +35,15 @@ def version_tuple(version):
     return tuple(int(n) for n in match.groups())
 
 
+def _installed_version_key(version):
+    """RC installations may upgrade to the corresponding stable release."""
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:rc|-rc\.)(\d+)", version)
+    if match:
+        major, minor, patch, candidate = (int(n) for n in match.groups())
+        return major, minor, patch, 0, candidate
+    return (*version_tuple(version), 1, 0)
+
+
 def file_hash(path):
     with Path(path).open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
@@ -150,9 +159,7 @@ class GitHubUpdates:
                 if status == 404:
                     raise UpdateError("Release unavailable. No published release or update file was found.")
                 if status in (401, 403):
-                    raise UpdateError(
-                        "GitHub denied this request or its rate limit was reached. Try again later."
-                    )
+                    raise UpdateError("GitHub denied this request or its rate limit was reached. Try again later.")
                 raise UpdateError(f"GitHub update request failed (HTTP {status}).")
             return response
         raise UpdateError("Too many update download redirects.")
@@ -183,7 +190,7 @@ class GitHubUpdates:
             newest = version_tuple(tag)
             if data.get("draft") or data.get("prerelease"):
                 raise UpdateError("No stable published update is available.")
-            if newest <= version_tuple(current):
+            if (*newest, 1, 0) <= _installed_version_key(current):
                 return None
             assets = tuple(
                 Asset(a["name"], a["id"], a["size"]) for a in data.get("assets", []) if a.get("state") == "uploaded"

@@ -9,6 +9,10 @@ Ludivoxa extends [Interpreter](https://github.com/bquenin/interpreter), retainin
 its capture → OCR → translation → overlay pipeline and Qt interface. This fork
 starts at **v1.0.0**; see [attribution and licenses](NOTICE.md).
 
+**Testing release:** [v1.1.2-rc.1](docs/releases/v1.1.2-rc.1.md) fixes first-read
+OCR starvation, white-cursor repeats and Remote Desktop capture recovery. It is
+a manual app-only update for existing installations; **v1.1.1 remains stable**.
+
 ## Features
 
 - Offline English/Japanese PaddleOCR with a fast English profile, automatic
@@ -44,6 +48,7 @@ lower is faster.
 | v1.1.0 — streaming profile¹ | 912.6 ms | 1,013.6 ms | 1,436.9 ms |
 | Reduction versus v1.0.0 | **35.4%** | **41.9%** | **67.8%** |
 | v1.1.1 — OCR repeat/audio fixes² | Not measured | Not measured | Not measured |
+| v1.1.2-rc.1 — speech/RDP fixes | Not measured | Not measured | Not measured |
 
 Measured on Windows 11, Core i7-13700F and RTX 4090 24 GB, using the same saved
 dialogue crops, English OCR → Vietnamese, local HauhauCS Qwen3 4B Q4_K_M,

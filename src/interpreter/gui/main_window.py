@@ -1972,17 +1972,22 @@ class MainWindow(QMainWindow):
             overlay.ensure_above(getattr(self._capture, "window_id", None))
 
         if frame is None:
-            # A capture card keeps the session open with no frames while the console is off;
-            # say so after a few seconds instead of leaving a silent blank preview
-            if isinstance(self._capture, VideoDeviceCapture):
-                self._frames_missing += 1
-                if self._frames_missing * PROCESS_INTERVAL_MS >= NO_SIGNAL_NOTICE_MS and not self._waiting_for_signal:
-                    self._waiting_for_signal = True
+            # Display/session changes can interrupt window capture too. Show a
+            # notice rather than leaving an unexplained frozen preview/overlay.
+            self._frames_missing += 1
+            if self._frames_missing * PROCESS_INTERVAL_MS >= NO_SIGNAL_NOTICE_MS and not self._waiting_for_signal:
+                self._waiting_for_signal = True
+                if isinstance(self._capture, VideoDeviceCapture):
                     self.statusBar().showMessage(f"Waiting for a video signal from '{self._capture.name[:40]}'...")
+                else:
+                    self.statusBar().showMessage("Waiting for window frames. Keep the game visible; capture will retry.")
             return
 
-        if self._waiting_for_signal and isinstance(self._capture, VideoDeviceCapture):
-            self.statusBar().showMessage(f"Capturing video device '{self._capture.name[:40]}'")
+        if self._waiting_for_signal:
+            if isinstance(self._capture, VideoDeviceCapture):
+                self.statusBar().showMessage(f"Capturing video device '{self._capture.name[:40]}'")
+            else:
+                self.statusBar().showMessage(f"Capturing '{self._current_window_title[:40]}'")
         self._waiting_for_signal = False
         self._frames_missing = 0
 

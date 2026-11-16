@@ -410,6 +410,11 @@ class WindowCapture:
             return False
         return getattr(self._stream, "window_invalid", False)
 
+    @property
+    def error(self) -> str | None:
+        """Expose temporary display/session failures without ending capture."""
+        return getattr(self._stream, "error", None)
+
     def stop(self) -> None:
         """Stop capture and release resources.
 

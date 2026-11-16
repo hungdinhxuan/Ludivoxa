@@ -98,6 +98,10 @@ def test_native_surround_format_plays_buffered_and_streamed_speech(backend, chan
         assert player.diagnostics["output_channels"] == channels
         assert player.diagnostics["output_device"] == 12
         assert player.diagnostics["streaming"] == streaming
+        assert player.diagnostics["speech_volume"] == 0.5
+        assert player.diagnostics["audio_peak"] == pytest.approx(0.25, abs=2e-5)
+        assert player.diagnostics["audio_rms"] == pytest.approx(0.25, abs=2e-5)
+        assert player.diagnostics["output_device_name"] == "Selected speaker"
         pcm = np.concatenate(backend.streams[0].writes)
         assert len(pcm) == (9600 if streaming else 4800)
         np.testing.assert_allclose(pcm[:, :2], 0.25, atol=2e-5)
@@ -116,6 +120,71 @@ def test_wasapi_shared_conversion_keeps_stereo_when_supported(backend):
     assert settings["extra_settings"].auto_convert
     assert not settings["extra_settings"].exclusive
     assert len(backend.checks) == 1
+
+
+def test_next_utterance_requeries_endpoint_after_remote_audio_device_changes(backend):
+    app = QApplication.instance() or QApplication([])
+    player = PCMPlayer()
+    wav = _wav_bytes(np.full(4800, 0.5, dtype=np.float32), 48000)
+    try:
+        player._write_audio(player._generation, wav, 1.0)
+        assert player.diagnostics["output_device"] == 12
+        backend.original["name"] = "Remote Audio"
+        backend.native.update(name="Remote Audio", index=18)
+        backend.supported[18] = backend.supported.pop(12)
+        player._write_audio(player._generation, wav, 1.0)
+        assert player.diagnostics["output_device"] == 18
+        assert player.diagnostics["output_device_name"] == "Remote Audio"
+        assert len(backend.streams) == 2
+    finally:
+        player.close()
+    assert app is not None
+
+
+@pytest.mark.parametrize("host", ["Windows WDM-KS", "ASIO"])
+def test_callback_hosts_drain_every_stream_chunk_without_blocking_writes(backend, monkeypatch, host):
+    app = QApplication.instance() or QApplication([])
+    backend.devices = [backend.original]
+    backend.supported[3] = {2}
+    monkeypatch.setattr(backend, "query_hostapis", lambda index: {"name": host})
+    rendered = []
+
+    class CallbackStop(Exception):
+        pass
+
+    def output_stream(**settings):
+        def start():
+            while True:
+                out = np.empty((128, settings["channels"]), dtype=np.float32)
+                try:
+                    settings["callback"](out, 128, None, SimpleNamespace(output_underflow=False))
+                except CallbackStop:
+                    rendered.append(out.copy())
+                    break
+                rendered.append(out.copy())
+            settings["finished_callback"]()
+
+        return SimpleNamespace(start=start, stop=lambda: None, close=lambda: None, latency=0.06)
+
+    monkeypatch.setattr(backend, "CallbackStop", CallbackStop, raising=False)
+    monkeypatch.setattr(backend, "OutputStream", output_stream)
+    source = SpeechStream()
+    for level in (0.1, 0.2, 0.3):
+        source.put(_wav_bytes(np.full(4800, level, dtype=np.float32), 48000))
+    source.finish()
+    player = PCMPlayer()
+    try:
+        player._write_audio(player._generation, source, 1.0)
+        assert player.diagnostics["host_api"] == host
+        assert player.diagnostics["callback_mode"] and not player.diagnostics["streaming"]
+        assert player.diagnostics["processed_seconds"] == pytest.approx(0.3)
+        assert player.diagnostics["underruns"] == 0
+        pcm = np.concatenate(rendered)
+        for index, level in enumerate((0.1, 0.2, 0.3)):
+            np.testing.assert_allclose(pcm[index * 4800 : (index + 1) * 4800], level, atol=2 / 32768)
+    finally:
+        player.close()
+    assert app is not None
 
 
 def test_unsupported_auto_selected_wasapi_returns_to_original_endpoint(backend):

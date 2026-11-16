@@ -3,6 +3,22 @@
 All notable Ludivoxa changes are recorded here. This project uses version tags
 such as `v1.0.0`; numbering is independent of the upstream Interpreter project.
 
+## [1.1.2-rc.1] - 2026-11-16
+
+This prerelease is an app-only update for an existing v1.1.1 installation.
+Install it manually; the stable updater does not offer release candidates.
+
+- Confirm stable visible glyphs before the first speech request as well as
+  after playback, so oscillating/missing OCR cannot indefinitely reset TTS.
+  Recognize white completion arrows without ignoring real changed text;
+  add output endpoint and waveform-level diagnostics for intermittent silence.
+- Recover Windows capture across console/Remote Desktop session changes using
+  window-only PrintWindow rendering in RDP; recreate Graphics Capture on return.
+  Run initialization/recovery off the UI thread, stop native capture explicitly,
+  discard stale callbacks, and report missing window frames while retrying.
+- Support RC build/version metadata and upgrading an RC installation to its
+  corresponding stable release; remote prereleases remain excluded from the updater.
+
 ## [1.1.1] - 2026-11-15
 
 - Order horizontal OCR words by line and x position, and remember line-wide

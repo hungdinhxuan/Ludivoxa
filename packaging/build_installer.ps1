@@ -16,6 +16,9 @@ $outputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromP
 & $Python packaging/prepare_offline_bundle.py --app $AppDirectory --runtime $OllamaDirectory --store $ModelStore --output $stagePath
 if ($LASTEXITCODE -ne 0) { throw 'Offline bundle preparation failed.' }
 New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
-& $compilerPath ("/DPayloadDir=" + $stagePath) ("/DOutputDir=" + $outputPath) packaging/windows_installer.iss *> build/installer-compile.log
+$releaseVersion = & $Python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"
+if ($LASTEXITCODE -ne 0) { throw 'Cannot read the application version.' }
+$numericVersion = ($releaseVersion -split 'rc', 2)[0] + '.0'
+& $compilerPath ("/DAppVersion=" + $releaseVersion) ("/DAppNumericVersion=" + $numericVersion) ("/DPayloadDir=" + $stagePath) ("/DOutputDir=" + $outputPath) packaging/windows_installer.iss *> build/installer-compile.log
 if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed; see build/installer-compile.log.' }
 Write-Host "Offline setup written to $outputPath. Keep Setup.exe and every .bin file together."

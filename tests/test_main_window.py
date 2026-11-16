@@ -79,6 +79,33 @@ def test_capture_feeds_latest_frames_without_repainting_every_poll(capture_windo
     assert win._last_frame is frame
 
 
+def test_window_capture_interruption_reports_waiting_and_resumes_processing(capture_window, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import numpy as np
+
+    from interpreter.gui.main_window import NO_SIGNAL_NOTICE_MS, PROCESS_INTERVAL_MS
+
+    win = capture_window
+    win._current_window_title = "Game"
+    get_frame = MagicMock(return_value=None)
+    win._capture = SimpleNamespace(get_frame=get_frame, window_invalid=False, bounds={}, window_id=42)
+    submit = MagicMock()
+    monkeypatch.setattr(win._process_worker, "submit_frame", submit)
+    for _ in range(NO_SIGNAL_NOTICE_MS // PROCESS_INTERVAL_MS + 1):
+        win._capture_and_process()
+    assert win._waiting_for_signal
+    assert "Waiting for window frames" in win.statusBar().currentMessage()
+    submit.assert_not_called()
+    frame = np.ones((2, 4, 4), np.uint8)
+    get_frame.return_value = frame
+    win._capture_and_process()
+    assert not win._waiting_for_signal and win._frames_missing == 0
+    assert win.statusBar().currentMessage() == "Capturing 'Game'"
+    submit.assert_called_once_with(frame, 0)
+
+
 @pytest.mark.parametrize("accepted", [True, False])
 def test_roi_editor_previews_without_speech_and_saves_only_on_ok(capture_window, monkeypatch, accepted):
     from types import SimpleNamespace

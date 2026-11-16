@@ -8,6 +8,22 @@ streaming speech and latency improvements. Use patch
 version **1.1.1** fixes OCR/TTS repeats and audio formats. The published v1.0.0 has no updater;
 its users must install the first updater-enabled version manually once.
 
+For the **v1.1.2-rc.1** prerelease, Python metadata uses `1.1.2rc1` and Windows
+numeric resources use `1.1.2.0`. Keep `AppVersion` and `AppNumericVersion` in
+the Inno defaults aligned. Publish with `prerelease=true` and `make_latest=false`.
+Stable users do not receive RCs automatically; RC installations can upgrade
+to the same base stable version later. Existing runtime/model formats are unchanged,
+so this RC ships only the app-update installer, README, manifest and checksums:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1 -AppDirectory build/v1.1.2-rc.1-app/Interpreter -OutputDirectory dist/app-update/v1.1.2-rc.1
+uv run python packaging/package_release.py --output dist/releases/v1.1.2-rc.1 --source-commit $releaseCommit --app build/v1.1.2-rc.1-app/Interpreter/Interpreter.exe --app-update dist/app-update/v1.1.2-rc.1/Ludivoxa-1.1.2rc1-App-Update.exe
+```
+
+The packager maps PEP 440 RC metadata to the SemVer-style Git tag. It also
+retains full-offline packaging when `--installer` is supplied. New RC testers
+install the stable full offline setup first, then the manual app update.
+
 1. Update the project version in `pyproject.toml`, its editable entry in
    `uv.lock`, and `AppVersion` in `packaging/windows_installer.iss`.
 2. Refresh `CHANGELOG.md`, public guides and `docs/releases/vX.Y.Z.md`.

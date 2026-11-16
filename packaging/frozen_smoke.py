@@ -178,8 +178,11 @@ def run_smoke(report_path):
             loop.exec()
             if errors or player.diagnostics.get("processed_seconds", 0) < 4:
                 raise AssertionError(f"Streaming playback failed: {errors}, {player.diagnostics}")
-            if player.diagnostics["underruns"] or not player.diagnostics["streaming"]:
+            if player.diagnostics["underruns"]:
                 raise AssertionError(f"Streaming playback underrun: {player.diagnostics}")
+            callback_host = player.diagnostics["host_api"] in ("Windows WDM-KS", "ASIO")
+            if player.diagnostics["streaming"] != (not callback_host):
+                raise AssertionError(f"Unexpected native playback mode: {player.diagnostics}")
             report["streaming_playback_under_ui_stall"] = player.diagnostics.copy()
         finally:
             blocker.stop()

@@ -105,6 +105,10 @@ class ProcessWorker(QObject):
         self._mode = OverlayMode.BANNER
         self._confidence_threshold = 0.6
         self._speech_candidate = ""
+        self._speech_candidate_snapshot = None
+        self._speech_candidate_text = ""
+        self._speech_candidate_regions = []
+        self._speech_candidate_image_cache = []
         self._speech_candidate_since = 0.0
         self._speech_visual_since = 0.0
         self._speech_candidate_ink = None
@@ -374,12 +378,14 @@ class ProcessWorker(QObject):
                 ):
                     # A filled GBA continuation arrow can be recognized as T.
                     # Remove only a suffix backed by the actual cursor pixels.
-                    filtered[index] = OCRResult(re.sub(r"(?<=[.!?。！？])\s*[tTvVyY]\s*$", "", region.text), region.bbox)
+                    filtered[index] = OCRResult(
+                        re.sub(r"(?<=[.!?。！？])\s*[tTvVyY]\s*$", "", region.text), region.bbox
+                    )
         return [region for row in group_ocr_rows(filtered) for region in row]
 
     @staticmethod
     def _cursor_rectangles(frame, box):
-        """Find small filled, colored down-triangles at a text line's tail.
+        """Find small filled, colored or bright down-triangles at a line's tail.
 
         GBA continuation arrows can be merged into the line and recognized as
         a final T. Inspect a small tail crop; do not mask whole screen areas
@@ -394,7 +400,11 @@ class ProcessWorker(QObject):
         if not crop.size:
             return []
         maximum, minimum = crop.max(axis=2), crop.min(axis=2)
-        mask = ((maximum.astype(np.int16) - minimum > 80) & (maximum > 120)).astype(np.uint8) * 255
+        colored = (maximum.astype(np.int16) - minimum > 80) & (maximum > 120)
+        # RPGMaker also uses white continuation arrows. Keep the same shape,
+        # size and location checks as for GBA; do not strip arbitrary letters.
+        bright = (minimum > 200) & (maximum - minimum < 40) if np.mean(maximum < 160) > 0.4 else False
+        mask = (colored | bright).astype(np.uint8) * 255
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         rectangles = []
         for contour in contours:
@@ -526,6 +536,10 @@ class ProcessWorker(QObject):
         if snapshot is not self._spoken_image_cache_snapshot:
             self._spoken_image_cache_snapshot = snapshot
             self._spoken_image_cache.clear()
+        return self._same_dialogue_image(frame, regions, snapshot, self._spoken_image_cache)
+
+    def _same_dialogue_image(self, frame, regions, snapshot, image_cache):
+        """Compare positioned glyphs for either pending or already spoken text."""
         if not snapshot or not isinstance(frame, np.ndarray) or frame.ndim != 3 or frame.shape[2] < 3:
             return False
         shape, patches = snapshot
@@ -552,7 +566,7 @@ class ProcessWorker(QObject):
         for x, y, right, bottom, _, _, _ in patches:
             digest.update(np.ascontiguousarray(frame[y:bottom, x:right, :3]))
         image_key = digest.digest()
-        if image_key in self._spoken_image_cache:
+        if image_key in image_cache:
             return True
         for x, y, right, bottom, pixels, old_cursors, box in patches:
             current = frame[y:bottom, x:right, :3]
@@ -610,8 +624,8 @@ class ProcessWorker(QObject):
                     shifted_ink = (gray > threshold) != (current_gray > threshold + offset)
                     if np.any(shifted_ink & changed):
                         return False
-        self._spoken_image_cache.append(image_key)
-        del self._spoken_image_cache[:-4]
+        image_cache.append(image_key)
+        del image_cache[:-4]
         return True
 
     @staticmethod
@@ -726,6 +740,10 @@ class ProcessWorker(QObject):
             self._spoken_snapshot = None
             self._suppressed_source = ""
             self._speech_candidate = ""
+            self._speech_candidate_snapshot = None
+            self._speech_candidate_text = ""
+            self._speech_candidate_regions = []
+            self._speech_candidate_image_cache.clear()
             self._speech_revealing = self._speech_candidate_cursor = self._speech_cursor_expected = False
             self._speech_reveal_gap = 0.0
             self._speech_candidate_ink = None
@@ -737,6 +755,21 @@ class ProcessWorker(QObject):
                 logger.debug("speech repeat suppressed", reason="unchanged dialogue pixels", generation=generation)
                 self._suppressed_source = source_key
             source_key = self._spoken_source
+        if (
+            source_key != self._speech_candidate
+            and self._speech_candidate
+            and self._config.tts_enabled
+            and self._config.output_mode != OutputMode.OVERLAY
+            and self._same_dialogue_image(
+                frame, regions, self._speech_candidate_snapshot, self._speech_candidate_image_cache
+            )
+        ):
+            # OCR flicker must not keep resetting the first-read settle timer.
+            # Reuse text only after the existing strict image guard proves the
+            # visible glyphs unchanged, including when detection misses a frame.
+            source_key = self._speech_candidate
+            text = captured_text = self._speech_candidate_text
+            regions = self._speech_candidate_regions
         if source_key != self._speech_candidate:
             previous = self._speech_candidate
             growing = (
@@ -751,6 +784,10 @@ class ProcessWorker(QObject):
                 self._speech_revealing = False
                 self._speech_reveal_gap = 0.0
             self._speech_candidate = source_key
+            self._speech_candidate_snapshot = self._text_snapshot(frame, regions) if source_key else None
+            self._speech_candidate_text = text
+            self._speech_candidate_regions = regions
+            self._speech_candidate_image_cache.clear()
             self._speech_candidate_since = now
             self._speech_visual_since = now
             self._speech_candidate_ink = None

@@ -10,7 +10,8 @@ from PyInstaller.utils.win32.versioninfo import FixedFileInfo, StringFileInfo, S
 
 root = Path(SPECPATH).parent
 release_version = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-version_tuple = tuple(int(part) for part in release_version.split(".")) + (0,)
+# Windows needs numeric resource fields; retain the full PEP 440 RC in strings.
+version_tuple = tuple(int(part) for part in release_version.split("rc", 1)[0].split(".")) + (0,)
 version_info = VSVersionInfo(
     ffi=FixedFileInfo(filevers=version_tuple, prodvers=version_tuple),
     kids=[

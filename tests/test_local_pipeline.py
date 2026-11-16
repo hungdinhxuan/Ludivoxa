@@ -133,6 +133,68 @@ def test_capture_ocr_http_translation_overlay(endpoint, qapp, provider, mode, la
     print(f"{provider} {language} {mode.value}: {elapsed:.1f} ms (synthetic OCR and HTTP fixture)")
 
 
+@pytest.mark.parametrize("provider", ["ollama", "openai"])
+def test_first_read_ocr_jitter_reaches_http_and_audio_once(endpoint, qapp, monkeypatch, provider):
+    from PySide6.QtCore import QObject, Signal
+
+    from interpreter.config import OutputMode
+    from interpreter.gui import workers
+    from interpreter.ocr import OCRResult
+    from interpreter.speech import SpeechController, _wav_bytes
+
+    base, calls = endpoint
+    config = Config(
+        source_language="English",
+        output_mode=OutputMode.TTS,
+        llm=LLMSettings(provider=provider, base_url=base, model="local-test"),
+    )
+    worker = ProcessWorker(config)
+    worker.stream_speech = False
+    worker._translator = LLMTranslator(config.llm, source_language="English")
+    worker._translator._loaded = True
+    worker._ocr = MagicMock()
+    pixels = np.zeros((70, 280, 4), dtype=np.uint8)
+    pixels[20:40, 20:240, :3] = 230
+    box = dict(x=20, y=20, width=220, height=20)
+    clock = [0.0]
+    monkeypatch.setattr(workers, "time", SimpleNamespace(monotonic=lambda: clock[0], perf_counter=time.perf_counter))
+
+    class Player(QObject):
+        finished = Signal()
+        error = Signal(str)
+
+        def __init__(self):
+            super().__init__()
+            self.play = MagicMock()
+            self.stop = MagicMock()
+
+    player = Player()
+    voice = MagicMock()
+    voice.synthesize.return_value = _wav_bytes(np.full(4800, 0.1, dtype=np.float32), 48000)
+    controller = SpeechController(synthesizer=voice, player=player)
+    worker.speech_ready.connect(lambda text, _: controller.submit(text, "test-voice.onnx"))
+    try:
+        for i in range(25):
+            text = "Wait by the gate." if i % 2 == 0 else "Wait by the gate.V"
+            worker._ocr.extract_text_regions.return_value = [OCRResult(text, box)]
+            clock[0] = i * 0.15
+            worker._process_frame(pixels, 1)
+            qapp.processEvents()
+        deadline = time.monotonic() + 3
+        while player.play.call_count == 0 and time.monotonic() < deadline:
+            qapp.processEvents()
+            time.sleep(0.002)
+        assert len(calls) == 1
+        assert calls[0][1]["messages"][-1]["content"].endswith("Wait by the gate.")
+        voice.synthesize.assert_called_once()
+        assert voice.synthesize.call_args.args[0] == "Xin chào"
+        player.play.assert_called_once()
+        assert len(player.play.call_args.args[0]) > 44  # Actual nonempty WAV handed to playback.
+    finally:
+        controller.close()
+        worker._translator._session.close()
+
+
 def test_auto_context_mixed_text_and_manual_override(endpoint):
     base, calls = endpoint
     translator = LLMTranslator(LLMSettings(base_url=base, model="test"), source_language="Auto")

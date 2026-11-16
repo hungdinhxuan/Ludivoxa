@@ -232,8 +232,10 @@ class PCMPlayer(QObject):
             channels = output_format["channels"]
             host = sd.query_hostapis(device["hostapi"])["name"]
             callback_mode = host in ("Windows WDM-KS", "ASIO")
+            audio_peak, audio_energy, audio_samples = 0.0, 0.0, 0
 
             def decoded():
+                nonlocal audio_peak, audio_energy, audio_samples
                 chunks = iter(wav_bytes) if isinstance(wav_bytes, SpeechStream) else iter([wav_bytes])
                 for chunk in chunks:
                     with wave.open(BytesIO(chunk)) as wav_file:
@@ -245,6 +247,9 @@ class PCMPlayer(QObject):
                     if rate != source_rate:
                         size = round(len(samples) * rate / source_rate)
                         samples = np.interp(np.arange(size) * source_rate / rate, np.arange(len(samples)), samples)
+                    audio_peak = max(audio_peak, float(np.max(np.abs(samples))) * abs(volume))
+                    audio_energy += float(np.sum(samples * samples)) * volume * volume
+                    audio_samples += len(samples)
                     pcm = np.zeros((len(samples), channels), dtype="float32")
                     # Mono speech goes to the front L/R channels. Do not send
                     # a full-range voice signal to surround or LFE channels.
@@ -331,7 +336,11 @@ class PCMPlayer(QObject):
                 streaming=isinstance(wav_bytes, SpeechStream) and not callback_mode,
                 requested_latency_ms=60,
                 output_device=device["index"],
+                output_device_name=device["name"],
                 output_channels=channels,
+                speech_volume=volume,
+                audio_peak=audio_peak,
+                audio_rms=(audio_energy / max(1, audio_samples)) ** 0.5,
                 device_latency_ms=stream.latency * 1000,
                 buffer_active=False,
             )

@@ -12,7 +12,8 @@ COMPILER = ROOT / "build/tools/InnoSetup/ISCC.exe"
 
 
 @pytest.mark.skipif(os.name != "nt" or not COMPILER.is_file(), reason="Native Inno Setup compiler required")
-def test_app_update_preserves_models_and_configuration_in_isolated_install(tmp_path):
+@pytest.mark.parametrize("app_version", ["1.0.1", "1.1.2rc1"])
+def test_app_update_preserves_models_and_configuration_in_isolated_install(tmp_path, app_version):
     payload = tmp_path / "payload"
     payload.mkdir()
     (payload / "Interpreter.exe").write_bytes(b"new-app-file")
@@ -65,7 +66,7 @@ def test_app_update_preserves_models_and_configuration_in_isolated_install(tmp_p
         [
             str(COMPILER),
             "/DAppUpdateOnly=1",
-            "/DAppVersion=1.0.1",
+            f"/DAppVersion={app_version}",
             f"/DPayloadDir={payload}",
             f"/DOutputDir={tmp_path}",
             str(definition),
@@ -75,7 +76,7 @@ def test_app_update_preserves_models_and_configuration_in_isolated_install(tmp_p
         timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    setup = tmp_path / "Ludivoxa-1.0.1-App-Update.exe"
+    setup = tmp_path / f"Ludivoxa-{app_version}-App-Update.exe"
     result = subprocess.run(
         [
             str(setup),

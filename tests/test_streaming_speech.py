@@ -555,7 +555,12 @@ def test_one_native_audio_stream_drains_all_chunks_during_ui_stalls(qapp):
         player.play(source)
         loop.exec()
         assert not errors
-        assert player.diagnostics["streaming"]
+        # WDM-KS/ASIO expose callback I/O only; the existing player buffers
+        # their utterance before rendering. They must still drain all chunks
+        # independently of the blocked Qt thread, just like WASAPI streaming.
+        assert player.diagnostics["streaming"] == (
+            player.diagnostics["host_api"] not in ("Windows WDM-KS", "ASIO")
+        )
         assert player.diagnostics["processed_seconds"] == 3.0
         assert player.underruns == 0
         assert player.diagnostics["elapsed_seconds"] < 3.75

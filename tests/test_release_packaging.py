@@ -26,7 +26,7 @@ def test_release_manifest_tracks_version_source_and_all_checksums(package):
     commit = "a" * 40
     assets = helper.prepare(source, output, source_commit=commit)
     data = json.loads((output / "release-manifest.json").read_text(encoding="utf-8"))
-    assert data["version"] == helper.VERSION and data["tag"] == "v" + helper.VERSION
+    assert data["version"] == helper.VERSION and data["tag"] == helper.TAG
     assert data["source_commit"] == commit and data["installer"] == base + ".exe"
     for line in (output / "SHA256SUMS.txt").read_text().splitlines():
         expected, name = line.split("  ", 1)
@@ -69,3 +69,31 @@ def test_release_can_include_checksummed_app_only_installer(package, tmp_path):
     assert f"{helper.sha256(update)}  {update.name}\n" in checksums
     manifest = json.loads((output / "release-manifest.json").read_text())
     assert any(asset["name"] == update.name for asset in manifest["assets"])
+
+
+def test_app_update_only_release_omits_model_payload(package, tmp_path):
+    helper, _source, output, _base = package
+    update = tmp_path / f"Ludivoxa-{helper.VERSION}-App-Update.exe"
+    update.write_bytes(b"app update")
+    assets = helper.prepare(None, output, app_update=update, source_commit="b" * 40)
+    data = json.loads((output / "release-manifest.json").read_text())
+    assert data["tag"] == helper.TAG and data["installer"] == update.name
+    assert not data["models_included"] and "model_weights_sha256" not in data
+    assert {p.name for p in assets} == {update.name, "README.txt", "release-manifest.json", "SHA256SUMS.txt"}
+    assert "existing Ludivoxa" in (output / "README.txt").read_text()
+    assert all(
+        helper.sha256(output / name) == digest
+        for digest, name in (line.split("  ") for line in (output / "SHA256SUMS.txt").read_text().splitlines())
+    )
+
+
+def test_empty_release_and_overlapping_update_are_rejected(package):
+    helper, _source, output, _base = package
+    with pytest.raises(ValueError, match="required"):
+        helper.prepare(None, output)
+    update = output / f"Ludivoxa-{helper.VERSION}-App-Update.exe"
+    # The empty-output check rejects inputs already placed inside the output.
+    output.mkdir()
+    update.write_bytes(b"app update")
+    with pytest.raises(ValueError, match="empty"):
+        helper.prepare(None, output, app_update=update)

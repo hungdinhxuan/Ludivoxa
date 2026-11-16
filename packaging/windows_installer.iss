@@ -5,13 +5,17 @@
   #define OutputDir "..\dist\installer"
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.1.1"
+  #define AppVersion "1.1.2rc1"
+#endif
+#ifndef AppNumericVersion
+  #define AppNumericVersion "1.1.2.0"
 #endif
 
 [Setup]
 AppId={{6C80F14D-818C-4A3F-B431-5389B73CA221}
 AppName=Ludivoxa
 AppVersion={#AppVersion}
+VersionInfoVersion={#AppNumericVersion}
 AppPublisher=Ludivoxa contributors
 AppPublisherURL=https://github.com/hungdinhxuan/Ludivoxa
 DefaultDirName={localappdata}\Programs\Ludivoxa

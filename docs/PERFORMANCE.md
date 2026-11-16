@@ -1,5 +1,25 @@
 # Validation and performance
 
+## v1.1.2-rc.1 speech starvation and RDP recovery
+
+The pending first-read candidate now reuses the existing strict glyph-image
+comparison; OCR variation alone cannot keep restarting the settle timer while
+the visible text is unchanged. White completion arrows are checked by geometry,
+and real numeric/negative text changes remain covered. A replay of ten saved
+GBA states with controlled fast OCR alternation changed from zero speech
+requests to one; stable-first then alternating input still produced one.
+This replay used simulated translations/audio and is not a live error rate or
+TTFA benchmark. **No new end-to-end TTFA result is available for this RC.**
+
+Twenty-four offline Nano preset-4 waveform trials produced non-silent audio
+(RMS 0.0994–0.1886). Native audio diagnostics record the endpoint, volume,
+peak and RMS. WDM-KS/ASIO retain their existing buffered callback path; the
+tests require complete playback without underruns for each supported host.
+
+Windows capture was exercised with real WGC/PrintWindow windows and a real
+RDP session in Symphony of the Serpent. The user's latest intermittent game
+scene was not available for a fresh post-fix check; RC notes retain this limit.
+
 ## v1.1.1 live GBA repeat reproduction
 
 A read-only capture collected 112 selected-box frames while the user operated

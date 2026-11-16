@@ -80,6 +80,13 @@ def test_numeric_versions_and_preferred_app_only_package():
     assert client(metadata(tag="v1.0.0")).check("1.0.0") is None
 
 
+@pytest.mark.parametrize("current", ["1.1.2rc1", "v1.1.2-rc.1"])
+def test_rc_installation_can_upgrade_to_same_base_stable_but_not_older(current):
+    assert client(metadata(tag="v1.1.1")).check(current) is None
+    assert client(metadata(tag="v1.1.2")).check(current).tag == "v1.1.2"
+    assert client(metadata(tag="v1.1.3")).check(current).tag == "v1.1.3"
+
+
 @pytest.mark.parametrize("tag", ["../bad", "main", "v1.1.0-beta", "v1.0", "v1.0.0/evil"])
 def test_unsupported_tags_are_not_download_paths(tag):
     with pytest.raises(u.UpdateError):
