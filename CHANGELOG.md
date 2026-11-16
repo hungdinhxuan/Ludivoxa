@@ -18,6 +18,10 @@ Stable app-only update, including the RC's speech and Remote Desktop fixes.
   a new TTFA benchmark or exhaustive live gameplay validation.
 - Publish a stable update for v1.1.1 and v1.1.2-rc.1 installations, preserving
   existing models, runtime and configuration.
+- Post-release validation: publish 36 tagged-source WASAPI loopback trials.
+  The v1.1.2 Qwen/Nano warm medians are 867.7/966.3/1,355.9 ms for short,
+  two-sentence and long inputs. Release notes link the samples and limitations;
+  the application tag, installer and checksums remain unchanged.
 
 ## [1.1.2-rc.1] - 2026-11-16
 
