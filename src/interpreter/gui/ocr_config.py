@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDoubleSpinBox,
+    QFrame,
     QGraphicsItem,
     QGraphicsRectItem,
     QGraphicsScene,
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QSlider,
     QSplitter,
     QTextEdit,
@@ -174,7 +176,9 @@ class OCRConfigDialog(QDialog):
     ):
         super().__init__(parent)
         self.setWindowTitle(f"Configure OCR: {window_title}" if window_title else "Configure OCR")
-        self.setMinimumSize(1000, 700)
+        available = self.screen().availableGeometry().adjusted(12, 36, -12, -12)
+        self.setMinimumSize(min(480, available.width()), min(320, available.height()))
+        self.resize(min(1000, available.width()), min(700, available.height()))
 
         self._window_title = window_title
         self._confidence = initial_confidence
@@ -199,8 +203,17 @@ class OCRConfigDialog(QDialog):
 
     def _setup_ui(self):
         """Set up the dialog UI."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(10, 10, 10, 10)
+        # Keep actions outside the scrollable editor, even on a small RDP desktop.
+        self._editor_scroll = QScrollArea()
+        self._editor_scroll.setWidgetResizable(True)
+        self._editor_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        editor = QWidget()
+        layout = QVBoxLayout(editor)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self._editor_scroll.setWidget(editor)
+        outer_layout.addWidget(self._editor_scroll, 1)
 
         # Instructions
         scan_row = QHBoxLayout()
@@ -255,6 +268,9 @@ class OCRConfigDialog(QDialog):
         self._view.setRenderHints(self._view.renderHints())
         self._view.setDragMode(QGraphicsView.DragMode.NoDrag)
         self._view.setMouseTracking(True)
+        self._view.setMinimumSize(240, 120)
+        self._view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._view.viewport().installEventFilter(self)
         left_layout.addWidget(self._view)
 
@@ -273,7 +289,7 @@ class OCRConfigDialog(QDialog):
         self._detected_text.setReadOnly(True)
         self._detected_text.setFont(QFont("sans-serif", 14))
         self._detected_text.setStyleSheet("background-color: #2a2a2a; color: #fff; border: 1px solid #555;")
-        self._detected_text.setMinimumWidth(250)
+        self._detected_text.setMinimumWidth(180)
         right_layout.addWidget(self._detected_text)
 
         splitter.addWidget(right_widget)
@@ -283,39 +299,48 @@ class OCRConfigDialog(QDialog):
 
         layout.addWidget(splitter, 1)
 
-        # Bottom controls
-        bottom_layout = QHBoxLayout()
+        confidence_layout = QHBoxLayout()
 
         # Confidence slider
-        bottom_layout.addWidget(QLabel("Confidence:"))
+        confidence_layout.addWidget(QLabel("Confidence:"))
         self._confidence_slider = QSlider(Qt.Orientation.Horizontal)
         self._confidence_slider.setRange(0, 100)
         self._confidence_slider.setValue(int(self._confidence * 100))
         self._confidence_slider.valueChanged.connect(self._on_confidence_changed)
-        self._confidence_slider.setMinimumWidth(200)
-        bottom_layout.addWidget(self._confidence_slider)
+        self._confidence_slider.setMinimumWidth(100)
+        confidence_layout.addWidget(self._confidence_slider, 1)
         self._confidence_label = QLabel(f"{self._confidence:.0%}")
         self._confidence_label.setMinimumWidth(40)
-        bottom_layout.addWidget(self._confidence_label)
+        confidence_layout.addWidget(self._confidence_label)
 
-        bottom_layout.addStretch()
+        self._action_bar = QWidget()
+        actions = QHBoxLayout(self._action_bar)
+        actions.setContentsMargins(0, 0, 0, 0)
 
         # Clear exclusions button
         self._clear_btn = QPushButton("Clear Exclusions")
         self._clear_btn.clicked.connect(self._clear_current)
-        bottom_layout.addWidget(self._clear_btn)
+        actions.addWidget(self._clear_btn)
+        actions.addStretch()
 
         # OK/Cancel buttons
         self._ok_btn = QPushButton("OK")
         self._ok_btn.setDefault(True)
         self._ok_btn.clicked.connect(self.accept)
-        bottom_layout.addWidget(self._ok_btn)
+        actions.addWidget(self._ok_btn)
 
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        bottom_layout.addWidget(cancel_btn)
+        self._cancel_btn = QPushButton("Cancel")
+        self._cancel_btn.clicked.connect(self.reject)
+        actions.addWidget(self._cancel_btn)
+        for button in (self._clear_btn, self._ok_btn, self._cancel_btn):
+            button.setMinimumHeight(44)
 
-        layout.addLayout(bottom_layout)
+        outer_layout.insertWidget(0, self._action_bar)
+        outer_layout.insertLayout(1, confidence_layout)
+        self.setTabOrder(self._clear_btn, self._ok_btn)
+        self.setTabOrder(self._ok_btn, self._cancel_btn)
+        self.setTabOrder(self._cancel_btn, self._confidence_slider)
+        self.setTabOrder(self._confidence_slider, self._scan_mode)
         self._scan_mode.currentIndexChanged.connect(self._on_scan_mode_changed)
 
     def _on_scan_mode_changed(self):
@@ -413,6 +438,8 @@ class OCRConfigDialog(QDialog):
         from PySide6.QtCore import QEvent
 
         if obj == self._view.viewport():
+            if event.type() == QEvent.Type.Resize:
+                self._fit_preview()
             if event.type() == QEvent.Type.MouseButtonPress:
                 if event.button() == Qt.MouseButton.LeftButton:
                     scene_pos = self._view.mapToScene(event.position().toPoint())
@@ -532,9 +559,13 @@ class OCRConfigDialog(QDialog):
                         )
                     )
             self._preview_size = (new_w, new_h)
-            self._view.setMinimumSize(new_w + 4, new_h + 4)
         self.apply_pending_zones()
         self._sync_region_fields()
+        self._fit_preview()
+
+    def _fit_preview(self):
+        if not self._scene.sceneRect().isEmpty():
+            self._view.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
     def update_ocr_results(self, results: list):
         """Update with OCR results from the worker.

@@ -14,8 +14,8 @@ Người dùng mới: từ [bộ offline v1.1.1](https://github.com/hungdinhxuan
 Không dùng nút **Source code** để cài app: đó là mã nguồn, không chứa runtime
 và model. Bản offline có dung lượng khoảng 4,9 GB; app cài xong khoảng 6,4 GB.
 Python và Ollama đã có sẵn trong bộ cài. Cài đặt mặc định theo tài khoản người
-dùng; nâng cấp giữ `config.yml` hiện có. Sau đó cài **v1.1.2 App-Update** qua
-tab **Updates** hoặc [release stable](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.2).
+dùng; nâng cấp giữ `config.yml` hiện có. Sau đó cài **v1.1.3 App-Update** qua
+tab **Updates** hoặc [release stable](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.3).
 
 ## Dịch hội thoại
 
@@ -23,6 +23,10 @@ tab **Updates** hoặc [release stable](https://github.com/hungdinhxuan/Ludivoxa
 2. Chờ OCR, translation và voice sẵn sàng, rồi chọn **Start Capture**.
 3. Mở **Configure OCR** → **Scan: Only selected box**.
 4. Kéo khoanh phần hội thoại và nhấn **OK**.
+
+Từ v1.1.3, **Configure OCR** nằm trên thanh đầu cửa sổ app. Trong dialog,
+**OK / Cancel / Clear** luôn ở trên cùng; nội dung bên dưới có thể cuộn và
+preview tự co theo kích thước cửa sổ để dùng trên màn hình remote nhỏ.
 
 Box xanh có thể kéo để di chuyển, kéo góc để đổi kích thước, hoặc chỉnh bằng
 các ô phần trăm. **Use bottom dialogue box** tạo vùng khởi đầu ở phía dưới.
@@ -99,6 +103,14 @@ PrintWindow vẫn có thể trả ảnh đen; không phải mọi game/driver đ
 Khi phiên Windows ngắt kết nối, app chờ phiên hoạt động trước khi mở capture
 native và tự tiếp tục sau khi kết nối lại. Bản v1.1.1 chưa có phần sửa này.
 
+Giọng TTS theo đầu ra âm thanh mặc định của Windows. Khi kết nối Remote
+Desktop có **Remote Audio**, các câu tiếp theo tự chuyển sang thiết bị đó;
+khi trở về console, app theo đầu ra mặc định mới. Câu đang phát được giữ
+nguyên tới hết để tránh cắt tiếng. Từ v1.1.3, app cập nhật danh sách thiết bị
+trước câu tiếp theo khi đầu ra đổi. WASAPI phát qua callback với bộ đệm có
+giới hạn để tránh nghẽn ghi âm thanh sau khi đổi phiên; nếu callback ngừng
+hoạt động, app báo lỗi và làm mới thiết bị ở lần phát sau.
+
 ## Ollama local và GPU server LAN
 
 Bộ cài mặc định dùng Ollama riêng ở `http://127.0.0.1:11435`, model
@@ -124,12 +136,12 @@ nguyên bản; không tự làm nhẹ, tăng nặng hay thêm chi tiết. Prompt
 
 ## Cập nhật ứng dụng
 
-**v1.1.2 là bản stable:** dùng tab **Updates**, hoặc tải
-`Ludivoxa-1.1.2-App-Update.exe` từ
-[release stable](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.2)
+**v1.1.3 là bản stable:** dùng tab **Updates**, hoặc tải
+`Ludivoxa-1.1.3-App-Update.exe` từ
+[release stable](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.3)
 và chọn thư mục Ludivoxa đang cài. Gói cập nhật giữ model/runtime/cấu hình.
 Người dùng mới cần cài bộ offline v1.1.1 ở đầu hướng dẫn trước.
-Cả v1.1.1 và v1.1.2-rc.1 đều cập nhật được lên stable qua tab Updates.
+Các bản v1.1.1, v1.1.2-rc.1 và v1.1.2 đều cập nhật được lên v1.1.3 qua tab Updates.
 
 Từ v1.1.0, mở **Updates** ở thanh bên:
 

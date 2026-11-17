@@ -3,6 +3,22 @@
 All notable Ludivoxa changes are recorded here. This project uses version tags
 such as `v1.0.0`; numbering is independent of the upstream Interpreter project.
 
+## [1.1.3] - 2026-11-17
+
+Stable app-only patch for Remote Desktop audio and OCR configuration controls.
+
+- Keep Configure OCR in the main header and its Clear/OK/Cancel actions at the top
+  of a screen-sized, scrollable dialog so they remain reachable on small RDP desktops.
+- Use a bounded native callback for WASAPI speech instead of blocking writes,
+  which could hang in an RDP session and fill the synthesis queue indefinitely.
+  Preserve incremental playback, detect stopped callbacks, retain responsive
+  cancellation and invalidate the endpoint after a driver failure.
+- Follow Windows default audio output changes between console and Remote
+  Desktop. Refresh PortAudio's cached devices on the audio writer before the
+  next utterance, retaining the current line and avoiding per-line refreshes.
+  Serialize refresh with native stream cleanup and report refresh failures
+  instead of playing through a stale physical speaker.
+
 ## [1.1.2] - 2026-11-16
 
 Stable app-only update, including the RC's speech and Remote Desktop fixes.

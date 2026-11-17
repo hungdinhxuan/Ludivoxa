@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 from PIL import Image, ImageDraw, ImageFont
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QRect, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMainWindow
 
@@ -196,26 +196,59 @@ def test_selected_mode_requires_box_and_preserves_hidden_exclusions(dialog):
 def test_drag_draw_move_resize_and_clear_selected_box(dialog):
     dialog._scan_mode.setCurrentIndex(1)
     view = dialog._view
+    # Mouse positions are integer viewport pixels after the preview is scaled.
+    pixel = 1 / (view.transform().m11() * min(dialog._preview_size))
     start, end = view.mapFromScene(100, 200), view.mapFromScene(600, 400)
     QTest.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=start)
     QTest.mouseMove(view.viewport(), end)
     QTest.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=end)
-    assert dialog.get_scan_region() == pytest.approx({"x": 0.125, "y": 200 / 480, "width": 0.625, "height": 200 / 480})
+    assert dialog.get_scan_region() == pytest.approx(
+        {"x": 0.125, "y": 200 / 480, "width": 0.625, "height": 200 / 480}, abs=pixel
+    )
     item = dialog._region_item
     center = view.mapFromScene(item.mapToScene(item.rect().center()))
     moved = center + view.mapFromScene(40, 20) - view.mapFromScene(0, 0)
     QTest.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=center)
     QTest.mouseMove(view.viewport(), moved)
     QTest.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=moved)
-    assert dialog.get_scan_region()["x"] == pytest.approx(0.175)
+    assert dialog.get_scan_region()["x"] == pytest.approx(0.175, abs=2 * pixel)
     corner = view.mapFromScene(item.mapToScene(item.rect().bottomRight()))
     larger = corner + view.mapFromScene(40, 20) - view.mapFromScene(0, 0)
     QTest.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=corner)
     QTest.mouseMove(view.viewport(), larger)
     QTest.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=larger)
-    assert dialog.get_scan_region()["width"] == pytest.approx(0.675)
+    assert dialog.get_scan_region()["width"] == pytest.approx(0.675, abs=2 * pixel)
     dialog._clear_current()
     assert dialog.get_scan_region() == {} and not dialog._ok_btn.isEnabled()
+
+
+@pytest.mark.parametrize("size", [(640, 360), (800, 450), (1024, 600)])
+def test_small_remote_desktop_keeps_actions_clickable_and_selection_intact(qapp, monkeypatch, size):
+    screen = SimpleNamespace(availableGeometry=lambda: QRect(0, 0, *size))
+    monkeypatch.setattr(OCRConfigDialog, "screen", lambda self: screen)
+    instance = OCRConfigDialog(initial_region=REGION)
+    try:
+        instance.update_frame(np.full((1080, 1920, 4), 255, dtype=np.uint8))
+        instance.show()
+        QTest.qWait(10)
+        assert instance.width() <= size[0] and instance.height() <= size[1]
+        assert instance.get_scan_region() == pytest.approx(REGION)
+        # Scrolling a large editor must never move its actions out of reach.
+        scroll = instance._editor_scroll.verticalScrollBar()
+        scroll.setValue(scroll.maximum())
+        for button in (instance._clear_btn, instance._ok_btn, instance._cancel_btn):
+            top_left = button.mapTo(instance, button.rect().topLeft())
+            bounds = QRect(top_left, button.size())
+            assert instance.rect().contains(bounds)
+            assert bounds.bottom() < instance._editor_scroll.y()
+            assert instance.childAt(bounds.center()) is button
+        instance.resize(max(480, size[0] - 180), max(300, size[1] - 100))
+        qapp.processEvents()
+        assert instance.get_scan_region() == pytest.approx(REGION)
+        QTest.mouseClick(instance._ok_btn, Qt.MouseButton.LeftButton)
+        assert instance.result() == instance.DialogCode.Accepted
+    finally:
+        instance.close()
 
 
 def test_numeric_selection_clips_and_saved_selection_scales_with_preview(dialog):

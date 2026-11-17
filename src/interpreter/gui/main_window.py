@@ -402,13 +402,14 @@ class MainWindow(QMainWindow):
         return page
 
     def _build_header(self) -> QWidget:
-        """App title on the left, engine status pills and Fix Models on the right."""
+        """Keep OCR configuration at the top, alongside engine status."""
         header = QWidget()
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(20, 12, 16, 4)
         title = QLabel("Ludivoxa")
         title.setProperty("role", "app-title")
         header_layout.addWidget(title)
+        header_layout.addWidget(self._ocr_config_btn)
         header_layout.addStretch()
 
         self._ocr_engine_label = QLabel(self._ocr_engine_name())
@@ -529,9 +530,9 @@ class MainWindow(QMainWindow):
         source_row.addWidget(refresh_btn)
 
         self._ocr_config_btn = QPushButton("Configure OCR")
+        self._ocr_config_btn.setMinimumHeight(44)
         self._ocr_config_btn.setEnabled(False)  # Disabled until capturing
         self._ocr_config_btn.clicked.connect(self._open_ocr_config)
-        source_row.addWidget(self._ocr_config_btn)
 
         capture_layout.addLayout(source_row)
 

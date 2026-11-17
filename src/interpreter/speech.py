@@ -16,11 +16,15 @@ from queue import Empty, Full, Queue
 
 import numpy as np
 from PySide6.QtCore import QCoreApplication, QObject, Signal, Slot
+from PySide6.QtMultimedia import QMediaDevices
 
 from . import log
 
 DEFAULT_VOICE_PATH = str(Path.home() / ".interpreter" / "voices" / "vi_VN-vais1000-medium.onnx")
 logger = log.get_logger()
+# PortAudio's device snapshot is process-wide. Never rebuild it while another
+# PCMPlayer owns a native stream, including a cancelled writer still closing.
+_AUDIO_DEVICE_LOCK = threading.Lock()
 
 
 class SpeechStream:
@@ -205,6 +209,11 @@ class PCMPlayer(QObject):
         self._closed = False
         self.underruns = 0
         self.diagnostics = {}
+        self._output_revision = 0
+        self._applied_output_revision = -1
+        if os.name == "nt":
+            self._media_devices = QMediaDevices(self)
+            self._media_devices.audioOutputsChanged.connect(self._on_audio_outputs_changed)
         self._completed.connect(self._on_completed)
         app = QCoreApplication.instance()
         if app:
@@ -212,6 +221,14 @@ class PCMPlayer(QObject):
 
     def setVolume(self, volume):
         self._volume = volume
+
+    @Slot()
+    def _on_audio_outputs_changed(self):
+        # Qt observes the live Windows default (including Remote Audio), while
+        # PortAudio keeps the list/default from its last initialization. Mark
+        # it here; all native work remains on the audio writer's thread.
+        with self._lock:
+            self._output_revision += 1
 
     def play(self, wav_bytes):
         if self._closed:
@@ -224,14 +241,29 @@ class PCMPlayer(QObject):
     def _write_audio(self, token, wav_bytes, volume):
         stream = None
         report = {}
+        _AUDIO_DEVICE_LOCK.acquire()
         try:
+            with self._lock:
+                if token != self._generation or self._closed:
+                    return
+                revision = self._output_revision
             import sounddevice as sd
 
+            if os.name == "nt" and self._applied_output_revision != revision:
+                # Refresh once at startup and after a device/default change,
+                # before opening/consuming audio. Steady-state speech does not
+                # pay for repeated enumeration. A failed refresh must not play
+                # through the stale physical speaker during an RDP session.
+                if sd._initialized:
+                    sd._terminate()
+                sd._initialize()
+                self._applied_output_revision = revision
             device, output_format = _output_format(sd)
             rate = output_format["samplerate"]
             channels = output_format["channels"]
             host = sd.query_hostapis(device["hostapi"])["name"]
-            callback_mode = host in ("Windows WDM-KS", "ASIO")
+            buffered_callback = host in ("Windows WDM-KS", "ASIO")
+            callback_mode = buffered_callback or host == "Windows WASAPI"
             audio_peak, audio_energy, audio_samples = 0.0, 0.0, 0
 
             def decoded():
@@ -257,7 +289,7 @@ class PCMPlayer(QObject):
                     yield pcm
 
             chunks = iter(decoded())
-            if callback_mode:
+            if buffered_callback:
                 # These hosts cannot use blocking writes. Preserve their native
                 # callback path with a fully buffered utterance.
                 pcm = np.concatenate(list(chunks))
@@ -267,16 +299,35 @@ class PCMPlayer(QObject):
             done = threading.Event()
             cursor = 0
             callback_underruns = 0
+            delivered_samples = 0
+            queued_pcm = Queue(maxsize=2)
+            production_done = threading.Event()
+            if buffered_callback or not isinstance(wav_bytes, SpeechStream):
+                production_done.set()
+            last_callback = time.monotonic()
 
             def render(outdata, frames, time_info, status):
-                nonlocal cursor, callback_underruns
+                nonlocal cursor, callback_underruns, pcm, delivered_samples, last_callback
+                last_callback = time.monotonic()
                 if status.output_underflow:
                     callback_underruns += 1
-                count = min(frames, len(pcm) - cursor)
                 outdata.fill(0)
-                outdata[:count] = pcm[cursor : cursor + count]
-                cursor += count
-                if cursor == len(pcm):
+                offset = 0
+                while offset < frames:
+                    if cursor == len(pcm):
+                        try:
+                            pcm = queued_pcm.get_nowait()
+                            cursor = 0
+                        except Empty:
+                            if production_done.is_set():
+                                raise sd.CallbackStop from None
+                            return  # The real-time callback must never wait for synthesis.
+                    count = min(frames - offset, len(pcm) - cursor)
+                    outdata[offset : offset + count] = pcm[cursor : cursor + count]
+                    cursor += count
+                    offset += count
+                    delivered_samples += count
+                if cursor == len(pcm) and production_done.is_set() and queued_pcm.empty():
                     raise sd.CallbackStop
 
             options = {"callback": render, "finished_callback": done.set} if callback_mode else {}
@@ -285,7 +336,7 @@ class PCMPlayer(QObject):
                 if token != self._generation or self._closed:
                     return
                 self._stream = stream
-                stream.start()
+            stream.start()
             start = time.monotonic()
             # Only this worker touches the native stream. Aborting from the UI
             # concurrently with a blocking write corrupts some Windows drivers.
@@ -294,19 +345,34 @@ class PCMPlayer(QObject):
             underrun = False
             total_samples = len(pcm)
             if callback_mode:
-                # WDM-KS/ASIO do not implement PortAudio's blocking API. Feed
-                # the already generated PCM from their native audio callback;
-                # completion still waits for the driver's drained-buffer signal.
-                while not done.wait(0.05):
+
+                def check_output():
                     with self._lock:
-                        cancelled = token != self._generation or self._closed
-                    if cancelled:
-                        stream.abort()
-                        return
-                    if time.monotonic() - start > len(pcm) / rate + 10:
-                        stream.abort()
+                        if token != self._generation or self._closed:
+                            raise CancelledError()
+                    if done.is_set() and not production_done.is_set():
+                        raise RuntimeError("Audio output stopped while speech was being produced.")
+                    if time.monotonic() - last_callback > 2:
+                        raise RuntimeError("Audio output stopped accepting samples. Reconnect the audio device.")
+
+                # WASAPI blocking writes can hang indefinitely after an RDP
+                # endpoint stops. Feed bounded PCM from this writer and let the
+                # native callback drain it; cancellation never waits on write().
+                for next_pcm in chunks:
+                    while True:
+                        check_output()
+                        try:
+                            queued_pcm.put(next_pcm, timeout=0.05)
+                            total_samples += len(next_pcm)
+                            break
+                        except Full:
+                            continue
+                production_done.set()
+                while not done.wait(0.05):
+                    check_output()
+                    if time.monotonic() - start > total_samples / rate + 10:
                         raise RuntimeError("Audio driver did not report playback completion.")
-                if cursor != len(pcm):
+                if delivered_samples != total_samples:
                     raise RuntimeError("Audio driver stopped before all samples were delivered.")
                 underrun = callback_underruns
             else:
@@ -333,7 +399,7 @@ class PCMPlayer(QObject):
                 underruns=int(underrun),
                 host_api=host,
                 callback_mode=callback_mode,
-                streaming=isinstance(wav_bytes, SpeechStream) and not callback_mode,
+                streaming=isinstance(wav_bytes, SpeechStream) and not buffered_callback,
                 requested_latency_ms=60,
                 output_device=device["index"],
                 output_device_name=device["name"],
@@ -348,12 +414,17 @@ class PCMPlayer(QObject):
             return
         except Exception as exc:
             report = {"error": f"Audio playback failed: {exc}", "buffer_active": False}
+            self._applied_output_revision = -1  # Retry with a fresh endpoint after a driver failure.
+            logger.error("speech playback failed", error=str(exc))
         finally:
             with self._lock:
                 if self._stream is stream:
                     self._stream = None
-            if stream is not None:
-                stream.close()
+            try:
+                if stream is not None:
+                    stream.close()
+            finally:
+                _AUDIO_DEVICE_LOCK.release()
         if not self._closed:
             self._completed.emit(token, report)
 

@@ -9,8 +9,8 @@ Ludivoxa extends [Interpreter](https://github.com/bquenin/interpreter), retainin
 its capture → OCR → translation → overlay pipeline and Qt interface. This fork
 starts at **v1.0.0**; see [attribution and licenses](NOTICE.md).
 
-**Latest stable:** [v1.1.2](docs/releases/v1.1.2.md) fixes speech starvation,
-repeated dialogue and Remote Desktop capture recovery. Existing installations
+**Latest stable:** [v1.1.3](docs/releases/v1.1.3.md) fixes WASAPI speech stalls,
+audio routing after RDP changes and inaccessible OCR configuration controls. Existing installations
 can use **Updates**; new users install the full offline v1.1.1 package first,
 then this app-only update. Models and configuration are preserved.
 
@@ -52,6 +52,7 @@ lower is faster.
 | v1.1.1 — released tag² | 888.0 ms | 971.2 ms | 1,433.6 ms |
 | v1.1.2-rc.1 — released tag² | 866.5 ms | 849.3 ms | 1,364.3 ms |
 | v1.1.2 stable — released tag² | **867.7 ms** | **966.3 ms** | **1,355.9 ms** |
+| v1.1.3 stable | Not measured | Not measured | Not measured |
 
 Measured on Windows 11, Core i7-13700F and RTX 4090 24 GB, using the same saved
 dialogue crops, English OCR → Vietnamese, local HauhauCS Qwen3 4B Q4_K_M,
@@ -123,9 +124,9 @@ Python, English/Japanese OCR models, Vietnamese speech, Ollama 0.40.16 and
 HauhauCS Qwen3 4B Aggressive Q4_K_M are included. No separate model download is
 needed for that profile. The installer preserves an existing `config.yml`.
 
-Then open **Updates** to install v1.1.2 (also supported from v1.1.2rc1).
-For v1.0.0, or to update manually, run **Ludivoxa-1.1.2-App-Update.exe** from
-[v1.1.2](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.2) and select the existing
+Then open **Updates** to install v1.1.3 (also supported from v1.1.2rc1).
+For v1.0.0, or to update manually, run **Ludivoxa-1.1.3-App-Update.exe** from
+[v1.1.3](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.3) and select the existing
 installation directory. This smaller package preserves your models, runtime
 and settings. Public release checks and downloads need no GitHub token or sign-in.
 
