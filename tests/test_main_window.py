@@ -17,7 +17,7 @@ def capture_window(qapp, monkeypatch):
     """Capture controls and a real processing worker, without loading any models."""
     from unittest.mock import MagicMock
 
-    from PySide6.QtCore import QTimer
+    from PySide6.QtCore import QCoreApplication, QEvent, QTimer
     from PySide6.QtWidgets import QMainWindow
 
     from interpreter.config import OverlayMode
@@ -52,6 +52,8 @@ def capture_window(qapp, monkeypatch):
     yield win
     win._process_worker.stop()
     win.close()
+    win.deleteLater()
+    QCoreApplication.sendPostedEvents(win, QEvent.Type.DeferredDelete)
 
 
 def test_capture_feeds_latest_frames_without_repainting_every_poll(capture_window, monkeypatch):
@@ -229,7 +231,6 @@ def test_roi_editor_previews_without_speech_and_saves_only_on_ok(capture_window,
     import numpy as np
     from PySide6.QtCore import QRectF
 
-    import interpreter.gui.main_window as module
     from interpreter.gui.ocr_config import OCRConfigDialog
 
     win = capture_window
@@ -245,21 +246,15 @@ def test_roi_editor_previews_without_speech_and_saves_only_on_ok(capture_window,
     monkeypatch.setattr(win._process_worker, "submit_frame", submit)
     monkeypatch.setattr(win._process_worker, "discard_pending_frames", discard)
 
-    def create_dialog(*args, **kwargs):
-        dialog = OCRConfigDialog(*args, **kwargs)
+    def edit(dialog):
+        dialog._set_region(QRectF(160, 240, 400, 144))
+        dialog._confidence_slider.setValue(80)
+        win._capture_and_process()
+        assert submit.call_args.kwargs == {"origin": (200, 300), "preview_only": True}
+        assert submit.call_args.args[0].shape == (180, 500, 4)
+        return int(accepted)
 
-        def edit():
-            dialog._set_region(QRectF(160, 240, 400, 144))
-            dialog._confidence_slider.setValue(80)
-            win._capture_and_process()
-            assert submit.call_args.kwargs == {"origin": (200, 300), "preview_only": True}
-            assert submit.call_args.args[0].shape == (180, 500, 4)
-            return int(accepted)
-
-        dialog.exec = edit
-        return dialog
-
-    monkeypatch.setattr(module, "OCRConfigDialog", create_dialog)
+    monkeypatch.setattr(OCRConfigDialog, "exec", edit)
     win._open_ocr_config()
     expected = {"x": 0.2, "y": 0.5, "width": 0.5, "height": 0.3} if accepted else old_region
     assert win._config.get_ocr_region("Game") == pytest.approx(expected)
