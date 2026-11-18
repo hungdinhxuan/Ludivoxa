@@ -2,6 +2,7 @@
 
 import math
 import os
+import unicodedata
 from dataclasses import asdict, dataclass, fields
 from dataclasses import field as dataclass_field
 from enum import Enum
@@ -203,6 +204,63 @@ def normalize_ocr_region(value):
     return {"x": x, "y": y, "width": right - x, "height": bottom - y}
 
 
+def character_name(text: str) -> str:
+    """Normalize a name label without guessing identity or gender."""
+    return " ".join(unicodedata.normalize("NFKC", str(text)).split()).strip(' :：「」『』【】[]"“”')[:64]
+
+
+@dataclass
+class CharacterVoices:
+    """Optional name-area OCR and explicit preset assignments for one game."""
+
+    enabled: bool = False
+    name_region: dict | None = None
+    model_path: str = ""
+    voices: dict[str, int] = dataclass_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data):
+        if not isinstance(data, dict):
+            return cls()
+        voices = {}
+        for name, value in (data.get("voices", {}) if isinstance(data.get("voices"), dict) else {}).items():
+            if not isinstance(name, str) or isinstance(value, bool):
+                continue
+            try:
+                index = int(value)
+            except (ValueError, TypeError, OverflowError):
+                continue
+            if character_name(name) and index >= 0 and str(index) == str(value):
+                voices[character_name(name)] = index
+        return cls(
+            enabled=data.get("enabled") is True,
+            name_region=normalize_ocr_region(data.get("name_region")),
+            model_path=data.get("model_path", "") if isinstance(data.get("model_path"), str) else "",
+            voices=voices,
+        )
+
+    def to_dict(self):
+        return asdict(self)
+
+    def matches_model(self, model_path):
+        if not self.model_path:
+            return False
+        if self.model_path == model_path:
+            return True
+        try:
+            return os.path.normcase(str(Path(self.model_path).expanduser().resolve())) == os.path.normcase(
+                str(Path(model_path).expanduser().resolve())
+            )
+        except (OSError, ValueError, RuntimeError):
+            return False
+
+    def speaker_for(self, name, model_path):
+        if not self.matches_model(model_path):
+            return None
+        key = character_name(name).casefold()
+        return next((index for label, index in self.voices.items() if label.casefold() == key), None)
+
+
 class Config:
     """Application configuration."""
 
@@ -252,6 +310,7 @@ class Config:
         tts_reference_audio: str = "",
         ocr_regions: dict | None = None,
         update_check_on_startup: bool = False,
+        character_voices: dict | None = None,
     ):
         self.window_title = window_title
         self.update_check_on_startup = update_check_on_startup is True
@@ -303,6 +362,10 @@ class Config:
                     self.ocr_regions[str(title)] = region
         # Per-window OCR confidence: {"window_title": 0.55, ...}
         self.ocr_confidence_per_window = ocr_confidence_per_window if ocr_confidence_per_window is not None else {}
+        self.character_voices = {
+            str(title): CharacterVoices.from_dict(value)
+            for title, value in (character_voices.items() if isinstance(character_voices, dict) else [])
+        }
 
     @classmethod
     def load(cls, config_path: str | None = None) -> "Config":
@@ -371,7 +434,7 @@ class Config:
 
             return cls(
                 window_title=data.get("window_title", cls.DEFAULT_WINDOW_TITLE),
-                update_check_on_startup=data.get("update_check_on_startup",False) is True,
+                update_check_on_startup=data.get("update_check_on_startup", False) is True,
                 ocr_confidence=float(data.get("ocr_confidence", cls.DEFAULT_OCR_CONFIDENCE)),
                 overlay_mode=overlay_mode,
                 font_family=data.get("font_family"),  # None = system default
@@ -385,6 +448,7 @@ class Config:
                 banner_y=data.get("banner_y"),
                 exclusion_zones=data.get("exclusion_zones", {}),
                 ocr_regions=data.get("ocr_regions"),
+                character_voices=data.get("character_voices"),
                 ocr_confidence_per_window=data.get("ocr_confidence_per_window", {}),
                 translation_backend=translation_backend,
                 llm=LLMSettings.from_dict(data.get("llm")),
@@ -497,6 +561,13 @@ hotkeys:
         """Selected translation box, or None for full-window/exclusion mode."""
         region = self.ocr_regions.get(window_title)
         return region.copy() if region else None
+
+    def get_character_voices(self, window_title: str) -> CharacterVoices:
+        profile = self.character_voices.get(window_title)
+        return CharacterVoices.from_dict(profile.to_dict()) if profile else CharacterVoices()
+
+    def set_character_voices(self, window_title: str, profile: CharacterVoices):
+        self.character_voices[window_title] = CharacterVoices.from_dict(profile.to_dict())
 
     def set_ocr_region(self, window_title: str, region: dict | None) -> None:
         if region is None:
@@ -622,6 +693,8 @@ hotkeys:
         # Save per-window OCR confidence if any are defined
         if self.ocr_regions:
             data["ocr_regions"] = {str(title): region.copy() for title, region in self.ocr_regions.items()}
+        if self.character_voices:
+            data["character_voices"] = {title: profile.to_dict() for title, profile in self.character_voices.items()}
         if self.ocr_confidence_per_window:
             data["ocr_confidence_per_window"] = {str(k): float(v) for k, v in self.ocr_confidence_per_window.items()}
 

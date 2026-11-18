@@ -3,6 +3,27 @@
 All notable Ludivoxa changes are recorded here. This project uses version tags
 such as `v1.0.0`; numbering is independent of the upstream Interpreter project.
 
+## [1.2.0] - 2026-11-18
+
+- Add experimental per-game character voices: select a speaker-name area,
+  assign existing presets once, and recognize the name offline on the OCR
+  worker. Unknown names/narration keep the default voice or clone. Bind each
+  utterance to its preset without interrupting speech, reloading the model,
+  or adding an LLM request. Name OCR uses its own crop even
+  outside the dialogue box/exclusions; its text stays out of translation.
+  The editor follows the active capture or the selected source when idle.
+- Recognize small detached completion arrows by their actual triangle pixels,
+  including when OCR calls them X, I or a digit. Do not add/remove that fake
+  character from the spoken source and replay the whole dialogue; retain real
+  letters and numbers that are not cursor shapes.
+- Keep outlined dialogue from being spoken again when the game background
+  animates and OCR changes a character. Compare exact foreground geometry
+  independently of the dim backdrop, while retaining strict checks for new
+  words, numbers and real glyph changes. Ignore standalone OCR punctuation
+  when remembering the dialogue image.
+- Record hashed source/translation identities, preset IDs and playback starts at normal
+  log level so repeat reports can be traced without logging dialogue text.
+
 ## [1.1.3] - 2026-11-17
 
 Stable app-only patch for Remote Desktop audio and OCR configuration controls.

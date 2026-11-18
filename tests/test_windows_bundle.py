@@ -64,6 +64,10 @@ def test_frozen_ocr_local_translation_and_speech(tmp_path):
     assert report["selected_box_pipeline_utterances"] == 1
     assert report["selected_box_input_shape"] == [100, 900, 4]
     assert report["selected_box_origin"] == [100, 300]
+    characters = report["character_voice_routing"]
+    assert characters["utterances"] == 2 and characters["speaker_ids"] == [1, 7]
+    assert [name.casefold() for name in characters["detected_names"]] == ["alice", "bob"]
+    assert characters["model_reused"] and characters["different_waveforms"]
     assert report["playback_under_ui_stall"]["elapsed_seconds"] < report["audio_seconds"] + 0.8
     assert report["streaming_playback_under_ui_stall"]["processed_seconds"] >= 4
     assert report["streaming_playback_under_ui_stall"]["underruns"] == 0

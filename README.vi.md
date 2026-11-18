@@ -9,17 +9,16 @@ Ludivoxa được phát triển từ [Interpreter](https://github.com/bquenin/in
 của qube/bquenin, giữ pipeline và giao diện Qt hiện có. Dự án này bắt đầu bằng
 **v1.0.0**, độc lập với phiên bản của upstream.
 
-**Bản stable mới nhất:** [v1.1.3](docs/releases/v1.1.3.md) sửa nghẽn phát TTS,
-chuyển thiết bị âm thanh RDP và nút cấu hình OCR khó bấm. Bản đã cài có thể
-cập nhật qua **Updates**; người dùng mới cài bộ offline v1.1.1 rồi cập nhật app.
-Giữ nguyên model, runtime và cấu hình hiện có.
+**Bản ổn định mới nhất [v1.2.0](docs/releases/v1.2.0.md)** thêm giọng theo tên
+nhân vật và giảm lỗi đọc lặp. Bản đã cài có thể nâng cấp qua **Updates**.
+Người dùng mới cài bộ offline v1.1.1 trước rồi cập nhật app.
 
-## Có gì trong v1.1.3?
+## Có gì trong v1.2.0?
 
-Bản vá này chuyển WASAPI sang phát bằng callback để tránh nghẽn ghi âm thanh,
-cập nhật thiết bị đầu ra khi đổi phiên RDP và đưa nút Configure OCR cùng
-OK/Cancel/Clear lên đầu để dễ bấm trên màn hình remote nhỏ.
-Xem [ghi chú bản vá](docs/releases/v1.1.3.md). Các tính năng hiện có:
+Mở **Character voices…**, khoanh vùng tên và gán preset cho từng nhân vật.
+App đọc tên riêng và tự chọn giọng khi gặp tên đã gán. Cấu hình lưu theo game,
+và tên chưa gán dùng giọng mặc định. Bản này cũng lọc mũi tên chuyển câu bị OCR
+nhận thành chữ. [Ghi chú bản phát hành](docs/releases/v1.2.0.md)
 
 - OCR Anh/Nhật offline, phát hiện ngôn ngữ hoặc chọn thủ công.
 - Khoanh box hội thoại để chỉ quét phần cần dịch; lưu riêng theo game. Cách
@@ -54,6 +53,7 @@ mili giây; càng thấp càng nhanh.
 | v1.1.2-rc.1 — đúng tag phát hành² | 866,5 ms | 849,3 ms | 1.364,3 ms |
 | v1.1.2 stable — đúng tag phát hành² | **867,7 ms** | **966,3 ms** | **1.355,9 ms** |
 | v1.1.3 stable | Chưa đo | Chưa đo | Chưa đo |
+| v1.2.0 stable | Phép đo riêng bên dưới | Chưa đo | Chưa đo |
 
 Máy đo: Windows 11, Core i7-13700F, RTX 4090 24 GB. Hai lượt dùng cùng ảnh
 hội thoại đã khoanh box, OCR Anh → dịch Việt, HauhauCS Qwen3 4B Q4_K_M local,
@@ -107,6 +107,13 @@ Xem [phương pháp và cách đo lại](docs/PERFORMANCE.md#v110-streaming-prof
 và [các mẫu thời gian công khai](docs/benchmarks/ttfa.json). Mỗi bản mới sẽ có
 dòng riêng khi có số đo tương đương; các cách quan sát khác nhau được ghi riêng.
 
+**Đo riêng v1.2.0 trong game.** Bật giọng nhân vật, dùng Gemma 4 E4B Q4_K_M
+và Nano TTS. Phát lại 4 câu đã hiện đủ chữ với vùng exclude cho kết quả
+trung vị **1,23 giây** qua WASAPI (12 lượt). Khi so 6 cặp trên cùng một câu ngắn,
+quét riêng ô hội thoại giảm trung vị **72 ms (7,5%)**, với TTFA trung vị
+**0,82 giây**. Các phép đo dùng mã bản ứng viên và khung hình đã lưu, nên chưa
+tính thời gian chữ chạy và chờ câu trước phát xong.
+
 ## Cài Windows offline
 
 Từ [bộ offline v1.1.1](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1), tải EXE và
@@ -115,9 +122,9 @@ Từ [bộ offline v1.1.1](https://github.com/hungdinhxuan/Ludivoxa/releases/tag
 Python, Ollama, OCR/TTS models và HauhauCS Qwen3 4B Aggressive Q4_K_M đã có sẵn.
 Bản build chưa ký số. Các file Source code tự động của GitHub không chứa model.
 
-Sau đó vào tab **Updates** để cập nhật v1.1.3 (cũng hỗ trợ từ v1.1.2rc1).
-Nếu dùng v1.0.0 hoặc muốn cập nhật thủ công, tải **Ludivoxa-1.1.3-App-Update.exe**
-từ [v1.1.3](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.3), chạy
+Sau đó vào tab **Updates** để cập nhật v1.2.0 (cũng hỗ trợ từ v1.1.2rc1).
+Nếu dùng v1.0.0 hoặc muốn cập nhật thủ công, tải **Ludivoxa-1.2.0-App-Update.exe**
+từ [v1.2.0](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.2.0), chạy
 và chọn đúng thư mục app đang dùng. Gói nhỏ giữ nguyên cấu hình, Ollama và
 model; v1.0.0 chưa có updater nên cần nâng cấp thủ công một lần.
 

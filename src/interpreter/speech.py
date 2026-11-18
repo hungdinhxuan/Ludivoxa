@@ -30,8 +30,21 @@ _AUDIO_DEVICE_LOCK = threading.Lock()
 class SpeechStream:
     """Bounded hand-off between translation, synthesis and native playback."""
 
-    def __init__(self, key=None, capacity=32, source=None):
+    def __init__(
+        self,
+        key=None,
+        capacity=32,
+        source=None,
+        speaker_id=None,
+        speaker_name="",
+        reference_audio=None,
+        voice_settings=None,
+    ):
         self.key, self.source = key, source
+        # Optional per-utterance binding; automatic routing never edits the
+        # global voice setting or a line that is already being synthesized.
+        self.speaker_id, self.speaker_name, self.reference_audio = speaker_id, speaker_name, reference_audio
+        self.voice_settings = voice_settings
         self._queue = Queue(maxsize=capacity)
         self._done, self._cancelled = threading.Event(), threading.Event()
         self._error = None
@@ -710,6 +723,13 @@ class SpeechController(QObject):
         self._warm_key = None
         self._playing_audio = self._input_stream = None
         self._last_spoken_translation = None
+        self._last_character_voice = None
+
+    @staticmethod
+    def _character_voice(stream):
+        if not isinstance(stream, SpeechStream) or stream.speaker_id is None:
+            return None
+        return stream.speaker_name.casefold(), stream.speaker_id, stream.reference_audio
 
     @property
     def _busy(self):
@@ -742,6 +762,8 @@ class SpeechController(QObject):
     def submit(self, text, model_path, speaker_id=0, rate=1.0, reference_audio=""):
         if isinstance(text, SpeechStream):
             normalized = ("source", text.key)
+            if self._character_voice(text) is not None:
+                normalized += (self._character_voice(text),)
         else:
             text = clean_speech_text(text)
             normalized = _speech_text_key(text)
@@ -751,6 +773,8 @@ class SpeechController(QObject):
             return
         previous = self._last_spoken_translation
         previous_key = _speech_text_key(previous.translation_text) if isinstance(previous, SpeechStream) else previous
+        if self._character_voice(text) != self._last_character_voice:
+            previous_key = None
         if (self._playing and normalized == self._playing_text) or (
             not isinstance(text, SpeechStream) and normalized == previous_key
         ):
@@ -820,6 +844,8 @@ class SpeechController(QObject):
         first = True
         previous = self._last_spoken_translation
         previous_key = _speech_text_key(previous.translation_text) if isinstance(previous, SpeechStream) else previous
+        if self._character_voice(source) != self._last_character_voice:
+            previous_key = None
 
         def cancelled():
             return (
@@ -875,7 +901,7 @@ class SpeechController(QObject):
                         first = False
                         self._stream_ready.emit(generation, request, audio)
             audio.finish()
-            logger.debug(
+            logger.info(
                 "speech translation processed",
                 source_id=hashlib.sha256(str(source.key).encode("utf-8")).hexdigest()[:12],
                 translation_id=hashlib.sha256(_speech_text_key(audio.translation_text).encode("utf-8")).hexdigest()[
@@ -922,10 +948,12 @@ class SpeechController(QObject):
         self._playing_audio = audio
         self._playing_text = text_key
         self._last_spoken_translation = audio if isinstance(audio, SpeechStream) else text_key
-        logger.debug(
+        self._last_character_voice = self._character_voice(audio.source) if isinstance(audio, SpeechStream) else None
+        logger.info(
             "speech playback started",
             request=self._request,
             streaming=isinstance(audio, SpeechStream),
+            preset_id=audio.source.speaker_id if isinstance(audio, SpeechStream) and audio.source else None,
             source_id=hashlib.sha256(
                 str(audio.source.key if isinstance(audio, SpeechStream) and audio.source else text_key).encode("utf-8")
             ).hexdigest()[:12],
@@ -950,6 +978,7 @@ class SpeechController(QObject):
             self._playing_audio.cancel()
         self._playing_audio = None
         self._last_spoken_translation = None
+        self._last_character_voice = None
         self._cancel_waiting_streams()
         self._pending = self._ready = None
         self._generation += 1
@@ -964,6 +993,7 @@ class SpeechController(QObject):
         """Allow an identical line in a new scene without interrupting speech."""
         self._last_text = ""
         self._last_spoken_translation = None
+        self._last_character_voice = None
         self._playing_text = ""
 
     def stop(self, reset=False, reason="user"):
@@ -980,6 +1010,7 @@ class SpeechController(QObject):
         if reset:
             self._last_text = ""
             self._last_spoken_translation = None
+            self._last_character_voice = None
 
     def close(self):
         self._closed = True

@@ -634,3 +634,93 @@ def test_bouncing_cursor_shadow_is_masked_but_real_text_changes_are_not():
     worker._spoken_snapshot = worker._text_snapshot(original, [OCRResult("HP 10", box)])
     assert worker._same_spoken_image(render(10, 8), [OCRResult("HP 1O", box)])
     assert not worker._same_spoken_image(render(20, 8), [OCRResult("HP 20", box)])
+
+
+def _outlined_dialogue(text, background_seed):
+    image = np.full((150, 700, 4), 255, dtype=np.uint8)
+    # A moving game scene remains visible underneath outlined dialogue.
+    image[:, :, :3] = np.random.default_rng(background_seed).integers(24, 150, (150, 700, 3), dtype=np.uint8)
+    cv2.putText(image, text, (25, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0, 255), 7, cv2.LINE_AA)
+    cv2.putText(image, text, (25, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,) * 4, 2, cv2.LINE_AA)
+    return image
+
+
+@pytest.mark.parametrize("mode", [OutputMode.TTS, OutputMode.BOTH])
+def test_animated_game_background_and_stable_ocr_variants_do_not_reread_outlined_text(monkeypatch, mode):
+    clock = [0.0]
+    monkeypatch.setattr("interpreter.gui.workers.time.monotonic", lambda: clock[0])
+    worker = ProcessWorker(Config(source_language="English", output_mode=mode))
+    worker._ocr, worker._translator = MagicMock(), MagicMock()
+    worker._translator.translate.side_effect = lambda text: ("VI: " + text, False)
+    spoken = []
+    worker.speech_ready.connect(lambda text, _: spoken.append(text))
+    box = dict(x=20, y=45, width=620, height=40)
+    visible = "Where are you going?"
+    for index, recognized in enumerate((visible, "Where are you go1ng?", "Where are you goIng?", visible)):
+        pixels = _outlined_dialogue(visible, index)
+        worker._ocr.extract_text_regions.return_value = [OCRResult(recognized, box)]
+        for delay in (0, 0.4, 1.4):
+            clock[0] = index * 2 + delay
+            worker._process_frame(pixels, 1)
+    assert spoken == ["VI: " + visible]
+
+
+@pytest.mark.parametrize("next_text", ["You need 20 gold.", "You need 100 gold.", "You need no gold."])
+def test_real_outlined_text_changes_are_read_over_an_animated_background(monkeypatch, next_text):
+    clock = [0.0]
+    monkeypatch.setattr("interpreter.gui.workers.time.monotonic", lambda: clock[0])
+    worker = ProcessWorker(Config(source_language="English", output_mode="tts"))
+    worker._ocr, worker._translator = MagicMock(), MagicMock()
+    worker._translator.translate.side_effect = lambda text: ("VI: " + text, False)
+    spoken = []
+    worker.speech_ready.connect(lambda text, _: spoken.append(text))
+    for index, text in enumerate(("You need 10 gold.", next_text)):
+        worker._ocr.extract_text_regions.return_value = [OCRResult(text, dict(x=20, y=45, width=620, height=40))]
+        image = _outlined_dialogue(text, index)
+        for delay in (0, 0.4, 1.4):
+            clock[0] = index * 2 + delay
+            worker._process_frame(image, 1)
+    assert spoken == ["VI: You need 10 gold.", "VI: " + next_text]
+
+
+def test_punctuation_only_detections_do_not_become_dialogue_image_baselines():
+    body = OCRResult("Wait here.", dict(x=20, y=100, width=500, height=40))
+    decoration = OCRResult("•", dict(x=220, y=40, width=20, height=20))
+    assert ProcessWorker._dialogue_regions([decoration, body]) == [body]
+
+
+@pytest.mark.parametrize("recognized", ["X", "Y", "I", "1", "II"])
+@pytest.mark.parametrize("highlight", [False, True])
+def test_detached_completion_arrow_recognized_as_a_letter_does_not_reread_dialogue(
+    visual_dialogue, recognized, highlight
+):
+    _, observe, spoken, image, box = visual_dialogue
+    box["height"] = 30
+    arrow = image.copy()
+    cv2.fillPoly(arrow, [np.array([[214, 100], [226, 100], [220, 108]])], (0, 210, 255, 255))
+    if highlight:
+        cv2.rectangle(arrow, (216, 96), (224, 100), (255,) * 4, -1)
+    extra = [OCRResult(recognized, dict(x=212, y=96, width=16, height=14))]
+    # This cursor is below the line, outside its remembered image patch.
+    observe("Wait here.", 0)
+    observe("Wait here.", 0.4)
+    for at in (1.0, 1.5, 3.0):
+        observe("Wait here.", at, arrow, extra)
+    observe("Wait here.", 4)
+    observe("Wait here.", 4.5)
+    assert spoken == ["VI: Wait here."]
+
+
+@pytest.mark.parametrize("text", ["X", "1", "No"])
+def test_small_real_letters_near_a_completion_arrow_remain_readable(visual_dialogue, text):
+    _, observe, spoken, image, _ = visual_dialogue
+    changed = image.copy()
+    cv2.putText(changed, text, (280, 108), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 210, 255, 255), 1)
+    cv2.fillPoly(changed, [np.array([[214, 100], [226, 100], [220, 108]])], (0, 210, 255, 255))
+    extra = [OCRResult(text, dict(x=278, y=96, width=20, height=12))]
+    observe("Wait here.", 0)
+    observe("Wait here.", 0.4)
+    observe("Wait here.", 1, changed, extra)
+    observe("Wait here.", 1.5, changed, extra)
+    observe("Wait here.", 3, changed, extra)
+    assert len(spoken) == 2

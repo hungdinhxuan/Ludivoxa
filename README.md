@@ -9,10 +9,10 @@ Ludivoxa extends [Interpreter](https://github.com/bquenin/interpreter), retainin
 its capture → OCR → translation → overlay pipeline and Qt interface. This fork
 starts at **v1.0.0**; see [attribution and licenses](NOTICE.md).
 
-**Latest stable:** [v1.1.3](docs/releases/v1.1.3.md) fixes WASAPI speech stalls,
-audio routing after RDP changes and inaccessible OCR configuration controls. Existing installations
-can use **Updates**; new users install the full offline v1.1.1 package first,
-then this app-only update. Models and configuration are preserved.
+**Latest stable:** [v1.2.0](docs/releases/v1.2.0.md) adds experimental voices by
+character name and improves repeat suppression. Update an existing installation
+from **Updates**. For a new installation, start with the full offline v1.1.1
+package, then apply the app update. The update keeps your models and settings.
 
 ## Features
 
@@ -26,6 +26,8 @@ then this app-only update. Models and configuration are preserved.
 - Overlay only, automatic Vietnamese TTS only, or both.
 - Eleven VieNeu Nano presets, optional local reference-audio cloning, and the
   existing 67 Piper speaker choices in the full Windows package.
+- Assign a voice preset to each speaker name per game. The app reads the name
+  in a separate OCR area and uses the default voice for unassigned speakers.
 - Background OCR/speech, bounded frame/prefetch queues, cached models/results,
   visual duplicate suppression and streaming native audio for Nano speech.
 - Private bundled Ollama stops with the last app instance, including forced
@@ -53,6 +55,7 @@ lower is faster.
 | v1.1.2-rc.1 — released tag² | 866.5 ms | 849.3 ms | 1,364.3 ms |
 | v1.1.2 stable — released tag² | **867.7 ms** | **966.3 ms** | **1,355.9 ms** |
 | v1.1.3 stable | Not measured | Not measured | Not measured |
+| v1.2.0 stable | Separate game test below | Not measured | Not measured |
 
 Measured on Windows 11, Core i7-13700F and RTX 4090 24 GB, using the same saved
 dialogue crops, English OCR → Vietnamese, local HauhauCS Qwen3 4B Q4_K_M,
@@ -113,6 +116,15 @@ and the [public timing samples](docs/benchmarks/ttfa.json). New versions will
 get new rows when comparable measurements are available; different observation
 methods are reported separately.
 
+**v1.2.0 game test:** Character voices on, local Gemma 4 E4B Q4_K_M and Nano TTS.
+Replaying four complete game lines with the full-window exclusions gave a
+median of **1.23 s** over 12 WASAPI loopback measurements. In a separate
+six-pair test of the same short line, a selected dialogue box reduced median
+paired TTFA by **72 ms (7.5%)**, with a median of **0.82 s** inside the box.
+These tests measured the release candidate code on saved game frames. Game
+text reveal and earlier queued speech are outside the measurement. See the
+[v1.2.0 notes](docs/releases/v1.2.0.md) for the setup and limits.
+
 ## Install on Windows
 
 The packaged release targets **Windows x64**. Download its setup EXE and **all
@@ -124,9 +136,9 @@ Python, English/Japanese OCR models, Vietnamese speech, Ollama 0.40.16 and
 HauhauCS Qwen3 4B Aggressive Q4_K_M are included. No separate model download is
 needed for that profile. The installer preserves an existing `config.yml`.
 
-Then open **Updates** to install v1.1.3 (also supported from v1.1.2rc1).
-For v1.0.0, or to update manually, run **Ludivoxa-1.1.3-App-Update.exe** from
-[v1.1.3](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.3) and select the existing
+Then open **Updates** to install v1.2.0 (also supported from v1.1.2rc1).
+For v1.0.0, or to update manually, run **Ludivoxa-1.2.0-App-Update.exe** from
+[v1.2.0](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.2.0) and select the existing
 installation directory. This smaller package preserves your models, runtime
 and settings. Public release checks and downloads need no GitHub token or sign-in.
 

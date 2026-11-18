@@ -11,10 +11,10 @@ import numpy as np
 from PySide6.QtCore import QObject, Signal
 
 from .. import log
-from ..config import Config, OutputMode, OverlayMode
+from ..config import Config, OutputMode, OverlayMode, character_name
 from ..languages import contains_japanese, contains_script  # noqa: F401  (contains_japanese kept for callers)
 from ..ocr import OCREngine, OCRResult, create_ocr, group_ocr_rows
-from ..speech import SpeechStream
+from ..speech import SpeechStream, voice_details
 from ..translate import TranslationEngine, create_translator
 
 logger = log.get_logger()
@@ -81,6 +81,7 @@ class ProcessWorker(QObject):
     speech_ready = Signal(str, int)  # Successful translations only; never speak source/error fallback text
     speech_stream_ready = Signal(object, int)
     speech_scene_reset = Signal(int)  # A confirmed visible scene break, not an OCR-only miss.
+    character_detected = Signal(str, bool, int)
 
     # Inplace mode: list of (text, bbox) regions
     regions_ready = Signal(list, int)
@@ -127,6 +128,20 @@ class ProcessWorker(QObject):
         self.stream_speech = True
         self._previewed_source = ""
         self._last_preview_time = float("-inf")
+        self._character_context_key = None
+        self._character_name = ""
+        self._character_candidate = None
+        self._character_candidate_since = 0.0
+        self._character_observations = 0
+        self._character_next_poll = 0.0
+        self._character_pixels = None
+        self._character_regions = []
+        self._character_snapshot = None
+        self._character_image_cache = []
+        self._character_settling = False
+        self._character_valid_speakers = set()
+        self._character_signal = None
+        self._spoken_character = ""
 
         # Track which models failed (for "Fix Models" button) and why
         self._ocr_failed = False
@@ -191,10 +206,10 @@ class ProcessWorker(QObject):
         except RuntimeError:  # "Signal source has been deleted": raced with teardown
             logger.debug("signal dropped after teardown")
 
-    def submit_frame(self, frame, generation: int = 0, origin=(0, 0), preview_only=False):
+    def submit_frame(self, frame, generation: int = 0, origin=(0, 0), preview_only=False, speaker_context=None):
         """Send a frame for processing (non-blocking)."""
         if self._running:
-            self._frame_buffer.put((frame, generation, origin, preview_only))
+            self._frame_buffer.put((frame, generation, origin, preview_only, speaker_context))
 
     def discard_pending_frames(self):
         """Drop queued work when capture stops; in-flight results retain their generation."""
@@ -363,13 +378,31 @@ class ProcessWorker(QObject):
             return regions
         height = float(np.median(heights))
         markers = {"v", "V", "√", "▼", "▽", "▾", "▿", "▲", "△", "◀", "▶", "►", "◄", "✓", "✔"}
-        filtered = [
-            r
-            for r in regions
-            if not (
-                r.text.strip() in markers and r.bbox and r.bbox["height"] < height * 0.75 and r.bbox["width"] <= height
-            )
-        ]
+
+        def is_cursor(region):
+            box = region.bbox
+            if not box or box["height"] >= height * 0.75 or box["width"] > height:
+                return False
+            if region.text.strip() in markers:
+                return True
+            if (
+                len(region.text.strip()) <= 2
+                and isinstance(frame, np.ndarray)
+                and frame.ndim == 3
+                and frame.shape[2] >= 3
+            ):
+                # A detached footer arrow may be recognized as X, I or a digit.
+                # Use the dialogue's font height for the shape check: the arrow
+                # itself is too small to be treated as a normal text line.
+                center_x = box["x"] + box["width"] / 2
+                center_y = box["y"] + box["height"] / 2
+                return any(
+                    left <= center_x <= right and top <= center_y <= bottom
+                    for left, top, right, bottom in ProcessWorker._cursor_rectangles(frame, {**box, "height": height})
+                )
+            return False
+
+        filtered = [region for region in regions if not is_cursor(region)]
         if isinstance(frame, np.ndarray) and frame.ndim == 3 and frame.shape[2] >= 3:
             for index, region in enumerate(filtered):
                 if (
@@ -382,7 +415,7 @@ class ProcessWorker(QObject):
                     filtered[index] = OCRResult(
                         re.sub(r"(?<=[.!?。！？])\s*[tTvVyY]\s*$", "", region.text), region.bbox
                     )
-        return [region for row in group_ocr_rows(filtered) for region in row]
+        return [region for row in group_ocr_rows(filtered) for region in row if re.search(r"\w", region.text)]
 
     @staticmethod
     def _cursor_rectangles(frame, box):
@@ -404,9 +437,16 @@ class ProcessWorker(QObject):
         colored = (maximum.astype(np.int16) - minimum > 80) & (maximum > 120)
         # RPGMaker also uses white continuation arrows. Keep the same shape,
         # size and location checks as for GBA; do not strip arbitrary letters.
-        bright = (minimum > 200) & (maximum - minimum < 40) if np.mean(maximum < 160) > 0.4 else False
-        mask = (colored | bright).astype(np.uint8) * 255
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        masks = [colored]
+        if np.mean(maximum < 160) > 0.4:
+            masks.append((minimum > 200) & (maximum - minimum < 40))
+        # A bright cap/shadow may touch a colored arrow and look like X when
+        # merged. Inspect the colors separately to retain the real triangle.
+        contours = [
+            contour
+            for mask in masks
+            for contour in cv2.findContours(mask.astype(np.uint8) * 255, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]
+        ]
         rectangles = []
         for contour in contours:
             left, top, w, h = cv2.boundingRect(contour)
@@ -532,20 +572,66 @@ class ProcessWorker(QObject):
             shading = False
         return not np.any(interior & ~unchanged & ~shading)
 
+    @staticmethod
+    def _same_outlined_text(pixels, current, focus):
+        """Compare bright glyph geometry independently of a moving dark backdrop.
+
+        Require several white glyphs with dark outlines before using this path.
+        Compare all bright colors, so new colored letters remain real changes.
+        """
+        white = cv2.inRange(pixels, (208, 208, 208), (255, 255, 255))
+        white[~focus] = 0
+        count, labels, stats, _ = cv2.connectedComponentsWithStats(white, 8)
+        dark = cv2.inRange(pixels, (0, 0, 0), (96, 96, 96))
+        outlined, area = 0, 0
+        for index in range(1, count):
+            x, y, w, h, size = stats[index]
+            if h < 4 or size < 8 or h >= pixels.shape[0] - 2:
+                continue
+            left, top = max(0, x - 3), max(0, y - 3)
+            right, bottom = min(pixels.shape[1], x + w + 3), min(pixels.shape[0], y + h + 3)
+            component = (labels[top:bottom, left:right] == index).astype(np.uint8)
+            ring = cv2.dilate(component, np.ones((7, 7), np.uint8)) != cv2.dilate(component, np.ones((3, 3), np.uint8))
+            if ring.any() and np.mean(dark[top:bottom, left:right][ring] != 0) >= 0.55:
+                outlined += 1
+                area += size
+        if outlined < 3 or area < 0.75 * cv2.countNonZero(white):
+            return False
+        # A bright foreground core is unaffected by the dim scene under its
+        # black outline. Exact geometry still distinguishes numbers/negation.
+        masks = [(cv2.inRange(image, (0, 0, 0), (207, 207, 207)) == 0) & focus for image in (pixels, current)]
+        old_moments, new_moments = (cv2.moments(mask.astype(np.uint8), binaryImage=True) for mask in masks)
+        if not old_moments["m00"] or not new_moments["m00"]:
+            return False
+        dx, dy = (
+            round(new_moments[key] / new_moments["m00"] - old_moments[key] / old_moments["m00"])
+            for key in ("m10", "m01")
+        )
+        if abs(dx) > 2 or abs(dy) > 2:
+            return False
+        aligned_focus = focus & np.roll(focus, (dy, dx), (0, 1))
+        return not np.any((np.roll(masks[0], (dy, dx), (0, 1)) != masks[1]) & aligned_focus)
+
     def _same_spoken_image(self, frame, regions):
         snapshot = self._spoken_snapshot
         if snapshot is not self._spoken_image_cache_snapshot:
             self._spoken_image_cache_snapshot = snapshot
             self._spoken_image_cache.clear()
-        return self._same_dialogue_image(frame, regions, snapshot, self._spoken_image_cache)
+        return self._same_dialogue_image(frame, regions, snapshot, self._spoken_image_cache, self._spoken_source)
 
-    def _same_dialogue_image(self, frame, regions, snapshot, image_cache):
+    def _same_dialogue_image(self, frame, regions, snapshot, image_cache, reference_key=""):
         """Compare positioned glyphs for either pending or already spoken text."""
         if not snapshot or not isinstance(frame, np.ndarray) or frame.ndim != 3 or frame.shape[2] < 3:
             return False
         shape, patches = snapshot
         if frame.shape[:2] != shape:
             return False
+        key = " ".join(re.findall(r"\w+", " ".join(r.text for r in regions).casefold()))
+        # Restrict the outlined-text fallback to unchanged word lengths (or an
+        # OCR miss). Extra/dim words and growing text must retain strict checks.
+        outlined_eligible = bool(reference_key) and (
+            not key or list(map(len, key.split())) == list(map(len, reference_key.split()))
+        )
         # Extra text elsewhere must still start a new utterance, even if the
         # previously spoken text remains on screen. Minor box jitter is safe
         # inside the remembered margin, whose pixels are also compared.
@@ -596,7 +682,9 @@ class ProcessWorker(QObject):
                 focus[max(0, top - y) : max(0, cursor_bottom - y), max(0, left - x) : max(0, cursor_right - x)] = False
             changed = np.any(current != pixels, axis=2) & focus
             if changed.any():
-                if self._same_pixel_text(pixels, current, focus):
+                if self._same_pixel_text(pixels, current, focus) or (
+                    outlined_eligible and self._same_outlined_text(pixels, current, focus)
+                ):
                     continue
                 # A flat dialogue panel may shade/fade while its glyphs stay
                 # identical. Compare exact high-contrast ink geometry, not RGB
@@ -682,7 +770,97 @@ class ProcessWorker(QObject):
                 return re.sub(r"^[\s,.!?。！？…:;]+", "", text[tokens[count - 1].end() :])
         return text
 
-    def _process_frame(self, frame, generation: int = 0, origin=(0, 0), preview_only=False):
+    def _character_voice(self, context, generation, now, force=False):
+        """Read a small name crop on this OCR worker, never on the UI thread."""
+        if context is None:
+            self._character_settling = False
+            self._character_context_key = None
+            return None
+        title, profile, frame = context
+        if not profile.enabled or not isinstance(frame, np.ndarray) or not frame.size:
+            self._character_settling = False
+            return None
+        settings = (title, repr(profile.to_dict()), self._config.tts_model_path)
+        if settings != self._character_context_key:
+            self._character_context_key = settings
+            self._character_name, self._character_candidate = "", None
+            self._character_snapshot = self._character_pixels = None
+            self._character_image_cache.clear()
+            self._character_next_poll = 0.0
+            self._character_signal = None
+            try:
+                self._character_valid_speakers = {index for _, index in voice_details(self._config.tts_model_path)}
+            except (OSError, ValueError, TypeError, KeyError):
+                self._character_valid_speakers = set()
+        if now >= self._character_next_poll or force:
+            self._character_next_poll = now + 0.25
+            if self._character_pixels is not None and np.array_equal(frame, self._character_pixels):
+                regions = self._character_regions
+            else:
+                try:
+                    regions = self._ocr.extract_text_regions(frame)
+                except Exception as exc:
+                    logger.debug("character name OCR failed", error=str(exc))
+                    self._character_name = ""
+                    self._character_settling = False
+                    return "", self._config.tts_speaker_id, self._config.tts_reference_audio, self._voice_settings_key()
+                self._character_pixels, self._character_regions = frame.copy(), regions
+            label = " ".join(r.text for row in group_ocr_rows(regions) for r in row if r.text)
+            name = character_name(label) if len(label) <= 64 else ""
+            if name.casefold() != self._character_name.casefold() and self._same_dialogue_image(
+                frame, regions, self._character_snapshot, self._character_image_cache, self._character_name.casefold()
+            ):
+                name = self._character_name
+            if name.casefold() != self._character_candidate:
+                self._character_candidate = name.casefold()
+                self._character_candidate_since = now
+                self._character_observations = 1
+            else:
+                self._character_observations += 1
+            self._character_settling = (
+                self._character_candidate != self._character_name.casefold() or self._character_signal is None
+            )
+            if self._character_observations >= 2 and now - self._character_candidate_since >= 0.2:
+                if name.casefold() != self._character_name.casefold() or self._character_snapshot is None:
+                    self._character_snapshot = self._text_snapshot(frame, regions) if name else None
+                    self._character_image_cache.clear()
+                self._character_name = name
+                self._character_settling = False
+        preset = profile.speaker_for(self._character_name, self._config.tts_model_path)
+        mapped = preset is not None and preset in self._character_valid_speakers
+        state = self._character_name, mapped, generation
+        if not self._character_settling and state != self._character_signal:
+            self._character_signal = state
+            self._emit(self.character_detected, *state)
+        return (
+            self._character_name,
+            preset if mapped else self._config.tts_speaker_id,
+            "" if mapped else self._config.tts_reference_audio,
+            self._voice_settings_key(),
+        )
+
+    def _voice_settings_key(self):
+        return (
+            self._config.tts_model_path,
+            self._config.tts_speaker_id,
+            self._config.tts_rate,
+            self._config.tts_reference_audio,
+        )
+
+    @staticmethod
+    def _character_stream(source_key, binding):
+        if binding is None:
+            return SpeechStream(key=source_key)
+        name, preset, reference, voice_settings = binding
+        return SpeechStream(
+            key=("character", name.casefold(), source_key),
+            speaker_name=name,
+            speaker_id=preset,
+            reference_audio=reference,
+            voice_settings=voice_settings,
+        )
+
+    def _process_frame(self, frame, generation: int = 0, origin=(0, 0), preview_only=False, speaker_context=None):
         """Process a frame through OCR and translation."""
         if self._ocr is None:
             return
@@ -736,6 +914,7 @@ class ProcessWorker(QObject):
             self._config.tts_reference_audio,
         )
         if session != self._speech_session:
+            logger.info("speech session reset", generation=generation, reason="capture or voice settings changed")
             self._speech_session = session
             self._spoken_source = ""
             self._spoken_snapshot = None
@@ -748,6 +927,26 @@ class ProcessWorker(QObject):
             self._speech_revealing = self._speech_candidate_cursor = self._speech_cursor_expected = False
             self._speech_reveal_gap = 0.0
             self._speech_candidate_ink = None
+            self._spoken_complete = False
+            self._spoken_character = ""
+        name_start = time.perf_counter()
+        voice_binding = self._character_voice(
+            speaker_context, generation, now, force=source_key != self._speech_candidate
+        )
+        name_ocr_ms = int((time.perf_counter() - name_start) * 1000)
+        ocr_ms += name_ocr_ms
+        speaker = voice_binding[0].casefold() if voice_binding else ""
+        if (
+            not self._character_settling
+            and speaker
+            and self._spoken_character
+            and speaker != self._spoken_character
+            and self._spoken_source
+        ):
+            # A confirmed new speaker may genuinely say the same short line.
+            # Unknown/late name recognition never replays an already read line.
+            self._spoken_source = ""
+            self._spoken_snapshot = None
             self._spoken_complete = False
         if self._same_spoken_image(frame, regions):
             # A fresh OCR pass can change letters/order while recognizing the
@@ -762,7 +961,11 @@ class ProcessWorker(QObject):
             and self._config.tts_enabled
             and self._config.output_mode != OutputMode.OVERLAY
             and self._same_dialogue_image(
-                frame, regions, self._speech_candidate_snapshot, self._speech_candidate_image_cache
+                frame,
+                regions,
+                self._speech_candidate_snapshot,
+                self._speech_candidate_image_cache,
+                self._speech_candidate,
             )
         ):
             # OCR flicker must not keep resetting the first-read settle timer.
@@ -834,10 +1037,24 @@ class ProcessWorker(QObject):
         since = max(self._speech_candidate_since, self._speech_visual_since)
         if now - self._speech_candidate_since >= 2.0:
             since = self._speech_candidate_since
-        speech_stable = bool(source_key) and now - since >= settle_seconds
+        name_wait_expired = now - self._speech_candidate_since >= 0.6
+        speech_stable = (
+            bool(source_key) and now - since >= settle_seconds and (not self._character_settling or name_wait_expired)
+        )
+        if voice_binding is not None and self._character_settling and name_wait_expired:
+            # An unreadable/flickering name must never starve dialogue or reuse
+            # the previous character's voice. Fall back for this utterance only.
+            voice_binding = (
+                "",
+                self._config.tts_speaker_id,
+                self._config.tts_reference_audio,
+                self._voice_settings_key(),
+            )
+            speaker = ""
         source_complete = self._speech_candidate_cursor or bool(re.search(r"[.!?。！？…][\"'”’)]*\s*$", captured_text))
         if not source_key and self._spoken_source and now - self._speech_candidate_since >= 1.5:
             had_visible_baseline = self._spoken_snapshot is not None
+            logger.info("speech scene reset", generation=generation, reason="sustained visible blank")
             self._spoken_source = ""  # A sustained scene break can start a new identical line.
             self._spoken_snapshot = None
             self._spoken_complete = False
@@ -941,7 +1158,7 @@ class ProcessWorker(QObject):
                         in ("vietnamese", "vi", "vi-vn", "tiếng việt", "")
                     )
                     if can_stream:
-                        stream = SpeechStream(key=source_key)
+                        stream = self._character_stream(source_key, voice_binding)
 
                         def sentence_ready(sentence):
                             nonlocal streamed
@@ -949,10 +1166,11 @@ class ProcessWorker(QObject):
                             if not streamed:
                                 streamed = True
                                 self._spoken_source = source_key
+                                self._spoken_character = speaker
                                 self._spoken_snapshot = snapshot
                                 self._spoken_complete = source_complete
                                 self._suppressed_source = ""
-                                logger.debug(
+                                logger.info(
                                     "speech stream source accepted",
                                     source_id=hashlib.sha256(source_key.encode("utf-8")).hexdigest()[:12],
                                     source_chars=len(captured_text),
@@ -993,22 +1211,30 @@ class ProcessWorker(QObject):
             and self._config.output_mode != OutputMode.OVERLAY
         ):
             self._spoken_source = source_key
+            self._spoken_character = speaker
             self._spoken_snapshot = snapshot
             self._spoken_complete = source_complete
             self._suppressed_source = ""
-            logger.debug(
+            logger.info(
                 "speech source accepted",
                 source_id=hashlib.sha256(source_key.encode("utf-8")).hexdigest()[:12],
                 source_chars=len(captured_text),
                 reveal_wait_ms=round(settle_seconds * 1000),
                 generation=generation,
             )
-            self._emit(self.speech_ready, " ".join(speech_parts), generation)
+            if voice_binding is not None:
+                utterance = self._character_stream(source_key, voice_binding)
+                utterance.put(" ".join(speech_parts))
+                utterance.finish()
+                self._emit(self.speech_stream_ready, utterance, generation)
+            else:
+                self._emit(self.speech_ready, " ".join(speech_parts), generation)
         total_ms = int((time.perf_counter() - frame_start) * 1000)
         translate_str = f"{translate_ms} (cached)" if was_cached else str(translate_ms)
         logger.debug(
             "frame processed",
             ocr_ms=ocr_ms,
+            name_ocr_ms=name_ocr_ms,
             translate_ms=translate_str,
             total_ms=total_ms,
         )

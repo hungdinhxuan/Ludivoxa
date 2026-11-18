@@ -23,7 +23,7 @@ def run_smoke(report_path):
         from PySide6.QtWidgets import QApplication
 
         from interpreter import __version__
-        from interpreter.config import Config, OutputMode
+        from interpreter.config import CharacterVoices, Config, OutputMode
         from interpreter.gui.workers import ProcessWorker
         from interpreter.llm_translate import LLMTranslator
         from interpreter.ocr import create_ocr
@@ -277,6 +277,50 @@ def run_smoke(report_path):
         report["selected_box_pipeline_utterances"] = len(spoken) - 1
         report["selected_box_input_shape"] = list(crop.shape)
         report["selected_box_origin"] = list(origin)
+
+        # Same local OCR and translator, two named speakers, one already loaded
+        # Nano model. Names must not be sent to the LLM or treated as dialogue.
+        character_config = copy.deepcopy(pipeline_config)
+        character_config.tts_model_path = "models/VieNeu-TTS-v3-Nano"
+        profile = CharacterVoices(
+            True,
+            {"x": 0, "y": 0, "width": 0.2, "height": 0.1},
+            character_config.tts_model_path,
+            {"Alice": 1, "Bob": 7},
+        )
+        character_worker = ProcessWorker(character_config)
+        character_worker._ocr, character_worker._translator = ocr, translator
+        routed, detected = [], []
+        character_worker.speech_stream_ready.connect(lambda stream, _: routed.append(stream))
+        character_worker.character_detected.connect(lambda name, mapped, _: detected.append((name, mapped)))
+        for name in ("Alice", "Bob"):
+            name_image = Image.new("RGB", (360, 90), "white")
+            ImageDraw.Draw(name_image).text(
+                (15, 10), name, fill="black", font=ImageFont.truetype("C:/Windows/Fonts/arial.ttf", 36)
+            )
+            name_frame = np.concatenate(
+                (np.asarray(name_image)[:, :, ::-1], np.full((90, 360, 1), 255, np.uint8)), axis=2
+            )
+            for _ in range(5):
+                character_worker._process_frame(frame, 3, speaker_context=("Diagnostic", profile, name_frame))
+                time.sleep(0.16)
+        if len(routed) != 2 or [stream.speaker_id for stream in routed] != [1, 7]:
+            raise AssertionError(f"Character voice routing failed: {detected}, {[s.speaker_id for s in routed]}")
+        engine_before = synthesizer._vieneu._engine
+        character_audio, synthesis_times = [], []
+        for stream in routed:
+            start = time.perf_counter()
+            pcm = synthesizer.synthesize(" ".join(stream), character_config.tts_model_path, stream.speaker_id)
+            character_audio.append(pcm)
+            synthesis_times.append((time.perf_counter() - start) * 1000)
+        report["character_voice_routing"] = {
+            "utterances": len(routed),
+            "speaker_ids": [s.speaker_id for s in routed],
+            "detected_names": [name for name, mapped in detected if mapped],
+            "model_reused": synthesizer._vieneu._engine is engine_before,
+            "different_waveforms": character_audio[0] != character_audio[1],
+            "synthesis_ms": synthesis_times,
+        }
         import meikiocr  # Legacy backend remains importable in the executable.
         import sentencepiece
         import windows_capture

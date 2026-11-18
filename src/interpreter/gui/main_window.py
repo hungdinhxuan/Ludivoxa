@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QColorDialog,
     QComboBox,
+    QDialog,
     QDoubleSpinBox,
     QFileDialog,
     QFontDialog,
@@ -78,6 +79,7 @@ from ..permissions import (
 from ..speech import DEFAULT_VOICE_PATH, SpeechController, SpeechStream, available_voices, voice_details
 from ..translate import SUGOI_ONLY_JAPANESE, SUGOI_SOURCE_LANGUAGE
 from . import keyboard
+from .character_voices import CharacterVoicesDialog
 from .ocr_config import OCRConfigDialog
 from .theme import ERROR, OK, set_role
 from .updates_page import UpdatesPage
@@ -130,6 +132,8 @@ class MainWindow(QMainWindow):
         self._paused = False
         self._current_window_title: str = ""  # For exclusion zone lookup
         self._ocr_config_dialog = None  # Reference to open OCR config dialog
+        self._character_dialog = None
+        self._detected_character = ""
         # Wayland session detection (from capture module, uses D-Bus portal check)
         self._is_wayland_session = _is_wayland_session
         self._wayland_portal = None  # WaylandPortalCapture instance (for managing portal session lifecycle)
@@ -208,6 +212,7 @@ class MainWindow(QMainWindow):
         worker.speech_ready.connect(self._on_speech_ready)
         worker.speech_stream_ready.connect(self._on_speech_ready)
         worker.speech_scene_reset.connect(self._on_speech_scene_reset)
+        worker.character_detected.connect(self._on_character_detected)
         worker.ocr_results_ready.connect(self._on_ocr_results_ready)
         worker.models_ready.connect(self._on_models_ready)
         worker.models_failed.connect(self._on_models_failed)
@@ -324,6 +329,9 @@ class MainWindow(QMainWindow):
             voice_row.addWidget(voice_label)
             voice_row.addWidget(widget, 1)
         session_layout.addLayout(voice_row)
+        self._character_status = QLabel("Character voices off")
+        self._character_status.setWordWrap(True)
+        session_layout.addWidget(self._character_status)
         tts_row = QHBoxLayout()
         voice_label = QLabel("Local voice model:")
         self._tts_model_edit = QLineEdit(self._config.tts_model_path)
@@ -404,12 +412,13 @@ class MainWindow(QMainWindow):
     def _build_header(self) -> QWidget:
         """Keep OCR configuration at the top, alongside engine status."""
         header = QWidget()
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(20, 12, 16, 4)
+        outer_layout = QVBoxLayout(header)
+        outer_layout.setContentsMargins(20, 12, 16, 4)
+        header_layout = QHBoxLayout()
+        outer_layout.addLayout(header_layout)
         title = QLabel("Ludivoxa")
         title.setProperty("role", "app-title")
         header_layout.addWidget(title)
-        header_layout.addWidget(self._ocr_config_btn)
         header_layout.addStretch()
 
         self._ocr_engine_label = QLabel(self._ocr_engine_name())
@@ -425,6 +434,14 @@ class MainWindow(QMainWindow):
         self._fix_models_btn.clicked.connect(self._on_fix_models)
         self._fix_models_btn.setVisible(False)
         header_layout.addWidget(self._fix_models_btn)
+        actions = QHBoxLayout()
+        actions.addWidget(self._ocr_config_btn)
+        self._character_voices_btn = QPushButton("Character voices…")
+        self._character_voices_btn.setMinimumHeight(44)
+        self._character_voices_btn.clicked.connect(self._open_character_voices)
+        actions.addWidget(self._character_voices_btn)
+        actions.addStretch()
+        outer_layout.addLayout(actions)
         return header
 
     @staticmethod
@@ -516,6 +533,7 @@ class MainWindow(QMainWindow):
         source_row = QHBoxLayout()
 
         self._window_combo = QComboBox()
+        self._window_combo.setAccessibleName("Capture source")
         self._window_combo.setMinimumWidth(250)
         source_row.addWidget(self._window_combo, 1)
 
@@ -1750,6 +1768,9 @@ class MainWindow(QMainWindow):
         self._last_frame = None
         self._last_bounds = {}
         self._last_ocr_results = []
+        self._detected_character = ""
+        if hasattr(self, "_character_status"):
+            self._character_status.setText("Character voices off")
         self._paused = False
         self._pause_btn.setEnabled(False)
         self._ocr_config_btn.setEnabled(False)
@@ -2009,10 +2030,21 @@ class MainWindow(QMainWindow):
 
         # Apply exclusion zones before OCR
         frame_for_ocr, origin = self._prepare_ocr_frame(frame)
+        speaker_context = None
+        if frame_for_ocr is not None:
+            frame_for_ocr, speaker_context = self._prepare_character_ocr(frame, frame_for_ocr, origin)
 
         # Process through OCR and translation (on worker thread)
         if frame_for_ocr is not None and (not self._paused or self._config.tts_enabled or self._ocr_config_dialog):
-            if origin != (0, 0) or self._ocr_config_dialog:
+            if speaker_context is not None:
+                self._process_worker.submit_frame(
+                    frame_for_ocr,
+                    self._capture_generation,
+                    origin=origin,
+                    preview_only=bool(self._ocr_config_dialog),
+                    speaker_context=speaker_context,
+                )
+            elif origin != (0, 0) or self._ocr_config_dialog:
                 self._process_worker.submit_frame(
                     frame_for_ocr, self._capture_generation, origin=origin, preview_only=bool(self._ocr_config_dialog)
                 )
@@ -2116,16 +2148,83 @@ class MainWindow(QMainWindow):
             if self._config.translation_backend == TranslationBackend.LLM and (
                 self._config.llm.target_language or "Vietnamese"
             ).strip().casefold() in ("vietnamese", "vi", "vi-vn", "tiếng việt"):
+                preset = self._config.tts_speaker_id
+                reference = self._config.tts_reference_audio
+                if isinstance(translated, SpeechStream):
+                    current_voice = (
+                        self._config.tts_model_path,
+                        self._config.tts_speaker_id,
+                        self._config.tts_rate,
+                        self._config.tts_reference_audio,
+                    )
+                    if translated.voice_settings is not None and translated.voice_settings != current_voice:
+                        translated.cancel()
+                        return
+                    if translated.speaker_id is not None:
+                        preset = translated.speaker_id
+                    if translated.reference_audio is not None:
+                        reference = translated.reference_audio
                 self._speech.submit(
                     translated,
                     self._config.tts_model_path,
-                    self._config.tts_speaker_id,
+                    preset,
                     self._config.tts_rate,
-                    reference_audio=self._config.tts_reference_audio,
+                    reference_audio=reference,
                 )
                 return
         if isinstance(translated, SpeechStream):
             translated.cancel()
+
+    def _on_character_detected(self, name, mapped, generation):
+        if not self._capturing or generation != self._capture_generation:
+            return
+        self._detected_character = name
+        if hasattr(self, "_character_status"):
+            self._character_status.setText(
+                f"Character: {name} ({'assigned preset' if mapped else 'default voice'})"
+                if name
+                else "Narration / no name: default voice"
+            )
+        if getattr(self, "_character_dialog", None) is not None:
+            self._character_dialog.set_detected_name(name)
+
+    def _open_character_voices(self):
+        if self._capturing:
+            title = self._current_window_title
+        else:
+            kind, value = self._window_combo.currentData() or (None, None)
+            if kind == "window" and 0 <= value < len(self._windows_list):
+                title = self._windows_list[value].get("title", "")
+            elif kind == "device":
+                _, title = value
+            else:
+                title = ""
+        if not title:
+            self.statusBar().showMessage("Select a capture source first. On Wayland, start capture to choose a window.")
+            return
+        dialog = CharacterVoicesDialog(
+            self,
+            title,
+            self._config.get_character_voices(title),
+            self._config.tts_model_path,
+            frame=self._last_frame if self._capturing else None,
+            detected_name=self._detected_character if self._capturing else "",
+        )
+        self._character_dialog = dialog
+        dialog.preview_requested.connect(
+            lambda index: self._speech.preview(self._config.tts_model_path, index, self._config.tts_rate)
+        )
+        try:
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                profile = dialog.get_profile()
+                self._config.set_character_voices(title, profile)
+                self._config.save()
+                if self._capturing:
+                    self._character_status.setText(
+                        "Waiting for speaker name…" if profile.enabled else "Character voices off"
+                    )
+        finally:
+            self._character_dialog = None
 
     def _on_output_changed(self):
         self._config.output_mode = OutputMode(self._output_combo.currentData())
@@ -2321,6 +2420,32 @@ class MainWindow(QMainWindow):
         if right <= left or bottom <= top:
             return None, (left, top)
         return frame[top:bottom, left:right], (left, top)
+
+    def _prepare_character_ocr(self, full_frame, dialogue_frame, origin):
+        """Separate name OCR from dialogue, including outside the selected box."""
+        if self._ocr_config_dialog:
+            return dialogue_frame, None
+        profile = self._config.get_character_voices(self._current_window_title)
+        if not profile.enabled or not profile.name_region:
+            self._detected_character = ""
+            if hasattr(self, "_character_status") and self._character_status.text() != "Character voices off":
+                self._character_status.setText("Character voices off")
+            return dialogue_frame, None
+        region = profile.name_region
+        height, width = full_frame.shape[:2]
+        left, top = int(region["x"] * width), int(region["y"] * height)
+        right = min(width, round((region["x"] + region["width"]) * width))
+        bottom = min(height, round((region["y"] + region["height"]) * height))
+        name_frame = full_frame[top:bottom, left:right].copy()
+        x1, y1 = max(0, left - origin[0]), max(0, top - origin[1])
+        x2 = min(dialogue_frame.shape[1], right - origin[0])
+        y2 = min(dialogue_frame.shape[0], bottom - origin[1])
+        if x2 > x1 and y2 > y1:
+            dialogue_frame = dialogue_frame.copy()
+            dialogue_frame[y1:y2, x1:x2] = 0
+        if not self._config.tts_enabled or self._config.output_mode == OutputMode.OVERLAY:
+            return dialogue_frame, None
+        return dialogue_frame, (self._current_window_title, profile, name_frame)
 
     def _apply_exclusion_zones(self, frame):
         """Apply exclusion zones to frame by masking out excluded regions.

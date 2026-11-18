@@ -8,6 +8,7 @@ from concurrent.futures import CancelledError
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import cv2
 import numpy as np
 import pytest
 import requests
@@ -326,6 +327,95 @@ def test_real_translation_cache_and_ocr_variants_produce_one_playback(qapp, monk
         controller.close()
 
 
+@pytest.mark.parametrize("after_playback", [False, True])
+def test_outlined_dialogue_over_moving_scene_starts_one_translation_and_playback(qapp, monkeypatch, after_playback):
+    from interpreter.gui import workers
+
+    clock = [0.0]
+    monkeypatch.setattr(workers, "time", SimpleNamespace(monotonic=lambda: clock[0], perf_counter=time.perf_counter))
+    worker = ProcessWorker(Config(source_language="English", output_mode="tts"))
+    worker._ocr = MagicMock()
+    client, _ = translator()
+    source = "Where are you going?"
+    client._cache.put(source, "Bạn đang đi đâu?")
+    worker._translator = client
+    synth = MagicMock()
+    synth.iter_audio.side_effect = lambda text, *_args, **_kwargs: iter([text.encode()])
+    player = Player()
+    controller = SpeechController(synthesizer=synth, player=player)
+    streams = []
+
+    def submit(stream, generation):
+        streams.append(stream.key)
+        controller.submit(stream, "voice.onnx")
+
+    worker.speech_stream_ready.connect(submit)
+    try:
+        for index, recognized in enumerate((source, "Where are you go1ng?", source)):
+            image = np.full((150, 700, 4), 255, dtype=np.uint8)
+            image[:, :, :3] = np.random.default_rng(index).integers(24, 150, (150, 700, 3), dtype=np.uint8)
+            cv2.putText(image, source, (25, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0, 255), 7, cv2.LINE_AA)
+            cv2.putText(image, source, (25, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,) * 4, 2, cv2.LINE_AA)
+            worker._ocr.extract_text_regions.return_value = [
+                OCRResult(recognized, dict(x=20, y=45, width=620, height=40))
+            ]
+            for delta in (0, 0.4, 1.4):
+                clock[0] = index * 2 + delta
+                worker._process_frame(image, 1)
+            if index == 0:
+                until(lambda: player.play.call_count == 1)
+                assert list(player.play.call_args.args[0])
+                until(lambda: not controller._working)
+                if after_playback:
+                    player.finished.emit()
+        assert streams == ["where are you going"]
+        assert player.play.call_count == synth.iter_audio.call_count == 1
+        client._session.post.assert_not_called()
+    finally:
+        controller.close()
+
+
+def test_footer_arrow_X_never_overwrites_last_translation_and_replays_the_dialogue(qapp, monkeypatch):
+    from interpreter.gui import workers
+
+    clock = [0.0]
+    monkeypatch.setattr(workers, "time", SimpleNamespace(monotonic=lambda: clock[0], perf_counter=time.perf_counter))
+    worker = ProcessWorker(Config(source_language="English", output_mode="tts"))
+    worker._ocr = MagicMock()
+    client, _ = translator()
+    source = "Wait here by the gate."
+    client._cache.put(source, "Chờ ở cổng.")
+    client._cache.put("X", "x")
+    worker._translator = client
+    synth = MagicMock()
+    synth.iter_audio.side_effect = lambda text, *_args, **_kwargs: iter([text.encode()])
+    player = Player()
+    controller = SpeechController(synthesizer=synth, player=player)
+    worker.speech_stream_ready.connect(lambda stream, _: controller.submit(stream, "voice.onnx"))
+    try:
+        for index in range(5):
+            image = np.full((150, 460, 4), (20, 20, 20, 255), dtype=np.uint8)
+            cv2.putText(image, source, (25, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (235,) * 4, 2)
+            regions = [OCRResult(source, dict(x=20, y=25, width=360, height=30))]
+            if index % 2:
+                cv2.fillPoly(image, [np.array([[214, 100], [226, 100], [220, 108]])], (0, 210, 255, 255))
+                cv2.rectangle(image, (216, 96), (224, 100), (255,) * 4, -1)
+                regions.append(OCRResult("X", dict(x=212, y=96, width=16, height=14)))
+            worker._ocr.extract_text_regions.return_value = regions
+            for delta in (0, 2.0):
+                clock[0] = index * 4 + delta
+                worker._process_frame(image, 1)
+            if index == 0:
+                until(lambda: player.play.call_count == 1)
+                assert list(player.play.call_args.args[0]) == ["Chờ ở cổng.".encode()]
+                until(lambda: not controller._working)
+                player.finished.emit()
+        assert player.play.call_count == synth.iter_audio.call_count == 1
+        client._session.post.assert_not_called()
+    finally:
+        controller.close()
+
+
 def test_playback_starts_while_translation_is_still_open_and_preserves_order(qapp):
     source = SpeechStream(key="hello")
     source.put("Xin chào.")
@@ -558,9 +648,7 @@ def test_one_native_audio_stream_drains_all_chunks_during_ui_stalls(qapp):
         # WDM-KS/ASIO expose callback I/O only; the existing player buffers
         # their utterance before rendering. They must still drain all chunks
         # independently of the blocked Qt thread, just like WASAPI streaming.
-        assert player.diagnostics["streaming"] == (
-            player.diagnostics["host_api"] not in ("Windows WDM-KS", "ASIO")
-        )
+        assert player.diagnostics["streaming"] == (player.diagnostics["host_api"] not in ("Windows WDM-KS", "ASIO"))
         assert player.diagnostics["processed_seconds"] == 3.0
         assert player.underruns == 0
         assert player.diagnostics["elapsed_seconds"] < 3.75

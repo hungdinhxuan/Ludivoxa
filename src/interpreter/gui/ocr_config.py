@@ -173,6 +173,7 @@ class OCRConfigDialog(QDialog):
         initial_confidence: float = 0.6,
         initial_zones: list | None = None,
         initial_region: dict | None = None,
+        selection_only: bool = False,
     ):
         super().__init__(parent)
         self.setWindowTitle(f"Configure OCR: {window_title}" if window_title else "Configure OCR")
@@ -181,6 +182,7 @@ class OCRConfigDialog(QDialog):
         self.resize(min(1000, available.width()), min(700, available.height()))
 
         self._window_title = window_title
+        self._selection_only = selection_only
         self._confidence = initial_confidence
         self._zones: list[ExclusionZoneItem] = []
         self._region_item = None
@@ -194,7 +196,8 @@ class OCRConfigDialog(QDialog):
         self._ocr_results: list = []  # Store latest OCR results
 
         self._setup_ui()
-        self._scan_mode.setCurrentIndex(1 if self._pending_region else 0)
+        self._scan_mode.setCurrentIndex(1 if self._pending_region or selection_only else 0)
+        self._scan_mode.setEnabled(not selection_only)
         self._on_scan_mode_changed()
 
         # Load initial zones
@@ -302,7 +305,8 @@ class OCRConfigDialog(QDialog):
         confidence_layout = QHBoxLayout()
 
         # Confidence slider
-        confidence_layout.addWidget(QLabel("Confidence:"))
+        confidence_title = QLabel("Confidence:")
+        confidence_layout.addWidget(confidence_title)
         self._confidence_slider = QSlider(Qt.Orientation.Horizontal)
         self._confidence_slider.setRange(0, 100)
         self._confidence_slider.setValue(int(self._confidence * 100))
@@ -312,6 +316,9 @@ class OCRConfigDialog(QDialog):
         self._confidence_label = QLabel(f"{self._confidence:.0%}")
         self._confidence_label.setMinimumWidth(40)
         confidence_layout.addWidget(self._confidence_label)
+        if self._selection_only:
+            for control in (confidence_title, self._confidence_slider, self._confidence_label):
+                control.hide()
 
         self._action_bar = QWidget()
         actions = QHBoxLayout(self._action_bar)
@@ -346,7 +353,7 @@ class OCRConfigDialog(QDialog):
     def _on_scan_mode_changed(self):
         selected = self._scan_mode.currentIndex() == 1
         self._region_controls.setVisible(selected)
-        self._preset_btn.setVisible(selected)
+        self._preset_btn.setVisible(selected and not self._selection_only)
         self._clear_btn.setText("Clear Box" if selected else "Clear Exclusions")
         self._instructions.setText(
             "Draw a blue box around the text to translate, or use the percentage fields. "

@@ -14,8 +14,8 @@ Người dùng mới: từ [bộ offline v1.1.1](https://github.com/hungdinhxuan
 Không dùng nút **Source code** để cài app: đó là mã nguồn, không chứa runtime
 và model. Bản offline có dung lượng khoảng 4,9 GB; app cài xong khoảng 6,4 GB.
 Python và Ollama đã có sẵn trong bộ cài. Cài đặt mặc định theo tài khoản người
-dùng; nâng cấp giữ `config.yml` hiện có. Sau đó cài **v1.1.3 App-Update** qua
-tab **Updates** hoặc [release stable](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.3).
+dùng. Sau đó cài **v1.2.0 App-Update** qua tab **Updates** hoặc
+[bản phát hành ổn định](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.2.0).
 
 ## Dịch hội thoại
 
@@ -89,6 +89,24 @@ Câu giống hệt ở cảnh mới được đọc lại sau khi vùng chữ c�
 trống liên tục ít nhất 1,5 giây. Chớp ảnh ngắn hoặc OCR mất kết quả trên ảnh
 còn chữ không xóa bộ nhớ chống lặp; câu đang phát không bị ngắt.
 
+### Giọng theo nhân vật (thử nghiệm từ v1.2.0)
+
+1. Chọn cửa sổ game trong mục **Capture**, bắt đầu capture, rồi mở **Character voices…** ở đầu app.
+2. Chọn **Select name area…**, khoanh riêng nhãn tên người đang nói và nhấn **OK**.
+3. Nhập tên nhân vật đúng như game hiển thị, chọn **Voice preset**, rồi **Add / update**.
+   Dùng **Test selected voice** để nghe thử preset. Gán một lần cho mỗi tên; không phân biệt hoa/thường.
+4. Bật **Automatically select a voice from the speaker name**, rồi **OK** để lưu theo game.
+
+Khi đang capture, hộp thoại chỉnh cửa sổ đang được chụp. Khi đã dừng,
+hộp thoại chỉnh nguồn đang chọn trong danh sách và cho phép sửa các giọng đã gán.
+
+App đọc tên bằng cùng engine OCR offline trên worker; không gọi thêm LLM và
+không đoán giới tính từ hình ảnh. Vùng tên được tách khỏi phần dịch, kể cả khi
+nó nằm ngoài box hội thoại hoặc trong vùng exclude. Tên chưa gán/lời dẫn dùng
+giọng mặc định và mẫu clone hiện có; nhân vật đã gán dùng preset trong cùng model.
+Khi đổi model giọng, cần chọn lại preset tương ứng. Giọng được chốt cho từng câu;
+đổi tên nhân vật không cắt câu đang đọc. Game cần hiển thị nhãn tên rõ ràng.
+
 ## Remote Desktop trên Windows
 
 Từ v1.1.2, app tự nhận phiên Remote Desktop và chụp riêng
@@ -136,12 +154,12 @@ nguyên bản; không tự làm nhẹ, tăng nặng hay thêm chi tiết. Prompt
 
 ## Cập nhật ứng dụng
 
-**v1.1.3 là bản stable:** dùng tab **Updates**, hoặc tải
-`Ludivoxa-1.1.3-App-Update.exe` từ
-[release stable](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.3)
+Để lên **v1.2.0**, dùng tab **Updates**, hoặc tải
+`Ludivoxa-1.2.0-App-Update.exe` từ
+[bản phát hành ổn định](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.2.0)
 và chọn thư mục Ludivoxa đang cài. Gói cập nhật giữ model/runtime/cấu hình.
 Người dùng mới cần cài bộ offline v1.1.1 ở đầu hướng dẫn trước.
-Các bản v1.1.1, v1.1.2-rc.1 và v1.1.2 đều cập nhật được lên v1.1.3 qua tab Updates.
+Các bản v1.1.1, v1.1.2-rc.1, v1.1.2 và v1.1.3 đều cập nhật được qua tab Updates.
 
 Từ v1.1.0, mở **Updates** ở thanh bên:
 
