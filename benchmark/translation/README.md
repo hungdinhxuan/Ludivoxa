@@ -12,19 +12,19 @@ The primary workload is the text that a player would actually send from an old J
 
 | Platform | Games | Pairs |
 |---|---|---:|
-| Famicom Disk System | Famicom Detective Club: The Girl Who Stands Behind; The Missing Heir; Shin Onigashima; Time Twist; Yūyūki | 150 |
-| NEC PC-9801 | Dragon Slayer: The Legend of Heroes | 50 |
-| Sega Master System | Phantasy Star | 33 |
-| Super Famicom | Metal Slader Glory: Director's Cut | 35 |
+| Famicom Disk System | 5 | 150 |
+| NEC PC-9801 | 1 | 50 |
+| Sega Master System | 1 | 33 |
+| Super Famicom | 1 | 35 |
 
 The selected set contains 188 dialogue, 70 menu, and 10 system pairs: 121 short, 78 medium, and 69 long. Every pair has a `screen` track. When the source project also supplies a kanji-normalized transcription, the same reference is expanded into a `normalized` diagnostic track. There are 268 screen samples and 136 distinct normalized samples, for 404 model calls per repeat. The screen track—not normalized prose—is the promotion metric.
 
-The source projects are pinned to:
+The source projects are pinned in [`sources.json`](sources.json):
 
 - [sudgy/nintendo_translations at `39f7fb4`](https://github.com/sudgy/nintendo_translations/tree/39f7fb43549ebc428f6216c27cbd81ed738ba3c2), which supplies exact display text, normalized Japanese, and English for five FDS games.
-- [maxim-zhao/psrp at `2a327b7`](https://github.com/maxim-zhao/psrp/tree/2a327b7163eb7864c004ac2f46a00e66a88d2e1d), which supplies display/normalized Japanese plus literal and official-localization alternatives for Phantasy Star.
-- [romh-acking/metal-slader-glory-sfc-en at `beb3e86`](https://github.com/romh-acking/metal-slader-glory-sfc-en/tree/beb3e86dec0fd928ac165eaa7b9bfe29358b03ea), which supplies aligned SFC script text and a fan translation.
-- [nleseul/ds6_pc98_trans at `2d32f8f`](https://github.com/nleseul/ds6_pc98_trans/tree/2d32f8f93afa50dbe8003521624194a91a6f86a9), which supplies aligned PC-98 dialogue, menu, and battle text for Dragon Slayer: The Legend of Heroes.
+- [Master System corpus at `2a327b7`](https://github.com/maxim-zhao/psrp/tree/2a327b7163eb7864c004ac2f46a00e66a88d2e1d), which supplies display and normalized Japanese, literal translations, and official-localization alternatives.
+- The Super Famicom corpus from romh-acking at `beb3e86` supplies aligned script text and a fan translation.
+- [PC-98 corpus at `2d32f8f`](https://github.com/nleseul/ds6_pc98_trans/tree/2d32f8f93afa50dbe8003521624194a91a6f86a9), which supplies aligned dialogue, menu, and battle text.
 
 These are public corpora, so unknown training contamination remains possible. Most references have only one source, and the Nintendo repository itself describes its translations as nonprofessional. Automatic results are therefore evidence for ranking and regression detection, not sufficient evidence to ship a model. The promotion gate requires at least 100 independently verified, model-blind human references across five games, a separate private holdout, and a blind human A/B result. `reviews.json` deliberately starts empty; AI review does not count as independent verification.
 

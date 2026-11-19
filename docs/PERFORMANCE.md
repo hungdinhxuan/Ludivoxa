@@ -201,9 +201,9 @@ Twenty-four offline Nano preset-4 waveform trials produced non-silent audio
 peak and RMS. WDM-KS/ASIO retain their existing buffered callback path; the
 tests require complete playback without underruns for each supported host.
 
-Windows capture was exercised with real WGC/PrintWindow windows and a real
-RDP session in Symphony of the Serpent. The user's latest intermittent game
-scene was not available for a fresh post-fix check; RC notes retain this limit.
+Windows capture was exercised with real WGC/PrintWindow windows, including
+gameplay over RDP. The scene from the latest intermittent report was unavailable
+for a fresh check after the fix.
 
 ## v1.1.1 live GBA repeat reproduction
 
@@ -284,7 +284,7 @@ fuzzy cache also excludes matches with changed numbers or negation markers.
 
 A live 56-frame selected-box sample produced one simulated speech request;
 that sample did not reproduce the user's audible repeat. Separately, the local
-LLM/cache mapped the observed Pokemon/Pokamon variants to identical translations.
+LLM/cache mapped the observed one-letter OCR variants to identical translations.
 These are diagnostic observations, not a new end-to-end latency benchmark.
 Debug logs now identify accepted streaming sources, generated translations and
 playback starts with hashes, without adding dialogue text to those events.

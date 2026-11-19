@@ -8,7 +8,7 @@ The current corpus manifest has 105 entries, all captured from real games or gam
 | --- | ---: | --- | --- |
 | Historical benchmark branch | 13 | single review | Directional regression smoke test; one game only |
 | Project EGG retro-PC pack | 68 | single review | 41 PC-88, 19 PC-98, and 8 Sharp X1 title, dialogue, menu, battle, and HUD frames |
-| Curated SFC/Mega Drive sources | 16 | 15 single review, 1 unscored | Dragon Quest I, Chrono Trigger, Shining Force, Landstalker, Phantasy Star IV, and Madō Monogatari I |
+| Curated SFC/Mega Drive sources | 16 | 15 single review, 1 unscored | Six games from archived reading corpora and publisher pages |
 | Other external internet sources | 8 | 4 single review, 1 draft, 3 unscored | Visual-novel, PC-88, non-Japanese, and vendor-demo diagnostics |
 
 The 100 scoreable samples are all real screenshots. This is enough for a substantially broader directional comparison, but not enough to approve a model replacement by itself: all 100 references still have only one review, and there are currently zero independently verified real evaluation samples.
@@ -82,7 +82,7 @@ Third-party game screenshots are deliberately not committed. Their manifest entr
 
 The retro-PC source pack uses official [Project EGG PC-88](https://www.amusement-center.com/project/egg/console/hard.php?hard=PC-8801), [PC-98](https://www.amusement-center.com/project/egg/landing/hard.php?h=PC-9801), and [Sharp X1](https://www.amusement-center.com/project/egg/landing/hard.php?h=X1) pages. Frames with Project EGG command overlays, clipped text, or characters that could not be determined from the image pixels were rejected before references were frozen. The retained set spans 28 games and preserves each exact screenshot URL, catalog page, SHA-256, and dimensions.
 
-The retro outside batch includes 12 commit-pinned Super Famicom captures from Jo-Mako's archived JRPG reading corpus: six Dragon Quest I frames and six Chrono Trigger frames. The Dragon Quest source-authored transcriptions were checked against the selected images. The archived Chrono transcript index does not reliably match its image numbering, so those frames were transcribed visually and explicitly remain single-review. Four additional Mega Drive captures come from official SEGA pages for Shining Force, Landstalker, Phantasy Star IV, and Madō Monogatari I.
+The retro outside batch includes 12 commit-pinned Super Famicom captures from two games in Jo-Mako's archived reading corpus. Six transcriptions from the corpus were checked against the selected images. The other six were transcribed directly from the frames because their transcript index does not reliably match the image numbering. They remain single-review. Four additional Mega Drive captures come from official SEGA pages.
 
 The other outside batch includes two pinned screenshots from the [Light.vn repository](https://github.com/hsdk123/Light.vn), four individually marked public-domain PC-88 text screenshots from [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:Japanese-language_video_game_screenshots), a public-domain non-Japanese menu negative, and MeikiOCR's own [demo image](https://github.com/rtr46/meikiocr). The vendor demo is diagnostic only because training/tuning overlap is plausible.
 
@@ -101,7 +101,7 @@ Exact duplicates are rejected by SHA-256 today. Perceptual duplicate detection s
 
 ## Current limitations
 
-- The existing 13-image set is a single Tales of Phantasia sequence and its inherited ground truth has only one review.
+- The existing 13-image set covers one sequence from a single game. Its inherited ground truth has only one review.
 - Every currently scoreable transcription still has only one independent review; none can satisfy the promotion gate yet.
 - Bounding boxes are retained in result JSON, but the initial promotion metric is end-to-end text CER. Region-level IoU/precision/recall should be added once real boxes are double-annotated.
 - Public internet images are useful evaluation material, not a genuinely secret holdout.

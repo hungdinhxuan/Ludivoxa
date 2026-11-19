@@ -98,7 +98,7 @@ Install it manually; the stable updater does not offer release candidates.
 - Prevent fuzzy translation-cache matches when numbers or negation markers
   differ, so meaningful dialogue changes are translated again.
 
-- Suppress repeated speech from pixel-font OCR variants such as Pokemon/Pokamon
+- Suppress repeated speech from one-letter pixel-font OCR variants
   when the displayed glyph geometry is unchanged. Ignore animated box margins,
   tolerate flat-panel shading, antialiasing and up to two pixels of translation,
   and cache four verified image states. Preserve real glyph/number changes,

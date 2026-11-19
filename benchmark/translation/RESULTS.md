@@ -39,16 +39,16 @@ Mean screen chrF++ delta by game shows why a corpus-wide point estimate is insuf
 
 | Game | QuickMT | LFM2 | HY-MT | Riva |
 |---|---:|---:|---:|---:|
-| Dragon Slayer: The Legend of Heroes | −2.09 | −4.58 | −1.67 | −3.67 |
-| Famicom Detective Club: The Girl Who Stands Behind | −5.78 | −3.76 | +5.95 | −1.86 |
-| Famicom Detective Club: The Missing Heir | −8.59 | −5.81 | −2.83 | −0.56 |
-| Shin Onigashima | +0.89 | +1.32 | +4.70 | +1.28 |
-| Yūyūki | +2.05 | +3.30 | +10.12 | +9.18 |
-| Metal Slader Glory: Director's Cut | −4.50 | −4.25 | −4.98 | −2.01 |
-| Phantasy Star | −1.62 | −3.11 | +0.76 | −0.28 |
-| Time Twist | −5.21 | +0.41 | +5.45 | +2.11 |
+| PC-98 sample | −2.09 | −4.58 | −1.67 | −3.67 |
+| FDS sample A | −5.78 | −3.76 | +5.95 | −1.86 |
+| FDS sample B | −8.59 | −5.81 | −2.83 | −0.56 |
+| FDS sample C | +0.89 | +1.32 | +4.70 | +1.28 |
+| FDS sample D | +2.05 | +3.30 | +10.12 | +9.18 |
+| Super Famicom sample | −4.50 | −4.25 | −4.98 | −2.01 |
+| Master System sample | −1.62 | −3.11 | +0.76 | −0.28 |
+| FDS sample E | −5.21 | +0.41 | +5.45 | +2.11 |
 
-HY-MT therefore trips the greater-than-2 chrF++ regression guard on The Missing Heir and Metal Slader Glory despite having the best overall point estimate. Riva trips it on Dragon Slayer and Metal Slader Glory.
+HY-MT has the best overall point estimate and still exceeds the 2-point chrF++ regression threshold on FDS sample B and the Super Famicom sample. Riva exceeds it on the PC-98 and Super Famicom samples.
 
 The normalized diagnostic confirms why the screen track must remain primary:
 
@@ -114,16 +114,16 @@ Mean screen chrF++ delta by game:
 
 | Game | Sugoi 14B Ultra | Gemma 3 12B |
 |---|---:|---:|
-| Dragon Slayer: The Legend of Heroes | +2.23 | −0.11 |
-| Famicom Detective Club: The Girl Who Stands Behind | +16.25 | +11.58 |
-| Famicom Detective Club: The Missing Heir | +9.05 | +5.49 |
-| Shin Onigashima | +11.37 | +14.79 |
-| Yūyūki | +29.24 | +22.35 |
-| Metal Slader Glory: Director's Cut | +1.20 | −2.73 |
-| Phantasy Star | +14.94 | +8.29 |
-| Time Twist | +19.59 | +14.79 |
+| PC-98 sample | +2.23 | −0.11 |
+| FDS sample A | +16.25 | +11.58 |
+| FDS sample B | +9.05 | +5.49 |
+| FDS sample C | +11.37 | +14.79 |
+| FDS sample D | +29.24 | +22.35 |
+| Super Famicom sample | +1.20 | −2.73 |
+| Master System sample | +14.94 | +8.29 |
+| FDS sample E | +19.59 | +14.79 |
 
-Sugoi 14B Ultra improves every game. Gemma 3 12B trips the greater-than-2 chrF++ regression guard on Metal Slader Glory, the kanji-heavy Director's Cut text where the August candidates also struggled.
+Sugoi 14B Ultra improves every game. Gemma 3 12B exceeds the 2-point chrF++ regression threshold on the Super Famicom sample, the kanji-heavy script that also challenged the August candidates.
 
 Normalized diagnostic:
 

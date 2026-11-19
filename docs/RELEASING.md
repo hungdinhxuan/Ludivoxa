@@ -122,6 +122,8 @@ automatically download or install anything.
 
 Keep repository visibility unchanged unless its owner explicitly requests a
 change. Retain upstream attribution and third-party license/model-card files.
+Describe game tests by platform or scenario in public release notes and docs.
+Keep titles from personal playtests and user reports out of published materials.
 Release publishing still uses the maintainer's Git/GitHub authentication
 tooling; credentials must never be committed or embedded in app defaults.
 
