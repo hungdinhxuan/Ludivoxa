@@ -4,6 +4,7 @@ import ctypes
 import sys
 import threading
 import time
+from collections.abc import Callable
 from ctypes import wintypes
 
 import numpy as np
@@ -608,14 +609,18 @@ class WindowsCaptureStream:
     Throttled to 4 FPS to avoid wasteful high-frequency capture.
     """
 
-    def __init__(self, window_id: int):
+    def __init__(self, window_id: int, on_frame_ready: Callable[[], None] | None = None):
         """Initialize the capture stream.
 
         Args:
             window_id: The window handle (HWND) to capture.
+            on_frame_ready: Optional callback for a newly available frame.
         """
         self._window_id = window_id
         self._latest_frame: NDArray[np.uint8] | None = None
+        self._captured_at: float | None = None
+        self._on_frame_ready = on_frame_ready
+        self._frame_notification_pending = False
         self._frame_lock = threading.Lock()
         self._capture = None
         self._control = None
@@ -644,6 +649,23 @@ class WindowsCaptureStream:
     def _clear_frame(self):
         with self._frame_lock:
             self._latest_frame = None
+            self._captured_at = None
+
+    def _publish_frame(self, frame: NDArray[np.uint8], captured_at: float, graphics_generation: int | None = None):
+        with self._frame_lock:
+            if not self._running or (
+                graphics_generation is not None and graphics_generation != self._graphics_generation
+            ):
+                return
+            self._latest_frame = frame
+            self._captured_at = captured_at
+            self.error = None
+            # Hold just one notification while the consumer is busy.
+            notify = self._on_frame_ready is not None and not self._frame_notification_pending
+            if notify:
+                self._frame_notification_pending = True
+        if notify:
+            self._on_frame_ready()
 
     def _stop_graphics(self):
         # Invalidate callbacks before stopping: an old on_closed must not stop
@@ -698,10 +720,11 @@ class WindowsCaptureStream:
                         # This renders only the target HWND, so inplace overlay
                         # text cannot feed back into OCR as with desktop capture.
                         frame = capture_window(self._window_id, render_full_content=True)
-                        with self._frame_lock:
-                            if self._running:
-                                self._latest_frame = frame
-                        self.error = None if frame is not None else "Waiting for window frames. Keep the game visible."
+                        if frame is not None:
+                            self._publish_frame(frame, tick)
+                        else:
+                            self._clear_frame()
+                            self.error = "Waiting for window frames. Keep the game visible."
                     else:
                         if self._control is None:
                             self._graphics_closed = False
@@ -851,10 +874,7 @@ class WindowsCaptureStream:
                             log.get_logger().warning("failed to save debug frame", error=str(e))
 
                 # Store raw BGRA numpy array (consumers convert on demand)
-                with stream._frame_lock:
-                    if stream._running and generation == stream._graphics_generation:
-                        stream._latest_frame = arr.copy()
-                        stream.error = None
+                stream._publish_frame(arr.copy(), now, generation)
             except Exception as e:
                 from .. import log
 
@@ -896,6 +916,12 @@ class WindowsCaptureStream:
         """
         with self._frame_lock:
             return self._latest_frame
+
+    def get_frame_with_timestamp(self) -> tuple[NDArray[np.uint8] | None, float | None]:
+        """Consume the notification and read the most recent frame atomically."""
+        with self._frame_lock:
+            self._frame_notification_pending = False
+            return self._latest_frame, self._captured_at
 
     def stop(self):
         """Stop the capture stream."""

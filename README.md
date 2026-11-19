@@ -9,17 +9,17 @@ Ludivoxa extends [Interpreter](https://github.com/bquenin/interpreter), retainin
 its capture → OCR → translation → overlay pipeline and Qt interface. This fork
 starts at **v1.0.0**; see [attribution and licenses](NOTICE.md).
 
-**Latest stable:** [v1.2.0](docs/releases/v1.2.0.md) adds experimental voices by
-character name and improves repeat suppression. Update an existing installation
-from **Updates**. For a new installation, start with the full offline v1.1.1
+**Latest stable [v1.3.0](docs/releases/v1.3.0.md)** adds multiple OCR boxes,
+speaker-aware translation and faster Windows frame delivery. Update from
+**Updates**. For a new installation, start with the full offline v1.1.1
 package, then apply the app update. The update keeps your models and settings.
 
 ## Features
 
 - Offline English/Japanese PaddleOCR with a fast English profile, automatic
   source detection and a manual language fallback.
-- Select one dialogue box per game, move/resize it, or keep the existing
-  full-window/exclusion workflow. OCR processes the selected crop.
+- Select multiple dialogue boxes per game. OCR reads the selected pixels in
+  one pass. The full-window and exclusion options remain available.
 - Reuse of the existing LLM translator with local Ollama or configurable
   OpenAI-compatible/LAN endpoints, prompts and translation context.
 - Vietnamese translation by default; other LLM target languages remain available.
@@ -28,6 +28,7 @@ package, then apply the app update. The update keeps your models and settings.
   existing 67 Piper speaker choices in the full Windows package.
 - Assign a voice preset to each speaker name per game. The app reads the name
   in a separate OCR area and uses the default voice for unassigned speakers.
+  Label a character's gender to guide Vietnamese forms of address in translation.
 - Background OCR/speech, bounded frame/prefetch queues, cached models/results,
   visual duplicate suppression and streaming native audio for Nano speech.
 - Private bundled Ollama stops with the last app instance, including forced
@@ -56,6 +57,7 @@ lower is faster.
 | v1.1.2 stable — released tag² | **867.7 ms** | **966.3 ms** | **1,355.9 ms** |
 | v1.1.3 stable | Not measured | Not measured | Not measured |
 | v1.2.0 stable | Separate game test below | Not measured | Not measured |
+| v1.3.0 stable | Separate frame replay below | Separate frame replay below | Not measured |
 
 Measured on Windows 11, Core i7-13700F and RTX 4090 24 GB, using the same saved
 dialogue crops, English OCR → Vietnamese, local HauhauCS Qwen3 4B Q4_K_M,
@@ -125,6 +127,12 @@ These tests measured the release candidate code on saved game frames. Game
 text reveal and earlier queued speech are outside the measurement. See the
 [v1.2.0 notes](docs/releases/v1.2.0.md) for the setup and limits.
 
+**v1.3.0 Windows frame replay.** With the same Gemma and VieNeu settings,
+median TTFA over four complete-frame pairs was **1.20 s with timer polling**
+and **0.95 s with frame notifications**, a median paired saving of **209 ms**.
+The replay uses synthetic dialogue and measures first matching speech via
+WASAPI. See [the individual results and scope](docs/PERFORMANCE.md#v130-windows-frame-replay).
+
 ## Install on Windows
 
 The packaged release targets **Windows x64**. Download its setup EXE and **all
@@ -136,9 +144,9 @@ Python, English/Japanese OCR models, Vietnamese speech, Ollama 0.40.16 and
 HauhauCS Qwen3 4B Aggressive Q4_K_M are included. No separate model download is
 needed for that profile. The installer preserves an existing `config.yml`.
 
-Then open **Updates** to install v1.2.0 (also supported from v1.1.2rc1).
-For v1.0.0, or to update manually, run **Ludivoxa-1.2.0-App-Update.exe** from
-[v1.2.0](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.2.0) and select the existing
+Then open **Updates** to install v1.3.0 (also supported from v1.1.2rc1).
+For v1.0.0, or to update manually, run **Ludivoxa-1.3.0-App-Update.exe** from
+[v1.3.0](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.3.0) and select the existing
 installation directory. This smaller package preserves your models, runtime
 and settings. Public release checks and downloads need no GitHub token or sign-in.
 

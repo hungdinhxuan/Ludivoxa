@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..capture.convert import bgra_to_rgb_pil
-from ..config import normalize_ocr_region
+from ..config import normalize_ocr_region, normalize_ocr_regions
 from .theme import ACCENT
 
 
@@ -172,7 +172,7 @@ class OCRConfigDialog(QDialog):
         window_title: str = "",
         initial_confidence: float = 0.6,
         initial_zones: list | None = None,
-        initial_region: dict | None = None,
+        initial_region: dict | list[dict] | None = None,
         selection_only: bool = False,
     ):
         super().__init__(parent)
@@ -185,8 +185,10 @@ class OCRConfigDialog(QDialog):
         self._selection_only = selection_only
         self._confidence = initial_confidence
         self._zones: list[ExclusionZoneItem] = []
-        self._region_item = None
-        self._pending_region = normalize_ocr_region(initial_region)
+        self._region_items = []
+        self._pending_regions = normalize_ocr_regions(initial_region)
+        if selection_only:
+            self._pending_regions = self._pending_regions[:1]
         self._ocr_boxes: list[QGraphicsRectItem] = []  # OCR detection boxes (green)
         self._drawing = False
         self._draw_start = None
@@ -196,7 +198,7 @@ class OCRConfigDialog(QDialog):
         self._ocr_results: list = []  # Store latest OCR results
 
         self._setup_ui()
-        self._scan_mode.setCurrentIndex(1 if self._pending_region or selection_only else 0)
+        self._scan_mode.setCurrentIndex(1 if self._pending_regions or selection_only else 0)
         self._scan_mode.setEnabled(not selection_only)
         self._on_scan_mode_changed()
 
@@ -223,7 +225,7 @@ class OCRConfigDialog(QDialog):
         scan_label = QLabel("Scan:")
         self._scan_mode = QComboBox()
         self._scan_mode.addItem("Full window (use exclusions)")
-        self._scan_mode.addItem("Only selected box")
+        self._scan_mode.addItem("Only selected box" if self._selection_only else "Only selected boxes")
         self._scan_mode.setAccessibleName("OCR scan area")
         scan_label.setBuddy(self._scan_mode)
         scan_row.addWidget(scan_label)
@@ -354,37 +356,54 @@ class OCRConfigDialog(QDialog):
         selected = self._scan_mode.currentIndex() == 1
         self._region_controls.setVisible(selected)
         self._preset_btn.setVisible(selected and not self._selection_only)
-        self._clear_btn.setText("Clear Box" if selected else "Clear Exclusions")
+        self._clear_btn.setText(
+            ("Clear Box" if self._selection_only else "Remove Selected Box") if selected else "Clear Exclusions"
+        )
+        self._clear_btn.setEnabled(not selected or bool(self._region_item))
         self._instructions.setText(
-            "Draw a blue box around the text to translate, or use the percentage fields. "
-            "Only this box is scanned. Move it or resize its corner handles; Clear Box lets you redraw. "
-            "Green boxes show OCR detections."
+            (
+                "Draw one box around the speaker name or use the percentage fields."
+                if self._selection_only
+                else "Drag on the preview to add a box. Select a box to move, resize, or remove it. "
+                "The percentages apply to the selected box. Green boxes show OCR detections."
+            )
             if selected
             else "Draw red exclusion zones to block unwanted detections. Green boxes show OCR detections. "
-            "Choose Only selected box to scan just the dialogue area."
+            "Choose Only selected boxes to scan just the dialogue areas."
         )
         for zone in self._zones:
             zone.setVisible(not selected)
-        if self._region_item:
-            self._region_item.setVisible(selected)
+        for item in self._region_items:
+            item.setVisible(selected)
         self._ok_btn.setEnabled(not selected or bool(self.get_scan_region()))
 
-    def _set_region(self, rect):
+    @property
+    def _region_item(self):
+        return next((item for item in self._region_items if item.isSelected()), None)
+
+    def _set_region(self, rect, *, append=False):
         rect = rect.intersected(self._scene.sceneRect())
         if rect.isEmpty():
             return
-        if self._region_item:
-            self._scene.removeItem(self._region_item)
-        self._region_item = ExclusionZoneItem(rect, ACCENT)
-        self._scene.addItem(self._region_item)
-        self._region_item.setSelected(True)
-        self._region_item.setVisible(self._scan_mode.currentIndex() == 1)
+        item = None if append else self._region_item
+        if self._selection_only and self._region_items:
+            item = self._region_items[0]
+        if item is None:
+            item = ExclusionZoneItem(rect, ACCENT)
+            self._scene.addItem(item)
+            self._region_items.append(item)
+        else:
+            item.setPos(0, 0)
+            item.setRect(rect)
+        self._scene.clearSelection()
+        item.setVisible(self._scan_mode.currentIndex() == 1)
+        item.setSelected(True)
         self._sync_region_fields()
         self._on_scan_mode_changed()
 
     def _use_bottom_box(self):
         bounds = self._scene.sceneRect()
-        self._set_region(QRectF(0, bounds.height() * 0.6, bounds.width(), bounds.height() * 0.35))
+        self._set_region(QRectF(0, bounds.height() * 0.6, bounds.width(), bounds.height() * 0.35), append=True)
 
     def _region_from_fields(self):
         bounds = self._scene.sceneRect()
@@ -399,17 +418,19 @@ class OCRConfigDialog(QDialog):
         )
 
     def _sync_region_fields(self):
-        region = self._region_coordinates()
+        region = self._region_coordinates(self._region_item)
         if region:
             for key, value in region.items():
                 self._region_fields[key].setValue(value * 100)
-        self._ok_btn.setEnabled(self._scan_mode.currentIndex() == 0 or bool(region))
+        selected = self._scan_mode.currentIndex() == 1
+        self._clear_btn.setEnabled(not selected or bool(region))
+        self._ok_btn.setEnabled(not selected or bool(self.get_scan_region()))
 
-    def _region_coordinates(self):
-        if not self._region_item:
+    def _region_coordinates(self, item):
+        if item is None:
             return None
         bounds = self._scene.sceneRect()
-        rect = self._region_item.mapRectToScene(self._region_item.rect()).intersected(bounds)
+        rect = item.mapRectToScene(item.rect()).intersected(bounds)
         if rect.isEmpty() or bounds.isEmpty():
             return None
         return normalize_ocr_region(
@@ -422,10 +443,11 @@ class OCRConfigDialog(QDialog):
         )
 
     def get_scan_region(self):
-        """None = full window, {} = selected-box mode awaiting a valid box."""
+        """Get selected rectangles, keeping the original format for one box."""
         if self._scan_mode.currentIndex() == 0:
             return None
-        return self._region_coordinates() or {}
+        boxes = [region for item in self._region_items if (region := self._region_coordinates(item))]
+        return boxes[0] if len(boxes) == 1 else boxes or {}
 
     def accept(self):
         if self._scan_mode.currentIndex() == 1 and not self.get_scan_region():
@@ -435,9 +457,12 @@ class OCRConfigDialog(QDialog):
     def _clear_current(self):
         if self._scan_mode.currentIndex() == 0:
             self._clear_all()
-        elif self._region_item:
-            self._scene.removeItem(self._region_item)
-            self._region_item = None
+        elif (item := self._region_item) is not None:
+            self._region_items.remove(item)
+            self._scene.removeItem(item)
+            if self._region_items:
+                self._region_items[-1].setSelected(True)
+            self._sync_region_fields()
         self._on_scan_mode_changed()
 
     def eventFilter(self, obj, event):
@@ -453,8 +478,7 @@ class OCRConfigDialog(QDialog):
                     if not self._scene.sceneRect().contains(scene_pos):
                         return False
                     # Check if clicking on an existing zone
-                    item = self._scene.itemAt(scene_pos, self._view.transform())
-                    if isinstance(item, ExclusionZoneItem):
+                    if any(isinstance(item, ExclusionZoneItem) for item in self._scene.items(scene_pos)):
                         # Let the item handle selection
                         return False
                     # Start drawing new zone
@@ -487,7 +511,7 @@ class OCRConfigDialog(QDialog):
                         # Only create zone if large enough
                         if rect.width() >= ExclusionZoneItem.MIN_SIZE and rect.height() >= ExclusionZoneItem.MIN_SIZE:
                             if self._scan_mode.currentIndex() == 1:
-                                self._set_region(rect)
+                                self._set_region(rect, append=not self._selection_only)
                             else:
                                 self._add_zone(rect)
                     self._draw_start = None
@@ -554,7 +578,7 @@ class OCRConfigDialog(QDialog):
         if self._preview_size != (new_w, new_h):
             old_w, old_h = self._preview_size
             if old_w and old_h:
-                for item in self._zones + ([self._region_item] if self._region_item else []):
+                for item in self._zones + self._region_items:
                     rect = item.mapRectToScene(item.rect())
                     item.setPos(0, 0)
                     item.setRect(
@@ -648,18 +672,19 @@ class OCRConfigDialog(QDialog):
 
     def apply_pending_zones(self):
         """Apply pending zones after image is loaded."""
-        if self._pending_region and not self._scene.sceneRect().isEmpty():
+        if self._pending_regions and not self._scene.sceneRect().isEmpty():
             bounds = self._scene.sceneRect()
-            region = self._pending_region
-            self._set_region(
-                QRectF(
-                    region["x"] * bounds.width(),
-                    region["y"] * bounds.height(),
-                    region["width"] * bounds.width(),
-                    region["height"] * bounds.height(),
+            for region in self._pending_regions:
+                self._set_region(
+                    QRectF(
+                        region["x"] * bounds.width(),
+                        region["y"] * bounds.height(),
+                        region["width"] * bounds.width(),
+                        region["height"] * bounds.height(),
+                    ),
+                    append=True,
                 )
-            )
-            self._pending_region = None
+            self._pending_regions = []
         if not hasattr(self, "_pending_zones") or not self._pending_zones:
             return
 

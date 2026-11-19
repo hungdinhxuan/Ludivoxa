@@ -272,18 +272,42 @@ def test_saved_box_is_restored_on_first_frame(qapp):
         instance.close()
 
 
+def test_drag_multiple_boxes_save_and_keep_gaps_out_of_ocr(dialog, window, tmp_path):
+    dialog._scan_mode.setCurrentIndex(1)
+    view = dialog._view
+    for start, end in (((100, 100), (320, 200)), ((490, 270), (690, 380))):
+        QTest.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=view.mapFromScene(*start))
+        QTest.mouseMove(view.viewport(), view.mapFromScene(*end))
+        QTest.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=view.mapFromScene(*end))
+    regions = dialog.get_scan_region()
+    assert len(regions) == 2
+    window._config.set_ocr_region("Game", regions)
+    path = tmp_path / "config.yml"
+    window._config.save(str(path))
+    window._config = Config.load(str(path))
+    frame = np.full((600, 1000, 4), 255, dtype=np.uint8)
+    cropped, (left, top) = window._prepare_ocr_frame(frame)
+    assert cropped[160 - top, 150 - left].all()
+    assert cropped[400 - top, 800 - left].all()
+    assert not cropped[280 - top, 570 - left].any()
+    assert frame.all()
+    dialog._clear_current()
+    assert dialog.get_scan_region() == regions[0]
+
+
 @pytest.mark.skipif(
     not os.environ.get("INTERPRETER_TEST_MODEL_ROOT") or os.name != "nt", reason="Local OCR and Windows fonts required"
 )
 @pytest.mark.parametrize(
-    "language,text,font_name,recognizer",
+    "language,text,font_name,recognizer,multiple_boxes",
     [
-        ("English", "Welcome brave hero", "arial.ttf", "en_PP-OCRv5_mobile_rec_onnx"),
-        ("Japanese", "こんにちは勇者", "msgothic.ttc", "PP-OCRv5_mobile_rec_onnx"),
+        ("English", "Welcome brave hero", "arial.ttf", "en_PP-OCRv5_mobile_rec_onnx", False),
+        ("Japanese", "こんにちは勇者", "msgothic.ttc", "PP-OCRv5_mobile_rec_onnx", False),
+        ("English", "Welcome brave hero", "arial.ttf", "en_PP-OCRv5_mobile_rec_onnx", True),
     ],
 )
 def test_real_selected_box_pipeline_ignores_outside_text_and_speaks_once(
-    window, monkeypatch, language, text, font_name, recognizer
+    window, monkeypatch, language, text, font_name, recognizer, multiple_boxes
 ):
     from interpreter.paddle_ocr import IsolatedPaddleOCR
 
@@ -296,9 +320,13 @@ def test_real_selected_box_pipeline_ignores_outside_text_and_speaks_once(
     font = ImageFont.truetype(str(Path("C:/Windows/Fonts") / font_name), 36)
     draw.text((40, 30), "Do not translate this menu", fill="black", font=font)
     draw.text((280, 570), text, fill="black", font=font)
+    if multiple_boxes:
+        draw.text((130, 270), "Hello traveller", fill="black", font=font)
+        draw.text((260, 405), "Ignore gap text", fill="black", font=font)
+    areas = [REGION, dict(x=0.08, y=0.30, width=0.4, height=0.14)] if multiple_boxes else REGION
     rgb = np.array(image)
     frame = np.concatenate((rgb[:, :, ::-1], np.full((800, 1200, 1), 255, dtype=np.uint8)), axis=2)
-    window._config.set_ocr_region("Game", REGION)
+    window._config.set_ocr_region("Game", areas)
     window._config.source_language = language
     cropped, origin = window._prepare_ocr_frame(frame)
     worker = ProcessWorker(window._config)
@@ -317,7 +345,7 @@ def test_real_selected_box_pipeline_ignores_outside_text_and_speaks_once(
         clock[0] = 0.4
         worker._process_frame(cropped, 1, origin)
         worker._process_frame(cropped, 1, origin)
-        worker._translator.translate.assert_called_once_with(text)
+        worker._translator.translate.assert_called_once_with(f"Hello traveller {text}" if multiple_boxes else text)
         assert spoken == ["Chào mừng dũng sĩ"]
         assert boxes and all(b["x"] >= origin[0] and b["y"] >= origin[1] for b in boxes)
     finally:

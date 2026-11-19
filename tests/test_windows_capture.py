@@ -81,6 +81,35 @@ def test_starting_inside_rdp_never_initializes_graphics_capture(desktop, monkeyp
     native.assert_not_called()
 
 
+def test_remote_frames_notify_after_publication_and_keep_capture_time(desktop):
+    frames = []
+    stream = capture.WindowsCaptureStream(42, lambda: frames.append(stream.get_frame_with_timestamp()))
+    desktop.remote.return_value = True
+    assert pump(stream, desktop, 3) == [20, 20, 20]
+    assert [stamp for _, stamp in frames] == [0.0, 0.25, 0.5]
+    assert all(np.all(frame == 20) for frame, _ in frames)
+    assert stream.get_frame_with_timestamp() == (None, None)
+
+
+def test_frame_notifications_coalesce_and_obsolete_generations_cannot_publish():
+    notify = Mock()
+    stream = capture.WindowsCaptureStream(42, notify)
+    stream._running = True
+    first = np.full((2, 3, 4), 10, np.uint8)
+    latest = np.full_like(first, 20)
+    stream._publish_frame(first, 1.0)
+    stream._publish_frame(latest, 1.25)
+    notify.assert_called_once()
+    frame, stamp = stream.get_frame_with_timestamp()
+    assert frame is latest and stamp == 1.25
+    stream._stop_graphics()
+    stream._publish_frame(first, 1.5, graphics_generation=0)
+    assert stream.get_frame_with_timestamp() == (None, None)
+    notify.assert_called_once()
+    stream._publish_frame(latest, 1.75)
+    assert notify.call_count == 2
+
+
 @pytest.mark.parametrize("states", [[False, False, True, True], [True, False, True, True]])
 def test_disconnected_session_waits_before_native_start_and_recovers(desktop, monkeypatch, states):
     stream = capture.WindowsCaptureStream(42)

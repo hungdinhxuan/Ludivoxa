@@ -1,5 +1,39 @@
 # Validation and performance
 
+## v1.3.0 Windows frame replay
+
+On 2026-11-19, the release candidate replayed two synthetic English dialogue
+inputs at four captured frames per second. The same OCR, LLM and voice ran
+with 150 ms frame polling or with the Windows capture notification path.
+Both paths used the same warm local Gemma 4 E4B Q4_K_M, three seeded context
+pairs, the same speaker metadata and VieNeu Nano preset 7 with eight steps
+and two CPU threads. Translation and audio caches were reset between runs.
+
+| Input | Initial poll phase | Timer polling | Frame notifications |
+| --- | ---: | ---: | ---: |
+| Short dialogue | 25 ms | 912.14 ms | 919.07 ms |
+| Short dialogue | 75 ms | 1,180.48 ms | 902.66 ms |
+| Two sentences | 25 ms | 1,215.50 ms | 975.16 ms |
+| Two sentences | 75 ms | 1,210.92 ms | 1,032.72 ms |
+| Median | | **1,195.70 ms** | **947.12 ms** |
+
+The median paired saving was **209.27 ms**. Each trial matched its generated
+first audio chunk in Windows WASAPI loopback. Each pair produced the same
+translation, exactly one utterance and the same voice preset. OCR checks,
+including cache lookups, had a median of 17 with timer polling and 12 with
+notifications over the observation window.
+
+Separate replay checks covered a pause during text reveal, disappearing text
+and a static valid frame with no further capture events. The new path spoke
+the completed line once, stayed silent when the text disappeared and recovered
+the static line after about 800 ms. The latter case reached first audio in
+1,374.22 ms versus 941.62 ms with timer polling.
+
+The clock starts when the complete frame is published for the four timing
+pairs. This replay excludes game rendering, a preceding spoken line, native
+acquisition delays and RDP transport. The small sample does not establish
+live FPS, overall resource usage or p95 results.
+
 ## Tagged-version loopback TTFA
 
 On **2026-11-16**, after restoring an active Windows console and pausing

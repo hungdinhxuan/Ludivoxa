@@ -17,7 +17,7 @@ def capture_window(qapp, monkeypatch):
     """Capture controls and a real processing worker, without loading any models."""
     from unittest.mock import MagicMock
 
-    from PySide6.QtCore import QCoreApplication, QEvent, QTimer
+    from PySide6.QtCore import QCoreApplication, QEvent
     from PySide6.QtWidgets import QMainWindow
 
     from interpreter.config import OverlayMode
@@ -40,7 +40,7 @@ def capture_window(qapp, monkeypatch):
     win._last_bounds = {}
     win._last_ocr_results = []
     win._ocr_config_dialog = None
-    win._process_timer = QTimer(win)
+    win._setup_capture_timers()
     win._start_btn = QPushButton()
     win._pause_btn = QPushButton()
     win._ocr_config_btn = QPushButton()
@@ -50,6 +50,8 @@ def capture_window(qapp, monkeypatch):
     win._process_worker = win._create_worker()
     monkeypatch.setattr(win, "_set_banner_only", lambda enabled: None)
     yield win
+    win._process_timer.stop()
+    win._capture_idle_timer.stop()
     win._process_worker.stop()
     win.close()
     win.deleteLater()
@@ -221,6 +223,65 @@ def test_window_capture_interruption_reports_waiting_and_resumes_processing(capt
     assert not win._waiting_for_signal and win._frames_missing == 0
     assert win.statusBar().currentMessage() == "Capturing 'Game'"
     submit.assert_called_once_with(frame, 0)
+
+
+def test_native_capture_dispatch_uses_latest_frame_and_falls_back_when_idle(capture_window, monkeypatch, qapp):
+    import threading
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    import numpy as np
+
+    import interpreter.gui.main_window as module
+
+    class TimedCapture(module.WindowCapture):
+        bounds = {}
+        window_invalid = False
+        window_id = 42
+
+        def __init__(self):
+            self.latest = (None, None)
+
+        def get_frame_with_timestamp(self):
+            return self.latest
+
+    win = capture_window
+    win._capturing = True
+    old, win._capture = TimedCapture(), TimedCapture()
+    frame = np.zeros((2, 4, 4), np.uint8)
+    new = np.ones_like(frame)
+    old.latest = frame, 1.0
+    win._capture.latest = frame, 1.0
+    clock = [1.25]
+    monkeypatch.setattr(module, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    submit = Mock()
+    monkeypatch.setattr(win, "_update_capture_preview", Mock())
+    monkeypatch.setattr(win._process_worker, "submit_frame", submit)
+    discard = Mock()
+    monkeypatch.setattr(win._process_worker, "discard_pending_frames", discard)
+
+    win._queue_capture_frame(old)
+    thread = threading.Thread(target=win._queue_capture_frame, args=(win._capture,))
+    thread.start()
+    thread.join()
+    win._capture.latest = new, 1.25
+    submit.assert_not_called()
+    qapp.processEvents()
+    submit.assert_called_once_with(new, 0, captured_at=1.25)
+    assert win._capture_idle_timer.isActive()
+
+    win._capture_and_process()
+    assert submit.call_count == 1  # The health poll does not submit the same capture again.
+    clock[0] += module.CAPTURE_IDLE_SECONDS + 0.01
+    win._capture_idle_timer.timeout.emit()
+    submit.assert_called_with(new, 0)
+    assert submit.call_count == 2
+
+    win._capture.latest = None, None
+    win._capture_and_process()
+    assert submit.call_count == 2
+    discard.assert_called_once()
+    assert not win._capture_idle_timer.isActive()
 
 
 @pytest.mark.parametrize("accepted", [True, False])
@@ -812,7 +873,6 @@ def test_banner_click_during_video_session_is_not_persisted(qapp):
 def test_no_signal_state_is_reset_when_capture_stops(qapp, monkeypatch):
     """Greptile: a window capture after a stopped, signal-less video session must not touch .name."""
     import numpy as np
-    from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QLabel, QMainWindow, QPushButton
 
     import interpreter.gui.main_window as module
@@ -873,7 +933,7 @@ def test_no_signal_state_is_reset_when_capture_stops(qapp, monkeypatch):
     win._last_ocr_results = []
     win._last_frame = None
     win._preview_updated_at = float("-inf")
-    win._process_timer = QTimer()
+    win._setup_capture_timers()
     win._wayland_portal = None
     win._pause_btn = QPushButton()
     win._ocr_config_btn = QPushButton()

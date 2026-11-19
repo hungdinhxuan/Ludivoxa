@@ -25,6 +25,15 @@ from .translate import (
 
 logger = log.get_logger()
 
+SPEAKER_INSTRUCTIONS = (
+    "Some user messages contain JSON with speaker, gender, and dialogue fields. "
+    "Translate only dialogue. Speaker information is context for pronouns and forms of address. "
+    "The gender refers to the speaker, not the listener. Use the dialogue and previous lines to infer "
+    "relationships. For an unspecified gender, don't infer gender from a name or age. "
+    "Use neutral wording, such as tôi, mình, or an omitted pronoun in Vietnamese, unless dialogue establishes gender. "
+    "Keep the original tone and do not add a title or gendered wording unless the context supports it."
+)
+
 PROVIDER_OLLAMA = "ollama"
 PROVIDER_OPENAI = "openai"
 PROVIDERS = LLM_PROVIDERS
@@ -235,7 +244,7 @@ class LLMTranslator:
         self._source_language = source_language or DEFAULT_SOURCE_LANGUAGE
         self._detected_language = "English"
         self._cache = TranslationCache(cache_size, similarity_threshold)
-        self._history: deque[tuple[str, str]] = deque(maxlen=max(0, settings.context_lines))
+        self._history = deque(maxlen=max(0, settings.context_lines))
         self._session = requests.Session()
         self._session.trust_env = False
         self._loaded = False
@@ -299,7 +308,7 @@ class LLMTranslator:
     def is_loaded(self) -> bool:
         return self._loaded
 
-    def translate(self, text: str) -> tuple[str, bool]:
+    def translate(self, text: str, *, speaker=None) -> tuple[str, bool]:
         """Translate Japanese text.
 
         Returns:
@@ -313,7 +322,7 @@ class LLMTranslator:
 
         if self._source_language == "Auto":
             self._detected_language = detect_language(text)
-        ready = self._ready_translation(text)
+        ready = self._ready_translation(text, speaker)
         if ready is not None:
             return ready
 
@@ -321,7 +330,7 @@ class LLMTranslator:
             self.load()
 
         try:
-            raw = self._chat(self._build_messages(text))
+            raw = self._chat(self._build_messages(text, speaker))
         except requests.RequestException as e:
             raise LLMTranslationError(describe_request_error(e, self._settings)) from e
 
@@ -330,21 +339,33 @@ class LLMTranslator:
             logger.warning("empty translation from endpoint", text=text[:50])
             return "", False
 
-        self._cache.put(text, result)
-        self._history.append((text, result))
+        self._remember(text, result, speaker)
         return result, False
 
-    def _build_messages(self, text: str) -> list[dict[str, str]]:
-        messages = [{"role": "system", "content": self.system_prompt}]
-        for source, translation in self._history:
-            messages.append({"role": "user", "content": source})
+    @staticmethod
+    def _speaker_input(text, speaker):
+        if speaker is None:
+            return text
+        return json.dumps({"speaker": speaker[0], "gender": speaker[1], "dialogue": text}, ensure_ascii=False)
+
+    def _remember(self, text, result, speaker):
+        self._cache.put(text, result, scope=speaker)
+        self._history.append((text, result, speaker) if speaker is not None else (text, result))
+
+    def _build_messages(self, text: str, speaker=None) -> list[dict[str, str]]:
+        prompt = self.system_prompt
+        if speaker is not None or any(len(turn) == 3 for turn in self._history):
+            prompt += "\n\n" + SPEAKER_INSTRUCTIONS
+        messages = [{"role": "system", "content": prompt}]
+        for source, translation, *context in self._history:
+            messages.append({"role": "user", "content": self._speaker_input(source, context[0] if context else None)})
             messages.append({"role": "assistant", "content": translation})
-        messages.append({"role": "user", "content": text})
+        messages.append({"role": "user", "content": self._speaker_input(text, speaker)})
         return messages
 
-    def preview_translation(self, text):
+    def preview_translation(self, text, *, speaker=None):
         """Prepare one candidate without committing speculative OCR to context."""
-        cached = self._cache.get(text)
+        cached = self._cache.get(text, scope=speaker)
         if cached is not None:
             return cached
         if not self._loaded:
@@ -353,30 +374,29 @@ class LLMTranslator:
             self._detected_language = detect_language(text)
         context = tuple(self._history)
         try:
-            result = clean_output(self._chat(self._build_messages(text)))
+            result = clean_output(self._chat(self._build_messages(text, speaker)))
         except requests.RequestException as exc:
             raise LLMTranslationError(describe_request_error(exc, self._settings)) from exc
-        self._preview = (text, context, result) if result else None
+        self._preview = (text, context, speaker, result) if result else None
         return result
 
-    def _ready_translation(self, text):
-        cached = self._cache.get(text)
+    def _ready_translation(self, text, speaker):
+        cached = self._cache.get(text, scope=speaker)
         if cached is not None:
             return cached, True
         preview, self._preview = self._preview, None
-        if preview is not None and preview[:2] == (text, tuple(self._history)):
-            self._cache.put(text, preview[2])
-            self._history.append((text, preview[2]))
-            return preview[2], False
+        if preview is not None and preview[:3] == (text, tuple(self._history), speaker):
+            self._remember(text, preview[3], speaker)
+            return preview[3], False
         return None
 
-    def translate_stream(self, text, on_sentence):
+    def translate_stream(self, text, on_sentence, *, speaker=None):
         """Deliver completed sentences early; commit cache/context only on success."""
         if not text or not text.strip():
             return "", False
         if self._source_language == "Auto":
             self._detected_language = detect_language(text)
-        ready = self._ready_translation(text)
+        ready = self._ready_translation(text, speaker)
         if ready is not None:
             on_sentence(ready[0])
             return ready
@@ -384,7 +404,7 @@ class LLMTranslator:
             self.load()
         raw, emitted, complete = "", 0, False
         try:
-            for token, done in self._stream_chat(self._build_messages(text)):
+            for token, done in self._stream_chat(self._build_messages(text, speaker)):
                 raw += token
                 complete |= done
                 # Hide reasoning even when its tags span network packets. Keep
@@ -413,8 +433,7 @@ class LLMTranslator:
         if remainder:
             on_sentence(remainder)
         if result:
-            self._cache.put(text, result)
-            self._history.append((text, result))
+            self._remember(text, result, speaker)
         return result, False
 
     def _stream_chat(self, messages):

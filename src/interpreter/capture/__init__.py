@@ -3,6 +3,7 @@
 import os
 import platform
 import time
+from collections.abc import Callable
 from typing import Protocol
 
 import numpy as np
@@ -165,6 +166,7 @@ class WindowCapture:
         capture_interval: float = 0.25,
         window_id: int | None = None,
         bounds: dict | None = None,
+        on_frame_ready: Callable[["WindowCapture"], None] | None = None,
     ):
         """Initialize the window capture.
 
@@ -173,6 +175,7 @@ class WindowCapture:
             capture_interval: Seconds between background captures (Linux only).
             window_id: Optional window ID to use directly (skips title search).
             bounds: Optional window bounds if window_id is provided.
+            on_frame_ready: Optional Windows callback, invoked on the capture thread.
         """
         self.window_title = window_title
         self._window_id: int | None = window_id
@@ -180,6 +183,7 @@ class WindowCapture:
         self._last_bounds: dict | None = bounds
         self._stream: CaptureStream | None = None
         self._capture_interval = capture_interval
+        self._on_frame_ready = on_frame_ready
 
     def find_window(self) -> bool:
         """Find and cache the window ID.
@@ -325,7 +329,7 @@ class WindowCapture:
         # Create platform-specific stream
         if _system == "Windows":
             # Windows uses HWND for reliable capture (immune to dynamic titles)
-            self._stream = CaptureStream(self._window_id)
+            self._stream = CaptureStream(self._window_id, self._notify_frame if self._on_frame_ready else None)
         elif _system == "Linux":
             # Linux uses background thread with configurable interval
             self._stream = CaptureStream(self._window_id, self._capture_interval)
@@ -336,12 +340,16 @@ class WindowCapture:
         self._stream.start()
         return True
 
-    def get_frame(self) -> NDArray[np.uint8] | None:
-        """Get the latest frame from the capture stream.
+    def _notify_frame(self):
+        if self._on_frame_ready is not None:
+            self._on_frame_ready(self)
 
-        Returns:
-            Numpy array (H, W, 4) in BGRA format, or None if no frame available.
-        """
+    def get_frame(self) -> NDArray[np.uint8] | None:
+        """Get the latest frame from the capture stream."""
+        return self.get_frame_with_timestamp()[0]
+
+    def get_frame_with_timestamp(self) -> tuple[NDArray[np.uint8] | None, float | None]:
+        """Read the latest frame and its capture time when available."""
         global _invalid_time
 
         # No stream - try to find window and start one
@@ -349,7 +357,7 @@ class WindowCapture:
             if self.find_window():
                 logger.debug("window found, starting stream", window_id=self._window_id)
                 self.start_stream()
-            return None
+            return None, None
 
         # Check if window became invalid (e.g., fullscreen transition)
         if hasattr(self._stream, "window_invalid") and self._stream.window_invalid:
@@ -366,9 +374,12 @@ class WindowCapture:
                 logger.debug("stream restarted", window_id=self._window_id)
             else:
                 logger.debug("window not found during recovery")
-            return None  # No frame this iteration
+            return None, None
 
-        frame = self._stream.get_frame()
+        if _system == "Windows" and self._on_frame_ready is not None:
+            frame, captured_at = self._stream.get_frame_with_timestamp()
+        else:
+            frame, captured_at = self._stream.get_frame(), None
 
         # Double-check: window might have become invalid between our initial check and now
         if hasattr(self._stream, "window_invalid") and self._stream.window_invalid:
@@ -379,7 +390,7 @@ class WindowCapture:
             if self.find_window():
                 logger.debug("window found", old_id=old_id, new_id=self._window_id)
                 self.start_stream()
-            return None  # Discard stale frame
+            return None, None  # Discard stale frame
 
         # Log recovery timing when we get first frame after window change
         if frame is not None and _invalid_time > 0:
@@ -391,7 +402,7 @@ class WindowCapture:
         if frame is not None and self._window_id is not None:
             self._refresh_bounds()
 
-        return frame
+        return frame, captured_at
 
     def stop_stream(self):
         """Stop the background capture stream."""

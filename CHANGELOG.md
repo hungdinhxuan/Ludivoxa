@@ -3,6 +3,21 @@
 All notable Ludivoxa changes are recorded here. This project uses version tags
 such as `v1.0.0`; numbering is independent of the upstream Interpreter project.
 
+## Unreleased
+
+## [1.3.0] - 2026-11-19
+
+- Select and edit multiple OCR boxes per source. OCR reads the selected pixels
+  in one pass and retains the original positions for overlays.
+- Label the bundled Nano voice presets. Allow per-character gender overrides
+  and use the recognized speaker and gender for translation context, including
+  in overlay-only mode. Keep translations and speculative previews scoped to
+  the speaker so similar lines retain the right forms of address.
+- Dispatch Windows window frames to OCR as soon as capture delivers them.
+  Confirm speech on a fresh frame after the text stabilization window and
+  retain a fallback for static windows. Skip image comparisons when the
+  recognized dialogue already matches the last accepted line.
+
 ## [1.2.0] - 2026-11-18
 
 - Add experimental per-game character voices: select a speaker-name area,

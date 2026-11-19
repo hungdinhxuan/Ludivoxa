@@ -1,10 +1,12 @@
 """Main application window with settings and controls."""
 
+import math
 import threading
 import time
 
+import numpy as np
 from PIL import Image, ImageDraw
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QFont, QImage, QKeySequence, QPixmap
 from PySide6.QtMultimedia import QMediaDevices
 from PySide6.QtWidgets import (
@@ -47,7 +49,7 @@ from ..config import (
     OwocrSettings,
     PaddleSettings,
     TranslationBackend,
-    normalize_ocr_region,
+    normalize_ocr_regions,
 )
 from ..languages import DEFAULT_SOURCE_LANGUAGE
 from ..llm_translate import (
@@ -76,7 +78,7 @@ from ..permissions import (
     request_accessibility,
     request_screen_recording,
 )
-from ..speech import DEFAULT_VOICE_PATH, SpeechController, SpeechStream, available_voices, voice_details
+from ..speech import DEFAULT_VOICE_PATH, SpeechController, SpeechStream, available_voices, voice_details, voice_label
 from ..translate import SUGOI_ONLY_JAPANESE, SUGOI_SOURCE_LANGUAGE
 from . import keyboard
 from .character_voices import CharacterVoicesDialog
@@ -95,6 +97,7 @@ MAX_FONT_SIZE = 72
 # off the UI thread. Preview painting keeps its original, lower refresh rate.
 PROCESS_INTERVAL_MS = 150
 PREVIEW_INTERVAL_MS = 500
+CAPTURE_IDLE_SECONDS = 0.8
 NO_SIGNAL_NOTICE_MS = 3000  # video device session without frames before the status bar says so
 
 
@@ -104,6 +107,7 @@ class MainWindow(QMainWindow):
     # Signals for thread-safe hotkey handling
     hotkey_pressed = Signal()
     mode_switch_pressed = Signal()
+    _capture_frame_ready = Signal(object)
 
     # Results of background endpoint queries (list of models, or (translation, ms)); str = error
     _llm_models_result = Signal(object)
@@ -184,9 +188,7 @@ class MainWindow(QMainWindow):
             # Ensure banner is visible (handles monitor changes, resolution changes, etc.)
             self._banner_overlay.clamp_to_visible_area()
 
-        # Capture polling and preview painting use separate rates.
-        self._process_timer = QTimer()
-        self._process_timer.timeout.connect(self._capture_and_process)
+        self._setup_capture_timers()
         self._last_frame = None
         self._last_bounds = {}
         self._preview_updated_at = float("-inf")
@@ -203,6 +205,19 @@ class MainWindow(QMainWindow):
         self.resize(self.width(), max(self.height(), 680))
         self._refresh_sources()
         self._load_models()
+
+    def _setup_capture_timers(self):
+        # Windows publishes frames as they arrive. Polling also handles source
+        # recovery, preview/overlay position and captures without notifications.
+        self._process_timer = QTimer(self)
+        self._process_timer.timeout.connect(self._capture_and_process)
+        self._capture_frame_ready.connect(self._on_capture_frame_ready, Qt.ConnectionType.QueuedConnection)
+        self._capture_idle_timer = QTimer(self)
+        self._capture_idle_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._capture_idle_timer.setSingleShot(True)
+        self._capture_idle_timer.timeout.connect(self._capture_and_process)
+        self._last_ocr_capture = None
+        self._last_ocr_capture_seen_at = 0.0
 
     def _create_worker(self) -> ProcessWorker:
         """Create the OCR/translation worker and wire its signals."""
@@ -1548,7 +1563,9 @@ class MainWindow(QMainWindow):
         bounds = window.get("bounds")
 
         try:
-            self._capture = WindowCapture(title, window_id=window_id, bounds=bounds)
+            self._capture = WindowCapture(
+                title, window_id=window_id, bounds=bounds, on_frame_ready=self._queue_capture_frame
+            )
             if not self._capture.find_window():
                 self._stop_capture()
                 self.statusBar().showMessage("Window not found")
@@ -1566,7 +1583,6 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"Capture failed: {display_msg}")
             return
 
-        # Start single timer for capture + processing (fixed 2 FPS)
         self._process_timer.setInterval(PROCESS_INTERVAL_MS)
         self._process_timer.start()
 
@@ -1740,6 +1756,8 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_speech"):
             self._speech.stop(reset=True, reason="capture stopped")
         self._process_timer.stop()
+        self._capture_idle_timer.stop()
+        self._last_ocr_capture = None
         self._capturing = False
         self._capture_generation += 1
         self._process_worker.discard_pending_frames()
@@ -1961,6 +1979,17 @@ class MainWindow(QMainWindow):
                 self._inplace_overlay.position_over_window(self._last_bounds)
             self._inplace_overlay.show()
 
+    def _queue_capture_frame(self, capture):
+        try:
+            self._capture_frame_ready.emit(capture)
+        except RuntimeError:
+            pass  # Capture notification raced with Qt teardown.
+
+    @Slot(object)
+    def _on_capture_frame_ready(self, capture):
+        if self._capturing and capture is self._capture:
+            self._capture_and_process()
+
     def _capture_and_process(self):
         """Capture a frame and process it through OCR and translation."""
         if not self._capture:
@@ -1968,7 +1997,10 @@ class MainWindow(QMainWindow):
 
         # Get frame using unified capture interface
         try:
-            frame = self._capture.get_frame()
+            if isinstance(self._capture, WindowCapture):
+                frame, captured_at = self._capture.get_frame_with_timestamp()
+            else:
+                frame, captured_at = self._capture.get_frame(), None
         except Exception as e:
             logger.error("capture frame failed", error=str(e))
             self._stop_capture()
@@ -1995,6 +2027,10 @@ class MainWindow(QMainWindow):
             overlay.ensure_above(getattr(self._capture, "window_id", None))
 
         if frame is None:
+            if self._last_ocr_capture is not None:
+                self._capture_idle_timer.stop()
+                self._last_ocr_capture = None
+                self._process_worker.discard_pending_frames()
             # Display/session changes can interrupt window capture too. Show a
             # notice rather than leaving an unexplained frozen preview/overlay.
             self._frames_missing += 1
@@ -2028,28 +2064,39 @@ class MainWindow(QMainWindow):
         if self._mode == OverlayMode.INPLACE and bounds and not self._paused:
             self._inplace_overlay.position_over_window(bounds)
 
+        if self._paused and not (self._config.tts_enabled or self._ocr_config_dialog):
+            return
+
+        if captured_at is not None:
+            frame_key = (self._capture_generation, captured_at, id(frame))
+            new_frame = frame_key != self._last_ocr_capture
+            if new_frame:
+                self._last_ocr_capture_seen_at = now
+            remaining = CAPTURE_IDLE_SECONDS - (now - self._last_ocr_capture_seen_at)
+            if remaining > 0:
+                if new_frame or not self._capture_idle_timer.isActive():
+                    self._capture_idle_timer.start(max(10, math.ceil(remaining * 1000)))
+                if not new_frame and not self._ocr_config_dialog:
+                    return
+            else:
+                # A static window can stop publishing. Re-read the valid frame
+                # via the normal settle rules so static dialogue still speaks.
+                captured_at = None
+            self._last_ocr_capture = frame_key
+
         # Apply exclusion zones before OCR
         frame_for_ocr, origin = self._prepare_ocr_frame(frame)
-        speaker_context = None
-        if frame_for_ocr is not None:
-            frame_for_ocr, speaker_context = self._prepare_character_ocr(frame, frame_for_ocr, origin)
-
-        # Process through OCR and translation (on worker thread)
-        if frame_for_ocr is not None and (not self._paused or self._config.tts_enabled or self._ocr_config_dialog):
-            if speaker_context is not None:
-                self._process_worker.submit_frame(
-                    frame_for_ocr,
-                    self._capture_generation,
-                    origin=origin,
-                    preview_only=bool(self._ocr_config_dialog),
-                    speaker_context=speaker_context,
-                )
-            elif origin != (0, 0) or self._ocr_config_dialog:
-                self._process_worker.submit_frame(
-                    frame_for_ocr, self._capture_generation, origin=origin, preview_only=bool(self._ocr_config_dialog)
-                )
-            else:
-                self._process_worker.submit_frame(frame_for_ocr, self._capture_generation)
+        if frame_for_ocr is None:
+            return
+        frame_for_ocr, speaker_context = self._prepare_character_ocr(frame, frame_for_ocr, origin)
+        options = {}
+        if origin != (0, 0) or self._ocr_config_dialog or speaker_context is not None:
+            options.update(origin=origin, preview_only=bool(self._ocr_config_dialog))
+        if speaker_context is not None:
+            options["speaker_context"] = speaker_context
+        if captured_at is not None:
+            options["captured_at"] = captured_at
+        self._process_worker.submit_frame(frame_for_ocr, self._capture_generation, **options)
 
     def _update_capture_preview(self, frame):
         """Paint the preview/editor independently of the OCR polling rate."""
@@ -2071,11 +2118,12 @@ class MainWindow(QMainWindow):
         zones = self._config.get_exclusion_zones(self._current_window_title) if region is None else []
         if region:
             draw = ImageDraw.Draw(preview, "RGBA")
-            x, y = int(region["x"] * preview_w), int(region["y"] * preview_h)
-            right = int((region["x"] + region["width"]) * preview_w)
-            bottom = int((region["y"] + region["height"]) * preview_h)
-            draw.rectangle([x, y, right, bottom], outline=(79, 140, 255, 255), width=3)
-            draw.text((x + 4, y + 4), "Translation box", fill=(79, 140, 255, 255))
+            for box in normalize_ocr_regions(region):
+                x, y = int(box["x"] * preview_w), int(box["y"] * preview_h)
+                right = int((box["x"] + box["width"]) * preview_w)
+                bottom = int((box["y"] + box["height"]) * preview_h)
+                draw.rectangle([x, y, right, bottom], outline=(79, 140, 255, 255), width=3)
+                draw.text((x + 4, y + 4), "Translation box", fill=(79, 140, 255, 255))
         if zones:
             draw = ImageDraw.Draw(preview, "RGBA")
             for zone in zones:
@@ -2283,7 +2331,7 @@ class MainWindow(QMainWindow):
         except (OSError, ValueError, TypeError, KeyError):
             speakers = [("Default speaker", 0)]
         for label, index in speakers:
-            self._tts_speaker_combo.addItem(label, index)
+            self._tts_speaker_combo.addItem(voice_label(self._config.tts_model_path, label), index)
         index = self._tts_speaker_combo.findData(self._config.tts_speaker_id)
         self._tts_speaker_combo.setCurrentIndex(max(0, index))
         self._tts_speaker_combo.blockSignals(False)
@@ -2410,16 +2458,31 @@ class MainWindow(QMainWindow):
         region = self._selected_ocr_region()
         if region is None:
             return self._apply_exclusion_zones(frame), (0, 0)
-        region = normalize_ocr_region(region)
-        if not region:
+        regions = normalize_ocr_regions(region)
+        if not regions:
             return None, (0, 0)  # Selected-box mode with no box never scans outside it.
         height, width = frame.shape[:2]
-        left, top = int(region["x"] * width), int(region["y"] * height)
-        right = min(width, round((region["x"] + region["width"]) * width))
-        bottom = min(height, round((region["y"] + region["height"]) * height))
-        if right <= left or bottom <= top:
-            return None, (left, top)
-        return frame[top:bottom, left:right], (left, top)
+        boxes = []
+        for box in regions:
+            left, top = int(box["x"] * width), int(box["y"] * height)
+            right = min(width, round((box["x"] + box["width"]) * width))
+            bottom = min(height, round((box["y"] + box["height"]) * height))
+            if right > left and bottom > top:
+                boxes.append((left, top, right, bottom))
+        if not boxes:
+            return None, (0, 0)
+        left, top = min(b[0] for b in boxes), min(b[1] for b in boxes)
+        right, bottom = max(b[2] for b in boxes), max(b[3] for b in boxes)
+        cropped = frame[top:bottom, left:right]
+        if len(boxes) == 1:
+            return cropped, (left, top)
+        # Preserve reading order and overlay coordinates. Mask the spaces
+        # between boxes and scan overlapping pixels only once.
+        masked = np.zeros_like(cropped)
+        for x1, y1, x2, y2 in boxes:
+            selection = np.s_[y1 - top : y2 - top, x1 - left : x2 - left]
+            masked[selection] = cropped[selection]
+        return masked, (left, top)
 
     def _prepare_character_ocr(self, full_frame, dialogue_frame, origin):
         """Separate name OCR from dialogue, including outside the selected box."""
@@ -2443,7 +2506,9 @@ class MainWindow(QMainWindow):
         if x2 > x1 and y2 > y1:
             dialogue_frame = dialogue_frame.copy()
             dialogue_frame[y1:y2, x1:x2] = 0
-        if not self._config.tts_enabled or self._config.output_mode == OutputMode.OVERLAY:
+        if self._config.translation_backend != TranslationBackend.LLM and (
+            not self._config.tts_enabled or self._config.output_mode == OutputMode.OVERLAY
+        ):
             return dialogue_frame, None
         return dialogue_frame, (self._current_window_title, profile, name_frame)
 

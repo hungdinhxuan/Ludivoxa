@@ -43,6 +43,32 @@ def _openai_reply(content: str | None) -> dict:
     return {"choices": [{"message": {"role": "assistant", "content": content}}]}
 
 
+@pytest.mark.parametrize("provider,reply", [("ollama", _ollama_reply), ("openai", _openai_reply)])
+def test_speaker_is_scoped_in_http_context_cache_and_preview(provider, reply):
+    translator = LLMTranslator(
+        LLMSettings(provider=provider, context_lines=2, system_prompt="Translate to Vietnamese.")
+    )
+    translator._loaded = True
+    translator._session.post = post = MagicMock(
+        side_effect=[_response(reply("Em sẽ đợi.")), _response(reply("Anh sẽ đợi."))]
+    )
+    source = "I'll wait."
+    try:
+        assert translator.preview_translation(source, speaker=("Alice", "female")) == "Em sẽ đợi."
+        assert translator.translate(source, speaker=("Bob", "male")) == ("Anh sẽ đợi.", False)
+        messages = post.call_args.kwargs["json"]["messages"]
+        assert messages[0]["content"].startswith("Translate to Vietnamese.")
+        assert json.loads(messages[-1]["content"]) == {"speaker": "Bob", "gender": "male", "dialogue": source}
+        assert translator.translate(source, speaker=("Bob", "male")) == ("Anh sẽ đợi.", True)
+        history = translator._build_messages("Ready?", ("Alice", "female"))
+        assert json.loads(history[1]["content"])["speaker"] == "Bob"
+        assert json.loads(history[-1]["content"])["speaker"] == "Alice"
+        assert translator._cache.get(source) is None
+        assert post.call_count == 2
+    finally:
+        translator._session.close()
+
+
 class TestNormalizeBaseUrl:
     def test_ollama_strips_v1_and_trailing_slash(self):
         assert normalize_base_url("ollama", "http://127.0.0.1:11434/v1/") == "http://127.0.0.1:11434"

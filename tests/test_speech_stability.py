@@ -22,10 +22,10 @@ def dialogue(monkeypatch):
     spoken = []
     worker.speech_ready.connect(lambda text, generation: spoken.append((text, generation)))
 
-    def frame(text, at, generation=1):
+    def frame(text, at, generation=1, *, captured_at=None):
         clock[0] = at
         worker._ocr.extract_text_regions.return_value = [OCRResult(text)] if text else []
-        worker._process_frame("frame", generation)
+        worker._process_frame("frame", generation, captured_at=captured_at)
 
     return worker, frame, spoken
 
@@ -53,6 +53,29 @@ def test_word_by_word_render_pauses_do_not_speak_partial_sentences(dialogue):
     frame("Hello brave hero.", 1.8)
     assert spoken == [("VI: Hello brave hero.", 1)]
     worker._translator.translate.assert_called_once_with("Hello brave hero.")
+
+
+def test_waiting_until_deadline_cannot_confirm_an_earlier_capture(dialogue):
+    _, frame, spoken = dialogue
+    frame("Wait.", 0.03, captured_at=0.0)
+    frame("Wait.", 0.28, captured_at=0.25)
+    frame("Wait.", 0.46, captured_at=0.25)
+    assert not spoken
+    frame("Wait. I heard a noise.", 0.53, captured_at=0.5)
+    frame("Wait. I heard a noise.", 1.56, captured_at=1.0)
+    assert not spoken
+    frame("Wait. I heard a noise.", 1.78, captured_at=1.75)
+    frame("Wait. I heard a noise.", 2.03, captured_at=2.0)
+    assert spoken == [("VI: Wait. I heard a noise.", 1)]
+
+
+def test_idle_capture_fallback_can_confirm_static_dialogue(dialogue):
+    _, frame, spoken = dialogue
+    frame("Still here.", 0.03, captured_at=0.0)
+    frame("Still here.", 0.43, captured_at=0.0)
+    assert not spoken
+    frame("Still here.", 0.8)
+    assert spoken == [("VI: Still here.", 1)]
 
 
 def test_ocr_flicker_and_punctuation_do_not_repeat_spoken_source(dialogue):
@@ -451,7 +474,12 @@ def test_proven_render_variant_is_cached_and_cache_resets_on_new_dialogue(visual
     monkeypatch.setattr(ProcessWorker, "_same_pixel_text", staticmethod(helper))
     observe("Pokemon", 0, first)
     observe("Pokemon", 0.4, first)
+    comparison = MagicMock(wraps=worker._same_spoken_image)
+    monkeypatch.setattr(worker, "_same_spoken_image", comparison)
+    observe("Pokemon", 0.6, first)
+    comparison.assert_not_called()
     observe("Pokamon", 1, shifted)
+    comparison.assert_called_once()
     assert helper.call_count == 1
     for at in (1.4, 2, 2.4, 3, 3.4):
         observe("Pokamon", at, shifted)

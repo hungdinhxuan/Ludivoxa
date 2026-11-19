@@ -14,26 +14,25 @@ Người dùng mới: từ [bộ offline v1.1.1](https://github.com/hungdinhxuan
 Không dùng nút **Source code** để cài app: đó là mã nguồn, không chứa runtime
 và model. Bản offline có dung lượng khoảng 4,9 GB; app cài xong khoảng 6,4 GB.
 Python và Ollama đã có sẵn trong bộ cài. Cài đặt mặc định theo tài khoản người
-dùng. Sau đó cài **v1.2.0 App-Update** qua tab **Updates** hoặc
-[bản phát hành ổn định](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.2.0).
+dùng. Sau đó cài **v1.3.0 App-Update** qua tab **Updates** hoặc
+[bản phát hành ổn định](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.3.0).
 
 ## Dịch hội thoại
 
 1. Mở game, mở Ludivoxa, chọn **Refresh** rồi chọn đúng cửa sổ game.
 2. Chờ OCR, translation và voice sẵn sàng, rồi chọn **Start Capture**.
-3. Mở **Configure OCR** → **Scan: Only selected box**.
-4. Kéo khoanh phần hội thoại và nhấn **OK**.
+3. Mở **Configure OCR** → **Scan: Only selected boxes**.
+4. Kéo khoanh từng vùng hội thoại, rồi nhấn **OK**.
 
 Từ v1.1.3, **Configure OCR** nằm trên thanh đầu cửa sổ app. Trong dialog,
 **OK / Cancel / Clear** luôn ở trên cùng; nội dung bên dưới có thể cuộn và
 preview tự co theo kích thước cửa sổ để dùng trên màn hình remote nhỏ.
 
-Box xanh có thể kéo để di chuyển, kéo góc để đổi kích thước, hoặc chỉnh bằng
-các ô phần trăm. **Use bottom dialogue box** tạo vùng khởi đầu ở phía dưới.
-**Clear Box** cho phép vẽ lại. Box được lưu riêng cho từng tên cửa sổ/nguồn,
-theo tỷ lệ ảnh nên vẫn dùng được khi đổi độ phân giải.
+Kéo trên vùng trống để thêm ô xanh. Bấm chọn một ô để di chuyển, kéo góc,
+chỉnh phần trăm hoặc dùng **Remove Selected Box**. **Use bottom dialogue box**
+thêm một ô ở phía dưới. Các ô lưu riêng theo cửa sổ và dùng tọa độ theo tỷ lệ ảnh.
 
-Chỉ box đó được đưa vào OCR. Trong lúc chỉnh, app chỉ xem trước kết quả OCR,
+Chỉ phần bên trong các ô được đưa vào OCR. Trong lúc chỉnh, app chỉ xem trước kết quả OCR,
 không dịch và không đọc TTS. **Cancel** không lưu chỉnh sửa. Box trống không
 tự quay về quét cả màn hình. **Full window (use exclusions)** dùng lại cách
 exclude cũ; các exclude cũ vẫn được giữ khi chuyển chế độ.
@@ -93,8 +92,9 @@ còn chữ không xóa bộ nhớ chống lặp; câu đang phát không bị ng
 
 1. Chọn cửa sổ game trong mục **Capture**, bắt đầu capture, rồi mở **Character voices…** ở đầu app.
 2. Chọn **Select name area…**, khoanh riêng nhãn tên người đang nói và nhấn **OK**.
-3. Nhập tên nhân vật đúng như game hiển thị, chọn **Voice preset**, rồi **Add / update**.
-   Dùng **Test selected voice** để nghe thử preset. Gán một lần cho mỗi tên; không phân biệt hoa/thường.
+3. Nhập tên như game hiển thị, chọn **Voice preset** và **Character gender**, rồi **Add / update**.
+   **From preset** lấy nhãn của giọng Nano. Chọn giới tính trực tiếp nếu nhân vật
+   khác nhãn giọng, hoặc dùng **Default voice** để chỉ gán giới tính.
 4. Bật **Automatically select a voice from the speaker name**, rồi **OK** để lưu theo game.
 
 Khi đang capture, hộp thoại chỉnh cửa sổ đang được chụp. Khi đã dừng,
@@ -106,6 +106,11 @@ nó nằm ngoài box hội thoại hoặc trong vùng exclude. Tên chưa gán/l
 giọng mặc định và mẫu clone hiện có; nhân vật đã gán dùng preset trong cùng model.
 Khi đổi model giọng, cần chọn lại preset tương ứng. Giọng được chốt cho từng câu;
 đổi tên nhân vật không cắt câu đang đọc. Game cần hiển thị nhãn tên rõ ràng.
+
+Tên và giới tính của người đang nói được gửi trong chính lượt dịch để LLM
+chọn cách xưng hô theo ngữ cảnh. Khi chưa rõ, LLM có thể dựa vào hội thoại
+hoặc dùng cách xưng hô trung tính. Một ô tên xác định người nói hiện tại cho
+các ô hội thoại. [Nhãn giọng Nano của nhà phát hành](https://huggingface.co/pnnbao-ump/VieNeu-TTS-v3-Nano/blob/main/README.md#-preset-voices-11)
 
 ## Remote Desktop trên Windows
 
@@ -154,9 +159,9 @@ nguyên bản; không tự làm nhẹ, tăng nặng hay thêm chi tiết. Prompt
 
 ## Cập nhật ứng dụng
 
-Để lên **v1.2.0**, dùng tab **Updates**, hoặc tải
-`Ludivoxa-1.2.0-App-Update.exe` từ
-[bản phát hành ổn định](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.2.0)
+Để lên **v1.3.0**, dùng tab **Updates**, hoặc tải
+`Ludivoxa-1.3.0-App-Update.exe` từ
+[bản phát hành ổn định](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.3.0)
 và chọn thư mục Ludivoxa đang cài. Gói cập nhật giữ model/runtime/cấu hình.
 Người dùng mới cần cài bộ offline v1.1.1 ở đầu hướng dẫn trước.
 Các bản v1.1.1, v1.1.2-rc.1, v1.1.2 và v1.1.3 đều cập nhật được qua tab Updates.

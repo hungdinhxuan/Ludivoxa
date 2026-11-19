@@ -9,20 +9,20 @@ Ludivoxa được phát triển từ [Interpreter](https://github.com/bquenin/in
 của qube/bquenin, giữ pipeline và giao diện Qt hiện có. Dự án này bắt đầu bằng
 **v1.0.0**, độc lập với phiên bản của upstream.
 
-**Bản ổn định mới nhất [v1.2.0](docs/releases/v1.2.0.md)** thêm giọng theo tên
-nhân vật và giảm lỗi đọc lặp. Bản đã cài có thể nâng cấp qua **Updates**.
+**Bản ổn định mới nhất [v1.3.0](docs/releases/v1.3.0.md)** hỗ trợ chọn nhiều vùng
+OCR, dịch theo thông tin nhân vật và chuyển khung Windows nhanh hơn. Bản đã cài
+có thể nâng cấp qua **Updates**.
 Người dùng mới cài bộ offline v1.1.1 trước rồi cập nhật app.
 
-## Có gì trong v1.2.0?
+## Có gì trong v1.3.0?
 
-Mở **Character voices…**, khoanh vùng tên và gán preset cho từng nhân vật.
-App đọc tên riêng và tự chọn giọng khi gặp tên đã gán. Cấu hình lưu theo game,
-và tên chưa gán dùng giọng mặc định. Bản này cũng lọc mũi tên chuyển câu bị OCR
-nhận thành chữ. [Ghi chú bản phát hành](docs/releases/v1.2.0.md)
+Mở **Configure OCR** để chọn nhiều ô hội thoại. Trong **Character voices…**,
+khoanh vùng tên rồi gán giọng và giới tính cho từng nhân vật. LLM dùng thông tin
+người nói để chọn cách xưng hô phù hợp. [Ghi chú bản phát hành](docs/releases/v1.3.0.md)
 
 - OCR Anh/Nhật offline, phát hiện ngôn ngữ hoặc chọn thủ công.
-- Khoanh box hội thoại để chỉ quét phần cần dịch; lưu riêng theo game. Cách
-  exclude cũ vẫn có thể dùng lại.
+- Khoanh nhiều vùng hội thoại để chỉ quét phần cần dịch. Vùng chọn lưu riêng
+  theo game. Bạn vẫn có thể chuyển sang quét toàn cửa sổ hoặc loại trừ.
 - Ollama local hoặc OpenAI-compatible/GPU server LAN; giữ context, prompt tùy
   chỉnh, mặc định dịch sang tiếng Việt và không tự fallback sang cloud.
 - Overlay, TTS hoặc cả hai; tự đọc mỗi bản dịch ổn định mới.
@@ -54,6 +54,7 @@ mili giây; càng thấp càng nhanh.
 | v1.1.2 stable — đúng tag phát hành² | **867,7 ms** | **966,3 ms** | **1.355,9 ms** |
 | v1.1.3 stable | Chưa đo | Chưa đo | Chưa đo |
 | v1.2.0 stable | Phép đo riêng bên dưới | Chưa đo | Chưa đo |
+| v1.3.0 stable | Phát lại khung riêng | Phát lại khung riêng | Chưa đo |
 
 Máy đo: Windows 11, Core i7-13700F, RTX 4090 24 GB. Hai lượt dùng cùng ảnh
 hội thoại đã khoanh box, OCR Anh → dịch Việt, HauhauCS Qwen3 4B Q4_K_M local,
@@ -114,6 +115,11 @@ quét riêng ô hội thoại giảm trung vị **72 ms (7,5%)**, với TTFA tru
 **0,82 giây**. Các phép đo dùng mã bản ứng viên và khung hình đã lưu, nên chưa
 tính thời gian chữ chạy và chờ câu trước phát xong.
 
+**Phát lại khung với v1.3.0.** Cùng Gemma và VieNeu, TTFA trung vị của bốn
+cặp khung tổng hợp là **1,20 giây khi kiểm tra theo timer** và **0,95 giây
+khi nhận khung qua thông báo**, giảm trung vị **209 ms theo cặp**. Đo tiếng
+đầu tiên qua WASAPI. Xem [từng lượt và phạm vi đo](docs/PERFORMANCE.md#v130-windows-frame-replay).
+
 ## Cài Windows offline
 
 Từ [bộ offline v1.1.1](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1), tải EXE và
@@ -122,9 +128,9 @@ Từ [bộ offline v1.1.1](https://github.com/hungdinhxuan/Ludivoxa/releases/tag
 Python, Ollama, OCR/TTS models và HauhauCS Qwen3 4B Aggressive Q4_K_M đã có sẵn.
 Bản build chưa ký số. Các file Source code tự động của GitHub không chứa model.
 
-Sau đó vào tab **Updates** để cập nhật v1.2.0 (cũng hỗ trợ từ v1.1.2rc1).
-Nếu dùng v1.0.0 hoặc muốn cập nhật thủ công, tải **Ludivoxa-1.2.0-App-Update.exe**
-từ [v1.2.0](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.2.0), chạy
+Sau đó vào tab **Updates** để cập nhật v1.3.0 (cũng hỗ trợ từ v1.1.2rc1).
+Nếu dùng v1.0.0 hoặc muốn cập nhật thủ công, tải **Ludivoxa-1.3.0-App-Update.exe**
+từ [v1.3.0](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.3.0), chạy
 và chọn đúng thư mục app đang dùng. Gói nhỏ giữ nguyên cấu hình, Ollama và
 model; v1.0.0 chưa có updater nên cần nâng cấp thủ công một lần.
 

@@ -170,11 +170,11 @@ class TranslationCache:
             max_size: Maximum number of entries to store.
             similarity_threshold: Minimum similarity ratio for fuzzy match (0.0-1.0).
         """
-        self._cache: dict[str, str] = {}
+        self._cache: dict[tuple[tuple[str, str] | None, str], str] = {}
         self._max_size = max_size
         self._similarity_threshold = similarity_threshold
 
-    def get(self, text: str) -> str | None:
+    def get(self, text: str, *, scope: tuple[str, str] | None = None) -> str | None:
         """Get cached translation, using fuzzy matching if exact match not found.
 
         Args:
@@ -184,13 +184,16 @@ class TranslationCache:
             Cached translation if found, None otherwise.
         """
         # Try exact match first
-        if text in self._cache:
-            return self._cache[text]
+        key = scope, text
+        if key in self._cache:
+            return self._cache[key]
 
         # Try fuzzy match
         facts = self._facts(text)
         words = re.findall(r"\w+", text.casefold())
-        for cached_text, translation in self._cache.items():
+        for (cached_scope, cached_text), translation in self._cache.items():
+            if cached_scope != scope:
+                continue
             cached_words = re.findall(r"\w+", cached_text.casefold())
             if words != cached_words and (
                 words[: len(cached_words)] == cached_words or cached_words[: len(words)] == words
@@ -211,7 +214,7 @@ class TranslationCache:
         )
         return numbers, negation
 
-    def put(self, text: str, translation: str) -> None:
+    def put(self, text: str, translation: str, *, scope: tuple[str, str] | None = None) -> None:
         """Store a translation in the cache.
 
         Args:
@@ -219,11 +222,12 @@ class TranslationCache:
             translation: English translation.
         """
         # Simple LRU: remove oldest entry if at capacity
-        if len(self._cache) >= self._max_size and text not in self._cache:
+        key = scope, text
+        if len(self._cache) >= self._max_size and key not in self._cache:
             oldest_key = next(iter(self._cache))
             del self._cache[oldest_key]
 
-        self._cache[text] = translation
+        self._cache[key] = translation
 
 
 class Translator:

@@ -204,6 +204,15 @@ def normalize_ocr_region(value):
     return {"x": x, "y": y, "width": right - x, "height": bottom - y}
 
 
+def normalize_ocr_regions(value) -> list[dict]:
+    """Accept both legacy rectangles and lists of selected boxes."""
+    entries = value if isinstance(value, list) else [value]
+    return [region for entry in entries if (region := normalize_ocr_region(entry)) is not None]
+
+
+CHARACTER_GENDERS = ("male", "female", "nonbinary", "unknown")
+
+
 def character_name(text: str) -> str:
     """Normalize a name label without guessing identity or gender."""
     return " ".join(unicodedata.normalize("NFKC", str(text)).split()).strip(' :：「」『』【】[]"“”')[:64]
@@ -217,6 +226,7 @@ class CharacterVoices:
     name_region: dict | None = None
     model_path: str = ""
     voices: dict[str, int] = dataclass_field(default_factory=dict)
+    genders: dict[str, str] = dataclass_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data):
@@ -232,11 +242,19 @@ class CharacterVoices:
                 continue
             if character_name(name) and index >= 0 and str(index) == str(value):
                 voices[character_name(name)] = index
+        genders = data.get("genders")
         return cls(
             enabled=data.get("enabled") is True,
             name_region=normalize_ocr_region(data.get("name_region")),
             model_path=data.get("model_path", "") if isinstance(data.get("model_path"), str) else "",
             voices=voices,
+            genders={
+                character_name(name): value
+                for name, value in genders.items()
+                if isinstance(name, str) and character_name(name) and value in CHARACTER_GENDERS
+            }
+            if isinstance(genders, dict)
+            else {},
         )
 
     def to_dict(self):
@@ -259,6 +277,10 @@ class CharacterVoices:
             return None
         key = character_name(name).casefold()
         return next((index for label, index in self.voices.items() if label.casefold() == key), None)
+
+    def gender_for(self, name):
+        key = character_name(name).casefold()
+        return next((value for label, value in self.genders.items() if label.casefold() == key), None)
 
 
 class Config:
@@ -357,9 +379,9 @@ class Config:
         self.ocr_regions = {}
         if isinstance(ocr_regions, dict):
             for title, value in ocr_regions.items():
-                region = normalize_ocr_region(value)
-                if region:
-                    self.ocr_regions[str(title)] = region
+                boxes = normalize_ocr_regions(value)
+                if boxes:
+                    self.ocr_regions[str(title)] = boxes[0] if len(boxes) == 1 else boxes
         # Per-window OCR confidence: {"window_title": 0.55, ...}
         self.ocr_confidence_per_window = ocr_confidence_per_window if ocr_confidence_per_window is not None else {}
         self.character_voices = {
@@ -557,9 +579,11 @@ hotkeys:
         """
         return self.exclusion_zones.get(window_title, [])
 
-    def get_ocr_region(self, window_title: str) -> dict | None:
-        """Selected translation box, or None for full-window/exclusion mode."""
+    def get_ocr_region(self, window_title: str) -> dict | list[dict] | None:
+        """Selected translation boxes, or None for full-window/exclusion mode."""
         region = self.ocr_regions.get(window_title)
+        if isinstance(region, list):
+            return [box.copy() for box in region]
         return region.copy() if region else None
 
     def get_character_voices(self, window_title: str) -> CharacterVoices:
@@ -569,14 +593,14 @@ hotkeys:
     def set_character_voices(self, window_title: str, profile: CharacterVoices):
         self.character_voices[window_title] = CharacterVoices.from_dict(profile.to_dict())
 
-    def set_ocr_region(self, window_title: str, region: dict | None) -> None:
+    def set_ocr_region(self, window_title: str, region: dict | list[dict] | None) -> None:
         if region is None:
             self.ocr_regions.pop(window_title, None)
             return
-        normalized = normalize_ocr_region(region)
-        if normalized is None:
+        boxes = normalize_ocr_regions(region)
+        if not boxes:
             raise ValueError("Select a non-empty OCR box inside the image.")
-        self.ocr_regions[window_title] = normalized
+        self.ocr_regions[window_title] = boxes[0] if len(boxes) == 1 else boxes
 
     def set_exclusion_zones(self, window_title: str, zones: list[dict]) -> None:
         """Set exclusion zones for a specific window title.

@@ -97,14 +97,19 @@ def routed_worker(qapp, monkeypatch):
 
     worker._ocr.extract_text_regions.side_effect = ocr
 
-    def observe(text, name="Alice", at=0.0, generation=1, use_profile=True):
+    def observe(text, name="Alice", at=0.0, generation=1, use_profile=True, *, captured_at=None):
         clock[0], current[0] = at, text
         pixels = np.full((60, 200, 4), (next(k for k, v in labels.items() if v == name),) * 4, dtype=np.uint8)
         if name:
             cv2.putText(pixels, name, (8, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (235,) * 4, 2)
         body = np.full((100, 500, 4), 20, dtype=np.uint8)
         cv2.putText(body, text, (20, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (235,) * 4, 2)
-        worker._process_frame(body, generation, speaker_context=("Game", profile, pixels) if use_profile else None)
+        worker._process_frame(
+            body,
+            generation,
+            speaker_context=("Game", profile, pixels) if use_profile else None,
+            captured_at=captured_at,
+        )
 
     return worker, profile, observe, streams, names, name_calls, labels
 
@@ -126,6 +131,16 @@ def test_new_confirmed_speaker_can_say_identical_words_once(routed_worker):
         for delta in (0.0, 0.15, 0.3, 0.45, 0.6):
             observe("Yes.", name, index + delta)
     assert [s.speaker_id for s in streams] == [1, 2]
+
+
+def test_native_name_samples_settle_by_capture_time_without_repeating_ocr(routed_worker):
+    _, _, observe, streams, names, name_calls, _ = routed_worker
+    observe("Hello.", at=0.10, captured_at=0.0)
+    observe("Hello.", at=0.26, captured_at=0.24)
+    assert names == [("Alice", True, 1)]
+    assert len(name_calls) == 1 and not streams
+    observe("Hello.", at=0.51, captured_at=0.5)
+    assert len(streams) == 1 and streams[0].speaker_id == 1
 
 
 def test_name_ocr_jitter_on_unchanged_pixels_cannot_replay_a_line(routed_worker):
@@ -353,7 +368,8 @@ def test_complete_ocr_cached_llm_gui_and_speech_route_same_words_to_two_voices(r
     worker._config.translation_backend = TranslationBackend.LLM
     client = LLMTranslator(worker._config.llm, source_language="English")
     client._loaded = True
-    client._cache.put("Yes.", "Vâng.")
+    for name in ("Alice", "Bob"):
+        client._cache.put("Yes.", "Vâng.", scope=(name, "unknown"))
     client._session.post = MagicMock(side_effect=AssertionError("No extra LLM call is allowed"))
     worker._translator = client
     synth, player = MagicMock(), Player()
@@ -377,6 +393,34 @@ def test_complete_ocr_cached_llm_gui_and_speech_route_same_words_to_two_voices(r
         client._session.close()
 
 
+def test_character_metadata_from_preset_and_override_reaches_overlay_translation(routed_worker, monkeypatch):
+    import json
+
+    from interpreter.config import OutputMode
+    from interpreter.gui import workers
+    from interpreter.llm_translate import LLMTranslator
+
+    worker, profile, observe, _, _, _, _ = routed_worker
+    worker._config.output_mode = OutputMode.OVERLAY
+    profile.genders = {"bob": "nonbinary"}
+    monkeypatch.setattr(workers, "voice_gender", lambda _, label: {"One": "female", "Two": "male"}.get(label))
+    client = LLMTranslator(worker._config.llm, source_language="English")
+    client._loaded = True
+    client._chat = MagicMock(side_effect=["Vâng.", "Được rồi."])
+    worker._translator = client
+    try:
+        for index, name in enumerate(("Alice", "Bob")):
+            for delta in (0.0, 0.15, 0.3, 0.45):
+                observe("Yes.", name, index + delta)
+        payloads = [json.loads(call.args[0][-1]["content"]) for call in client._chat.call_args_list]
+        assert payloads == [
+            {"speaker": "Alice", "gender": "female", "dialogue": "Yes."},
+            {"speaker": "Bob", "gender": "nonbinary", "dialogue": "Yes."},
+        ]
+    finally:
+        client._session.close()
+
+
 def test_dialog_requires_name_area_and_saves_assignments_without_mutating_input(qapp, monkeypatch):
     from interpreter.gui import character_voices
 
@@ -390,10 +434,12 @@ def test_dialog_requires_name_area_and_saves_assignments_without_mutating_input(
         dialog._profile.name_region = REGION
         dialog._name.setText("Alice")
         dialog._preset.setCurrentIndex(dialog._preset.findData(2))
+        dialog._gender.setCurrentIndex(dialog._gender.findData("female"))
         dialog._add_name()
         dialog.accept()
         assert dialog.result() == dialog.DialogCode.Accepted
         assert dialog.get_profile().voices == {"Alice": 2}
+        assert dialog.get_profile().gender_for("ALICE") == "female"
         assert original.voices == {} and original.name_region is None
     finally:
         dialog.close()

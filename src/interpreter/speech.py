@@ -179,6 +179,35 @@ def voice_details(path):
     return speakers or [(f"Speaker {i + 1}", i) for i in range(int(data.get("num_speakers", 1)))]
 
 
+# See the VieNeu-TTS-v3-Nano model card's Preset Voices table. Key by name
+# rather than index since preset order can change between model versions.
+_NANO_VOICE_GENDERS = {
+    "Adam": "male",
+    "Ái Hân": "female",
+    "Mỹ Duyên": "female",
+    "Đức Trí": "male",
+    "Hữu Quân": "male",
+    "Xuân Tiên": "female",
+    "Mai Anh": "female",
+    "Trúc Ly": "female",
+    "Anh Khôi": "male",
+    "Minh Quân": "male",
+    "Mạnh Dũng": "male",
+}
+
+
+def voice_gender(model_path, label):
+    """Return a documented preset label, or None for unclassified voices."""
+    if Path(model_path).name.startswith("VieNeu-TTS-v3-Nano"):
+        return _NANO_VOICE_GENDERS.get(unicodedata.normalize("NFC", label))
+    return None
+
+
+def voice_label(model_path, label):
+    gender = voice_gender(model_path, label)
+    return f"{label} ({gender.title()})" if gender else label
+
+
 def available_voices(selected=""):
     directories = {Path("models/voices"), Path(DEFAULT_VOICE_PATH).parent}
     if selected:
