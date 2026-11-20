@@ -28,6 +28,7 @@ logger = log.get_logger()
 SPEAKER_INSTRUCTIONS = (
     "Some user messages contain JSON with speaker, gender, and dialogue fields. "
     "Translate only dialogue. Speaker information is context for pronouns and forms of address. "
+    "Do not add a speaker label or repeat metadata in the reply. Keep names spoken within the dialogue. "
     "The gender refers to the speaker, not the listener. Use the dialogue and previous lines to infer "
     "relationships. For an unspecified gender, don't infer gender from a name or age. "
     "Use neutral wording, such as tôi, mình, or an omitted pronoun in Vietnamese, unless dialogue establishes gender. "
@@ -57,7 +58,7 @@ DEFAULT_SYSTEM_PROMPT = (
     "Keep profanity, insults, slang and sexual wording as direct or euphemistic as the original; "
     "do not soften, censor, intensify or invent details. "
     "Keep polite language polite and neutral language neutral. "
-    "Keep character names as they appear, keep menu items in the same order, "
+    "Keep names that appear in the dialogue, keep menu items in the same order, "
     "and do not add explanations, notes, transliterations or quotation marks. "
     "Output only the translation."
 )
@@ -194,12 +195,25 @@ def _reject_redirect(response):
         )
 
 
-def clean_output(raw: str) -> str:
+def _speaker_label_pattern(speaker):
+    if not speaker or not speaker[0]:
+        return None
+    name = re.escape(speaker[0])
+    return re.compile(
+        rf'^\s*(?:"\s*)?(?:{name}\s*[:：]|\*\*{name}(?:\s*[:：]\*\*|\*\*\s*[:：])|'
+        rf"\[\s*{name}\s*\]\s*[:：]?)\s*",
+        re.IGNORECASE,
+    )
+
+
+def clean_output(raw: str, *, speaker_label=None) -> str:
     """Strip reasoning blocks, wrapping quotes and odd Unicode from a model reply."""
     text = THINK_BLOCK_RE.sub("", raw or "").strip()
     # Models sometimes quote the whole translation; drop a single outer pair.
     if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'" and text[0] not in text[1:-1]:
         text = text[1:-1].strip()
+    if speaker_label is not None:
+        text = speaker_label.sub("", text, count=1)
     return normalize_output(text)
 
 
@@ -334,7 +348,7 @@ class LLMTranslator:
         except requests.RequestException as e:
             raise LLMTranslationError(describe_request_error(e, self._settings)) from e
 
-        result = clean_output(raw)
+        result = clean_output(raw, speaker_label=_speaker_label_pattern(speaker))
         if not result:
             logger.warning("empty translation from endpoint", text=text[:50])
             return "", False
@@ -374,7 +388,9 @@ class LLMTranslator:
             self._detected_language = detect_language(text)
         context = tuple(self._history)
         try:
-            result = clean_output(self._chat(self._build_messages(text, speaker)))
+            result = clean_output(
+                self._chat(self._build_messages(text, speaker)), speaker_label=_speaker_label_pattern(speaker)
+            )
         except requests.RequestException as exc:
             raise LLMTranslationError(describe_request_error(exc, self._settings)) from exc
         self._preview = (text, context, speaker, result) if result else None
@@ -402,6 +418,8 @@ class LLMTranslator:
             return ready
         if not self._loaded:
             self.load()
+        speaker_label = _speaker_label_pattern(speaker)
+        speaker_name = speaker[0].casefold() if speaker_label is not None else ""
         raw, emitted, complete = "", 0, False
         try:
             for token, done in self._stream_chat(self._build_messages(text, speaker)):
@@ -410,6 +428,16 @@ class LLMTranslator:
                 # Hide reasoning even when its tags span network packets. Keep
                 # the original prefix so quotes/normalization cannot move offsets.
                 visible = re.sub(r"<think>.*?(?:</think>|$)", "", raw, flags=re.DOTALL | re.IGNORECASE)
+                if speaker_label is not None:
+                    label = speaker_label.match(visible)
+                    if label:
+                        visible = visible[label.end() :]
+                    elif (
+                        not emitted
+                        and not complete
+                        and speaker_name.startswith(visible.strip(' \t\r\n"[*]:：').casefold())
+                    ):
+                        continue  # A fragmented label can contain initials ending in a period.
                 # Require whitespace after punctuation: don't split decimals,
                 # abbreviations arriving in pieces, or a final wrapping quote.
                 for boundary in re.finditer(r"[.!?。！？]+[\"'”’]*\s+", visible):
@@ -427,8 +455,7 @@ class LLMTranslator:
                 raise LLMTranslationError("Translation stream ended before completion.")
         except requests.RequestException as exc:
             raise LLMTranslationError(describe_request_error(exc, self._settings)) from exc
-        result = clean_output(raw)
-        visible = re.sub(r"<think>.*?(?:</think>|$)", "", raw, flags=re.DOTALL | re.IGNORECASE)
+        result = clean_output(raw, speaker_label=speaker_label)
         remainder = clean_output(visible[emitted:]).strip('"')
         if remainder:
             on_sentence(remainder)

@@ -50,7 +50,7 @@ def test_speaker_is_scoped_in_http_context_cache_and_preview(provider, reply):
     )
     translator._loaded = True
     translator._session.post = post = MagicMock(
-        side_effect=[_response(reply("Em sẽ đợi.")), _response(reply("Anh sẽ đợi."))]
+        side_effect=[_response(reply("Alice: Em sẽ đợi.")), _response(reply("**Bob:** Anh sẽ đợi."))]
     )
     source = "I'll wait."
     try:
@@ -58,10 +58,12 @@ def test_speaker_is_scoped_in_http_context_cache_and_preview(provider, reply):
         assert translator.translate(source, speaker=("Bob", "male")) == ("Anh sẽ đợi.", False)
         messages = post.call_args.kwargs["json"]["messages"]
         assert messages[0]["content"].startswith("Translate to Vietnamese.")
+        assert "speaker label" in messages[0]["content"]
         assert json.loads(messages[-1]["content"]) == {"speaker": "Bob", "gender": "male", "dialogue": source}
         assert translator.translate(source, speaker=("Bob", "male")) == ("Anh sẽ đợi.", True)
         history = translator._build_messages("Ready?", ("Alice", "female"))
         assert json.loads(history[1]["content"])["speaker"] == "Bob"
+        assert history[2]["content"] == "Anh sẽ đợi."
         assert json.loads(history[-1]["content"])["speaker"] == "Alice"
         assert translator._cache.get(source) is None
         assert post.call_count == 2

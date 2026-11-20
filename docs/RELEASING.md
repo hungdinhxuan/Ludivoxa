@@ -8,17 +8,17 @@ streaming speech and latency improvements. Use patch
 version **1.1.1** fixes OCR/TTS repeats and audio formats. The published v1.0.0 has no updater;
 its users must install the first updater-enabled version manually once.
 
-**v1.3.0 stable** uses Python/AppVersion `1.3.0` and Windows numeric version
-`1.3.0.0`. Build and test a fresh app stage. The app-only installer uses the
+**v1.3.1 stable** uses Python/AppVersion `1.3.1` and Windows numeric version
+`1.3.1.0`. Build and test a fresh app stage. The app-only installer uses the
 existing offline models and runtime.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1 -AppDirectory build/v1.3.0-app/Interpreter -OutputDirectory dist/app-update/v1.3.0
-uv run python packaging/package_release.py --output dist/releases/v1.3.0 --source-commit $releaseCommit --app build/v1.3.0-app/Interpreter/Interpreter.exe --app-update dist/app-update/v1.3.0/Ludivoxa-1.3.0-App-Update.exe
+powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1 -AppDirectory build/v1.3.1-app/Interpreter -OutputDirectory dist/app-update/v1.3.1
+uv run python packaging/package_release.py --output dist/releases/v1.3.1 --source-commit $releaseCommit --app build/v1.3.1-app/Interpreter/Interpreter.exe --app-update dist/app-update/v1.3.1/Ludivoxa-1.3.1-App-Update.exe
 ```
 
-Publish `v1.3.0` with `prerelease=false` and `make_latest=true`. Verify that
-anonymous clients from v1.1.1 through v1.2.0 can download and verify the stable
+Publish `v1.3.1` with `prerelease=false` and `make_latest=true`. Verify that
+anonymous clients from v1.1.1 through v1.3.0 can download and verify the stable
 update. New users install
 the full offline v1.1.1 package before this update.
 

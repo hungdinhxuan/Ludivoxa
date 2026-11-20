@@ -1,5 +1,23 @@
 # Validation and performance
 
+## v1.3.1 Windows frame replay
+
+On 2026-11-20, the release source replayed two synthetic English dialogue
+inputs at four frames per second with the Windows capture notification path.
+The run used warm PP-OCRv5 on CPU, local Gemma 4 E4B Q4_K_M with three seeded
+context pairs, and VieNeu Nano preset 7. Speaker metadata was enabled. Translation
+and audio caches were reset per trial.
+
+| Synthetic input | WASAPI trials | Median TTFA |
+| --- | --- | ---: |
+| Short dialogue | 925.52, 882.31, 897.24 ms | **897.24 ms** |
+| Two sentences | 1,001.66, 1,017.59, 1,014.42 ms | **1,014.42 ms** |
+
+Each trial matched the first speech in WASAPI loopback and generated one
+utterance. Timing starts when a complete frame is published. This run uses
+a separate playback endpoint and does not establish a speed change versus
+v1.3.0. Live rendering, FPS, long passages and RDP were outside the benchmark.
+
 ## v1.3.0 Windows frame replay
 
 On 2026-11-19, the release candidate replayed two synthetic English dialogue

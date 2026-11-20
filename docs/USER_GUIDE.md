@@ -14,8 +14,8 @@ Người dùng mới: từ [bộ offline v1.1.1](https://github.com/hungdinhxuan
 Không dùng nút **Source code** để cài app: đó là mã nguồn, không chứa runtime
 và model. Bản offline có dung lượng khoảng 4,9 GB; app cài xong khoảng 6,4 GB.
 Python và Ollama đã có sẵn trong bộ cài. Cài đặt mặc định theo tài khoản người
-dùng. Sau đó cài **v1.3.0 App-Update** qua tab **Updates** hoặc
-[bản phát hành ổn định](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.3.0).
+dùng. Sau đó cài **v1.3.1 App-Update** qua tab **Updates** hoặc
+[bản phát hành ổn định](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.3.1).
 
 ## Dịch hội thoại
 
@@ -109,7 +109,8 @@ Khi đổi model giọng, cần chọn lại preset tương ứng. Giọng đư�
 
 Tên và giới tính của người đang nói được gửi trong chính lượt dịch để LLM
 chọn cách xưng hô theo ngữ cảnh. Khi chưa rõ, LLM có thể dựa vào hội thoại
-hoặc dùng cách xưng hô trung tính. Một ô tên xác định người nói hiện tại cho
+hoặc dùng cách xưng hô trung tính. TTS đọc phần lời thoại và giữ tên được nhắc
+trong câu. Một ô tên xác định người nói hiện tại cho
 các ô hội thoại. [Nhãn giọng Nano của nhà phát hành](https://huggingface.co/pnnbao-ump/VieNeu-TTS-v3-Nano/blob/main/README.md#-preset-voices-11)
 
 ## Remote Desktop trên Windows
@@ -159,9 +160,9 @@ nguyên bản; không tự làm nhẹ, tăng nặng hay thêm chi tiết. Prompt
 
 ## Cập nhật ứng dụng
 
-Để lên **v1.3.0**, dùng tab **Updates**, hoặc tải
-`Ludivoxa-1.3.0-App-Update.exe` từ
-[bản phát hành ổn định](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.3.0)
+Để lên **v1.3.1**, dùng tab **Updates**, hoặc tải
+`Ludivoxa-1.3.1-App-Update.exe` từ
+[bản phát hành ổn định](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.3.1)
 và chọn thư mục Ludivoxa đang cài. Gói cập nhật giữ model/runtime/cấu hình.
 Người dùng mới cần cài bộ offline v1.1.1 ở đầu hướng dẫn trước.
 Các bản v1.1.1, v1.1.2-rc.1, v1.1.2 và v1.1.3 đều cập nhật được qua tab Updates.

@@ -9,9 +9,9 @@ Ludivoxa được phát triển từ [Interpreter](https://github.com/bquenin/in
 của qube/bquenin, giữ pipeline và giao diện Qt hiện có. Dự án này bắt đầu bằng
 **v1.0.0**, độc lập với phiên bản của upstream.
 
-**Bản ổn định mới nhất [v1.3.0](docs/releases/v1.3.0.md)** hỗ trợ chọn nhiều vùng
-OCR, dịch theo thông tin nhân vật và chuyển khung Windows nhanh hơn. Bản đã cài
-có thể nâng cấp qua **Updates**.
+**Bản ổn định mới nhất [v1.3.1](docs/releases/v1.3.1.md)** sửa lỗi đọc lặp khi OCR
+tên nhân vật dao động. Tên trong vùng OCR riêng dùng để chọn giọng và giúp LLM
+chọn cách xưng hô. Bản đã cài có thể nâng cấp qua **Updates**.
 Người dùng mới cài bộ offline v1.1.1 trước rồi cập nhật app.
 
 ## Có gì trong v1.3.0?
@@ -55,6 +55,7 @@ mili giây; càng thấp càng nhanh.
 | v1.1.3 stable | Chưa đo | Chưa đo | Chưa đo |
 | v1.2.0 stable | Phép đo riêng bên dưới | Chưa đo | Chưa đo |
 | v1.3.0 stable | Phát lại khung riêng | Phát lại khung riêng | Chưa đo |
+| v1.3.1 stable | Mẫu ngắn tổng hợp bên dưới | **1.014,42 ms** qua phát lại khung | Chưa đo |
 
 Máy đo: Windows 11, Core i7-13700F, RTX 4090 24 GB. Hai lượt dùng cùng ảnh
 hội thoại đã khoanh box, OCR Anh → dịch Việt, HauhauCS Qwen3 4B Q4_K_M local,
@@ -120,6 +121,10 @@ cặp khung tổng hợp là **1,20 giây khi kiểm tra theo timer** và **0,95
 khi nhận khung qua thông báo**, giảm trung vị **209 ms theo cặp**. Đo tiếng
 đầu tiên qua WASAPI. Xem [từng lượt và phạm vi đo](docs/PERFORMANCE.md#v130-windows-frame-replay).
 
+**Phát lại khung với v1.3.1.** TTFA trung vị là **897,24 ms** với mẫu hội thoại
+ngắn và **1.014,42 ms** với hai câu tiếng Anh, mỗi trường hợp đo ba lượt qua
+WASAPI. [Từng lượt và cấu hình đo](docs/PERFORMANCE.md#v131-windows-frame-replay)
+
 ## Cài Windows offline
 
 Từ [bộ offline v1.1.1](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1), tải EXE và
@@ -128,9 +133,9 @@ Từ [bộ offline v1.1.1](https://github.com/hungdinhxuan/Ludivoxa/releases/tag
 Python, Ollama, OCR/TTS models và HauhauCS Qwen3 4B Aggressive Q4_K_M đã có sẵn.
 Bản build chưa ký số. Các file Source code tự động của GitHub không chứa model.
 
-Sau đó vào tab **Updates** để cập nhật v1.3.0 (cũng hỗ trợ từ v1.1.2rc1).
-Nếu dùng v1.0.0 hoặc muốn cập nhật thủ công, tải **Ludivoxa-1.3.0-App-Update.exe**
-từ [v1.3.0](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.3.0), chạy
+Sau đó vào tab **Updates** để cập nhật v1.3.1 (cũng hỗ trợ từ v1.1.2rc1).
+Nếu dùng v1.0.0 hoặc muốn cập nhật thủ công, tải **Ludivoxa-1.3.1-App-Update.exe**
+từ [v1.3.1](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.3.1), chạy
 và chọn đúng thư mục app đang dùng. Gói nhỏ giữ nguyên cấu hình, Ollama và
 model; v1.0.0 chưa có updater nên cần nâng cấp thủ công một lần.
 

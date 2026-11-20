@@ -5,6 +5,16 @@ such as `v1.0.0`; numbering is independent of the upstream Interpreter project.
 
 ## Unreleased
 
+## [1.3.1] - 2026-11-20
+
+- Keep already spoken dialogue from replaying when name OCR alternates among
+  unconfigured speaker labels. Two configured characters can still speak the
+  same words using their own voices.
+- Use the speaker label only for voice routing and translation context. Strip
+  a matching label echoed at the start of an LLM reply before displaying or
+  speaking it, including when the label spans streaming packets. Keep names
+  that occur inside the dialogue.
+
 ## [1.3.0] - 2026-11-19
 
 - Select and edit multiple OCR boxes per source. OCR reads the selected pixels

@@ -28,6 +28,7 @@ class _CharacterBinding(NamedTuple):
     reference: str
     voice_settings: tuple
     gender: str | None = None
+    configured: bool = False
 
 
 # After this many consecutive runtime failures an engine is marked as failed
@@ -851,7 +852,7 @@ class ProcessWorker(QObject):
                 self._character_settling = False
         preset = profile.speaker_for(self._character_name, self._config.tts_model_path)
         mapped = preset in self._character_preset_genders
-        gender = profile.gender_for(self._character_name) or self._character_preset_genders.get(preset)
+        gender = profile.gender_for(self._character_name)
         state = self._character_name, mapped, generation
         if not self._character_settling and state != self._character_signal:
             self._character_signal = state
@@ -861,7 +862,8 @@ class ProcessWorker(QObject):
             preset if mapped else self._config.tts_speaker_id,
             "" if mapped else self._config.tts_reference_audio,
             self._voice_settings_key(),
-            gender,
+            gender or self._character_preset_genders.get(preset),
+            configured=preset is not None or gender is not None,
         )
 
     def _voice_settings_key(self):
@@ -967,15 +969,16 @@ class ProcessWorker(QObject):
         name_ocr_ms = int((time.perf_counter() - name_start) * 1000)
         ocr_ms += name_ocr_ms
         speaker = voice_binding.name.casefold() if voice_binding else ""
+        repeat_speaker = speaker if voice_binding and voice_binding.configured else ""
         if (
             not self._character_settling
-            and speaker
+            and repeat_speaker
             and self._spoken_character
-            and speaker != self._spoken_character
+            and repeat_speaker != self._spoken_character
             and self._spoken_source
         ):
-            # A confirmed new speaker may genuinely say the same short line.
-            # Unknown/late name recognition never replays an already read line.
+            # Two configured characters may genuinely say identical words.
+            # OCR variants of an unconfigured label cannot restart speech.
             self._spoken_source = ""
             self._spoken_snapshot = None
             self._spoken_complete = False
@@ -1090,7 +1093,7 @@ class ProcessWorker(QObject):
                 self._voice_settings_key(),
                 None,
             )
-            speaker = ""
+            speaker = repeat_speaker = ""
         source_complete = self._speech_candidate_cursor or bool(re.search(r"[.!?。！？…][\"'”’)]*\s*$", captured_text))
         if not source_key and self._spoken_source and now - self._speech_candidate_since >= 1.5:
             had_visible_baseline = self._spoken_snapshot is not None
@@ -1215,7 +1218,7 @@ class ProcessWorker(QObject):
                             if not streamed:
                                 streamed = True
                                 self._spoken_source = source_key
-                                self._spoken_character = speaker
+                                self._spoken_character = repeat_speaker
                                 self._spoken_snapshot = snapshot
                                 self._spoken_complete = source_complete
                                 self._suppressed_source = ""
@@ -1262,7 +1265,7 @@ class ProcessWorker(QObject):
             and self._config.output_mode != OutputMode.OVERLAY
         ):
             self._spoken_source = source_key
-            self._spoken_character = speaker
+            self._spoken_character = repeat_speaker
             self._spoken_snapshot = snapshot
             self._spoken_complete = source_complete
             self._suppressed_source = ""

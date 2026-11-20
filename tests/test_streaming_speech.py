@@ -81,6 +81,31 @@ def test_sentence_arrives_before_final_response_and_history_commits_once(provide
     response.__exit__.assert_called()
 
 
+@pytest.mark.parametrize("prefix", [("A. ", "J.:", " "), ("[A. ", "J.]\n", ""), ("**A. ", "J.:**", " ")])
+def test_stream_excludes_speaker_label_and_keeps_name_spoken_in_dialogue(prefix):
+    spoken = []
+    client, response = translator()
+    source = "Wait for me. A. J., can you hear me?"
+    speaker = ("A. J.", "unknown")
+
+    def packets():
+        for part in prefix:
+            yield packet(part)
+            assert spoken == []
+        yield packet("Đợi tôi nhé. ")
+        assert spoken == ["Đợi tôi nhé."]
+        yield packet("A. J., cậu nghe thấy tôi không?", True)
+
+    response.iter_lines.return_value = packets()
+    result, hit = client.translate_stream(source, spoken.append, speaker=speaker)
+    assert not hit and result == "Đợi tôi nhé. A. J., cậu nghe thấy tôi không?"
+    assert " ".join(spoken) == result
+    assert list(client._history) == [(source, result, speaker)]
+    spoken.clear()
+    assert client.translate_stream(source, spoken.append, speaker=speaker) == (result, True)
+    assert spoken == [result]
+
+
 @pytest.mark.parametrize(
     "lines",
     [

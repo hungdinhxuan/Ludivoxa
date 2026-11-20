@@ -133,6 +133,23 @@ def test_new_confirmed_speaker_can_say_identical_words_once(routed_worker):
     assert [s.speaker_id for s in streams] == [1, 2]
 
 
+@pytest.mark.parametrize("initial_name", ["Alice", "Eve"])
+def test_unconfigured_name_variants_cannot_replay_the_same_dialogue(routed_worker, initial_name):
+    worker, _, observe, streams, names, _, labels = routed_worker
+    labels[80] = "Al1ce"
+    line = "I heard something outside!"
+    for index, name in enumerate((initial_name, "Al1ce", "Eve", "Alice", "Al1ce", "Alice")):
+        for delta in (0.0, 0.3, 0.6):
+            observe(line, name, index + delta)
+    assert {entry[0] for entry in names} == {"Alice", "Al1ce", "Eve"}
+    assert [stream.speaker_name for stream in streams] == [initial_name]
+    worker._translator.translate.assert_called_once_with(line)
+
+    for at in (7.0, 7.3, 7.6):
+        observe("Let's go check.", "Alice", at)
+    assert [stream.speaker_id for stream in streams] == [1 if initial_name == "Alice" else 0, 1]
+
+
 def test_native_name_samples_settle_by_capture_time_without_repeating_ocr(routed_worker):
     _, _, observe, streams, names, name_calls, _ = routed_worker
     observe("Hello.", at=0.10, captured_at=0.0)
