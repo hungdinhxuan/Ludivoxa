@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..updates import RELEASES_URL, GitHubUpdates, UpdateCancelled, launch_update
+from ..updates import RELEASES_URL, DeltaUnavailable, GitHubUpdates, UpdateCancelled, launch_update
 from .theme import ERROR, OK
 
 
@@ -106,7 +106,8 @@ class UpdatesPage(QWidget):
         )
         self.cancel_button.setEnabled(self._busy)
         if self.release:
-            self.download_button.setText(f"Download update ({size_label(self.release.download_size)})")
+            label = "Download smaller update" if self.release.delta else "Download update"
+            self.download_button.setText(f"{label} ({size_label(self.release.download_size)})")
 
     def _task(self, action, operation):
         if self._busy or self._closed:
@@ -154,7 +155,11 @@ class UpdatesPage(QWidget):
         if self._busy or self.release is None:
             return
         release = self.release
-        self.status.setText(f"Downloading Ludivoxa {release.version}…")
+        self.status.setText(
+            "Checking installed files before downloading the smaller update…"
+            if release.delta
+            else f"Downloading Ludivoxa {release.version}…"
+        )
 
         def operation(cancel, generation):
             client = GitHubUpdates(cancel=cancel)
@@ -187,6 +192,8 @@ class UpdatesPage(QWidget):
 
     def _show_progress(self, generation, done, total):
         if generation == self._generation and self._busy and not self._closed:
+            if self.progress.maximum() == 0 and self.release and self.release.delta and not self._cancel.is_set():
+                self.status.setText(f"Downloading Ludivoxa {self.release.version}…")
             self.progress.setRange(0, 1000)
             self.progress.setValue(min(1000, int(done * 1000 / max(total, 1))))
             self.progress.setFormat(f"{done / max(total, 1):.0%} — {size_label(done)} / {size_label(total)}")
@@ -196,7 +203,11 @@ class UpdatesPage(QWidget):
             return
         self._busy = False
         self.progress.hide()
-        if isinstance(result, Exception):
+        if isinstance(result, DeltaUnavailable) and action == "download":
+            self.release = self.release.standard()
+            self.status.setText(f"{result} Select Download update to get the standard installer.")
+            self.status.setStyleSheet("")
+        elif isinstance(result, Exception):
             self.status.setText(str(result))
             self.status.setStyleSheet(f"color: {ERROR};" if not isinstance(result, UpdateCancelled) else "")
         elif action == "check":
@@ -208,6 +219,8 @@ class UpdatesPage(QWidget):
                     if result.app_only
                     else "Full offline installer download."
                 )
+                if result.delta:
+                    kind = "A smaller update is available if the installed files match."
                 self.status.setText(f"Ludivoxa {result.version} is available. {kind}")
                 self.update_available.emit(result.version)
             else:

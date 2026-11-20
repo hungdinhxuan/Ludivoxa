@@ -5,6 +5,12 @@ such as `v1.0.0`; numbering is independent of the upstream Interpreter project.
 
 ## Unreleased
 
+## [1.4.0] - 2026-11-20
+
+- Download smaller Windows updates when a release supplies a delta for the
+  installed version and its app files match. Offer the standard installer when
+  the delta is unavailable or fails verification.
+
 ## [1.3.1] - 2026-11-20
 
 - Keep already spoken dialogue from replaying when name OCR alternates among

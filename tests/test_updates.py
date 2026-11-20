@@ -244,3 +244,104 @@ def test_public_check_never_invokes_git_credential_helpers(monkeypatch):
     monkeypatch.setattr(u.subprocess, "run", git)
     assert client(metadata(tag="v1.0.0")).check("1.0.0") is None
     git.assert_not_called()
+
+
+@pytest.fixture
+def delta_package(tmp_path):
+    install = tmp_path / "installed app"
+    (install / "_internal").mkdir(parents=True)
+    exe = install / "Interpreter.exe"
+    exe.write_bytes(b"base app")
+    library = install / "_internal/Bình (sample).dll"
+    library.write_bytes(b"reused dependency")
+    (install / "config.yml").write_text("window_title: Game\n")
+    manifest = (
+        f"{u.file_hash(exe)}  Interpreter.exe\n"
+        f"{u.file_hash(library)}  _internal/{library.name}\n"
+        "-  _internal/new directory/new file.dat\n"
+    ).encode()
+    data = metadata()
+    standard = data["assets"][0]
+    standard_payload, patch = b"full installer" * 50, b"small installer"
+    standard["size"] = len(standard_payload)
+    delta_name = "Ludivoxa-1.0.1-Delta-from-1.0.0"
+    files = {standard["name"]: standard_payload, delta_name + ".exe": patch, delta_name + ".base.sha256": manifest}
+    data["assets"].extend(
+        {"name": name, "id": i, "size": len(files[name]), "state": "uploaded"}
+        for i, name in enumerate(list(files)[1:], start=3)
+    )
+    checksums = "".join(f"{hashlib.sha256(content).hexdigest()}  {name}\n" for name, content in files.items()).encode()
+    return data, exe, library, checksums, manifest, patch, standard_payload
+
+
+def test_delta_is_selected_only_for_exact_base_and_smaller_complete_pair(delta_package):
+    data, exe, *_ = delta_package
+    assert not client(data).check("1.0.0").delta  # Source run.
+    assert not client(data).check("0.9.9", executable=exe).delta
+    assert not client(data).check("1.0.0rc1", executable=exe).delta
+    delta = client(data).check("1.0.0", executable=exe).delta
+    assert delta.directory == exe.parent and delta.installer.name.endswith("Delta-from-1.0.0.exe")
+    data["assets"][-2]["size"] = data["assets"][0]["size"]
+    assert not client(data).check("1.0.0", executable=exe).delta
+    data["assets"].pop()
+    assert not client(data).check("1.0.0", executable=exe).delta
+
+
+def test_delta_preflights_base_downloads_only_small_assets_and_launches_verified_patch(
+    delta_package, tmp_path, monkeypatch
+):
+    data, exe, _, checksums, manifest, patch, _ = delta_package
+    release = client(data).check("1.0.0", executable=exe)
+    session = Session([Response(checksums), Response(manifest), Response(patch)])
+    progress = []
+    update = u.GitHubUpdates(session=session).download(release, tmp_path / "cache", lambda *args: progress.append(args))
+    total = len(manifest) + len(patch)
+    assert progress == [(len(manifest), total), (total, total)]
+    assert [url.rsplit("/", 1)[-1] for url, _ in session.calls] == ["2", "4", "3"]
+    assert update.installer.read_bytes() == patch
+    monkeypatch.setattr(u.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(u, "os", SimpleNamespace(name="nt", environ={}))
+    popen = MagicMock()
+    monkeypatch.setattr(u.subprocess, "Popen", popen)
+    u.launch_update(update, exe)
+    assert popen.call_args.args[0][0] == str(update.installer)
+
+
+@pytest.mark.parametrize("damage", ["missing_library", "changed_library", "occupied_new_path", "manifest", "patch"])
+def test_invalid_delta_offers_full_update_without_automatically_downloading_it(delta_package, tmp_path, damage):
+    data, exe, library, checksums, manifest, patch, standard = delta_package
+    release = client(data).check("1.0.0", executable=exe)
+    if damage == "missing_library":
+        library.unlink()
+    elif damage == "changed_library":
+        library.write_bytes(b"modified")
+    elif damage == "occupied_new_path":
+        other = exe.parent / "_internal/new directory/new file.dat"
+        other.parent.mkdir()
+        other.write_bytes(b"private")
+    elif damage == "manifest":
+        manifest = b"x" + manifest[1:]
+    elif damage == "patch":
+        patch = b"x" + patch[1:]
+    session = Session([Response(checksums), Response(manifest), Response(patch)])
+    cache = tmp_path / "cache"
+    with pytest.raises(u.DeltaUnavailable):
+        u.GitHubUpdates(session=session).download(release, cache)
+    assert len(session.calls) == (3 if damage == "patch" else 2)
+    assert not list(cache.rglob("*.exe")) and not list(cache.rglob("*.part"))
+    downloaded = u.GitHubUpdates(session=Session([Response(checksums), Response(standard)])).download(
+        release.standard(), cache
+    )
+    assert downloaded.installer.name.endswith("App-Update.exe") and downloaded.installer.read_bytes() == standard
+
+
+def test_delta_base_rejects_traversal_and_honors_cancellation(delta_package):
+    _, exe, _, _, manifest, *_ = delta_package
+    with pytest.raises(ValueError, match="manifest"):
+        u.verify_delta_base(manifest + b"-  _internal/../config.yml\n", exe.parent)
+
+    def cancel():
+        raise u.UpdateCancelled
+
+    with pytest.raises(u.UpdateCancelled):
+        u.verify_delta_base(manifest, exe.parent, cancel)

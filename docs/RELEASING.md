@@ -8,19 +8,19 @@ streaming speech and latency improvements. Use patch
 version **1.1.1** fixes OCR/TTS repeats and audio formats. The published v1.0.0 has no updater;
 its users must install the first updater-enabled version manually once.
 
-**v1.3.1 stable** uses Python/AppVersion `1.3.1` and Windows numeric version
-`1.3.1.0`. Build and test a fresh app stage. The app-only installer uses the
+**v1.4.0 stable** uses Python/AppVersion `1.4.0` and Windows numeric version
+`1.4.0.0`. Build and test a fresh app stage. The app-only installers use the
 existing offline models and runtime.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1 -AppDirectory build/v1.3.1-app/Interpreter -OutputDirectory dist/app-update/v1.3.1
-uv run python packaging/package_release.py --output dist/releases/v1.3.1 --source-commit $releaseCommit --app build/v1.3.1-app/Interpreter/Interpreter.exe --app-update dist/app-update/v1.3.1/Ludivoxa-1.3.1-App-Update.exe
+powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1 -AppDirectory build/v1.4.0-app/Interpreter -OutputDirectory dist/app-update/v1.4.0
 ```
 
-Publish `v1.3.1` with `prerelease=false` and `make_latest=true`. Verify that
-anonymous clients from v1.1.1 through v1.3.0 can download and verify the stable
-update. New users install
-the full offline v1.1.1 package before this update.
+Build the delta from the archived v1.3.1 onedir bundle and package both
+installers using the [smaller Windows updates](#smaller-windows-updates)
+instructions. Publish `v1.4.0` with `prerelease=false` and `make_latest=true`.
+Verify anonymous downloads of both packages. New users install the full
+offline v1.1.1 package before this update.
 
 For the earlier **v1.1.2-rc.1** prerelease, Python metadata uses `1.1.2rc1` and Windows
 numeric resources use `1.1.2.0`. Keep `AppVersion` and `AppNumericVersion` in
@@ -109,6 +109,47 @@ the full installer directory. The helper includes it in both
 The client prefers `Ludivoxa-X.Y.Z-App-Update.exe`, or downloads the full
 setup plus every numbered BIN when app-only is absent. Checksums and expected
 byte counts are required and verified again immediately before launch.
+
+### Smaller Windows updates
+
+For a stable release with compatible model and runtime formats, keep the
+standard app-only installer and optionally build a delta for a recent stable
+version. Use the **exact archived PyInstaller onedir build** shipped with that
+version. A rebuild of the same tag can have different file hashes.
+
+```powershell
+$previous = '1.3.1'
+$version = '<new stable version>'
+$baseApp = "build/v$previous-app/Interpreter"
+$targetApp = "build/v$version-app/Interpreter"
+$appUpdate = "dist/app-update/v$version/Ludivoxa-$version-App-Update.exe"
+$deltaDir = "dist/deltas/v$version"
+uv run python packaging/build_delta_update.py --base $baseApp --base-version $previous --app $targetApp --output $deltaDir
+uv run python packaging/package_release.py --output "dist/releases/v$version" --source-commit $releaseCommit `
+  --app "$targetApp/Interpreter.exe" --app-update $appUpdate `
+  --delta "$deltaDir/Ludivoxa-$version-Delta-from-$previous.exe"
+```
+
+The builder includes only changed and new app files, plus the installer's
+small support files. It records removed app files for cleanup. The `.exe` and
+its matching `.base.sha256` both go into the release checksums. Repeat `--delta`
+to support additional base versions. The packager requires a standard app
+update and a total delta size smaller than the standard installer.
+
+The new updater checks the installed version and verifies the app files against
+the release's base manifest before downloading the delta executable. The delta
+installer also verifies the base with its embedded copy before modifying files.
+If the files differ or the delta fails verification, the user can choose the
+standard download at its displayed size. Check an upgrade from an intact base
+and rejection of a changed base in an isolated install before publishing.
+Use the standard app update to repair an interrupted installation.
+
+Older updaters download the standard installer even when the first release with
+delta support also publishes a smaller installer. Users on the matching base
+can run that release's `Delta-from` executable manually after verifying its
+checksum. New installations still start with the full offline installer.
+
+### Install and restart
 
 Use `/LUDIVOXARESTART=1` only for user-requested in-app installation; the
 installer's extra Run entry restarts the app after a successful silent

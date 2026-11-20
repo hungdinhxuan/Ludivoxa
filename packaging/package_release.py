@@ -20,7 +20,7 @@ def sha256(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def prepare(installer, output, *, app=None, source_commit=None, app_update=None):
+def prepare(installer, output, *, app=None, source_commit=None, app_update=None, deltas=()):
     output = Path(output).resolve()
     if output.exists() and any(output.iterdir()):
         raise ValueError("Release output must be empty; existing assets are never overwritten.")
@@ -54,6 +54,24 @@ def prepare(installer, output, *, app=None, source_commit=None, app_update=None)
         source_assets.append(app_update)
     if not source_assets:
         raise ValueError("A full installer or app-update installer is required.")
+    delta_names = set()
+    for delta in deltas:
+        delta = Path(delta).resolve()
+        match = re.fullmatch(rf"Ludivoxa-{re.escape(VERSION)}-Delta-from-([0-9]+\.[0-9]+\.[0-9]+)\.exe", delta.name)
+        base = delta.with_suffix(".base.sha256")
+        if (
+            not match
+            or not app_update
+            or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", VERSION)
+            or tuple(map(int, match[1].split("."))) >= tuple(map(int, VERSION.split(".")))
+            or delta.name in delta_names
+            or any(path.is_relative_to(output) or not path.is_file() for path in (delta, base))
+            or not 0 < base.stat().st_size <= 4 * 1024 * 1024
+            or not 0 < delta.stat().st_size < app_update.stat().st_size - base.stat().st_size
+        ):
+            raise ValueError("Each delta needs a matching base manifest and a larger standard app-update fallback.")
+        delta_names.add(delta.name)
+        source_assets.extend([delta, base])
     output.mkdir(parents=True, exist_ok=True)
     for path in source_assets:
         shutil.copy2(path, output / path.name)
@@ -112,10 +130,16 @@ def main():
     parser.add_argument("--app", default="dist/Interpreter/Interpreter.exe")
     parser.add_argument("--source-commit")
     parser.add_argument("--app-update", help="Optional app-only installer, preferred by the in-app updater")
+    parser.add_argument("--delta", action="append", default=[], help="Optional delta installer; can be repeated")
     parser.add_argument("--local-zip", help="Optional local archive; too large for a single GitHub release asset")
     args = parser.parse_args()
     assets = prepare(
-        args.installer, args.output, app=args.app, source_commit=args.source_commit, app_update=args.app_update
+        args.installer,
+        args.output,
+        app=args.app,
+        source_commit=args.source_commit,
+        app_update=args.app_update,
+        deltas=args.delta,
     )
     if args.local_zip:
         local_zip(assets, args.local_zip)

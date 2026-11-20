@@ -97,3 +97,37 @@ def test_empty_release_and_overlapping_update_are_rejected(package):
     update.write_bytes(b"app update")
     with pytest.raises(ValueError, match="empty"):
         helper.prepare(None, output, app_update=update)
+
+
+def test_delta_pair_is_checksummed_and_keeps_the_standard_fallback(package, tmp_path, monkeypatch):
+    helper, _, output, _ = package
+    monkeypatch.setattr(helper, "VERSION", "1.0.1")
+    monkeypatch.setattr(helper, "TAG", "v1.0.1")
+    app_update = tmp_path / f"Ludivoxa-{helper.VERSION}-App-Update.exe"
+    delta = tmp_path / f"Ludivoxa-{helper.VERSION}-Delta-from-1.0.0.exe"
+    base = delta.with_suffix(".base.sha256")
+    app_update.write_bytes(b"standard installer" * 50)
+    delta.write_bytes(b"small installer")
+    base.write_bytes(b"base manifest")
+    assets = helper.prepare(None, output, app_update=app_update, deltas=[delta])
+    manifest = json.loads((output / "release-manifest.json").read_text())
+    assert manifest["installer"] == app_update.name
+    checksums = (output / "SHA256SUMS.txt").read_text()
+    for path in (delta, base, app_update):
+        assert output / path.name in assets
+        assert f"{helper.sha256(path)}  {path.name}\n" in checksums
+
+
+@pytest.mark.parametrize("damage", ["missing_manifest", "oversized_delta", "no_standard", "duplicate"])
+def test_packager_refuses_delta_without_smaller_pair_and_standard_fallback(package, tmp_path, damage):
+    helper, source, output, _ = package
+    app_update = tmp_path / f"Ludivoxa-{helper.VERSION}-App-Update.exe"
+    delta = tmp_path / f"Ludivoxa-{helper.VERSION}-Delta-from-1.0.0.exe"
+    app_update.write_bytes(b"standard installer" * 50)
+    delta.write_bytes(b"small installer" * (100 if damage == "oversized_delta" else 1))
+    if damage != "missing_manifest":
+        delta.with_suffix(".base.sha256").write_bytes(b"base manifest")
+    deltas = [delta] * (2 if damage == "duplicate" else 1)
+    with pytest.raises(ValueError, match="delta"):
+        helper.prepare(source, output, app_update=None if damage == "no_standard" else app_update, deltas=deltas)
+    assert not output.exists()

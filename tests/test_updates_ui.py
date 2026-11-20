@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication, QGroupBox, QLineEdit
 
 from interpreter.config import Config
 from interpreter.gui import updates_page as ui
-from interpreter.updates import Asset, Release, UpdateError
+from interpreter.updates import Asset, Delta, DeltaUnavailable, Release, UpdateError
 
 
 @pytest.fixture
@@ -123,3 +123,27 @@ def test_closed_page_discards_background_results(page):
     finish.set()
     QTest.qWait(20)
     assert widget.release is None
+
+
+def test_incompatible_delta_shows_standard_size_and_waits_for_new_download_click(page, tmp_path):
+    widget, client, *_ = page
+    full = Asset("Ludivoxa-1.0.1-App-Update.exe", 1, 320 * 1024**2)
+    small = Asset("Ludivoxa-1.0.1-Delta-from-1.0.0.exe", 2, 40 * 1024**2)
+    base = Asset("Ludivoxa-1.0.1-Delta-from-1.0.0.base.sha256", 3, 1024**2)
+    client.check.return_value = Release(
+        "v1.0.1", "New release", (full, small, base), True, Delta(small, base, tmp_path)
+    )
+    widget.check()
+    until(lambda: not widget._busy)
+    assert "smaller update (41.0 MB)" in widget.download_button.text()
+    client.download.side_effect = DeltaUnavailable("Installed files differ.")
+    widget.download()
+    until(lambda: not widget._busy)
+    assert client.download.call_count == 1 and not widget.install_button.isEnabled()
+    assert widget.download_button.text() == "Download update (320.0 MB)"
+    assert widget.download_button.isEnabled() and "Installed files differ" in widget.status.text()
+    client.download.side_effect = None
+    client.download.return_value = SimpleNamespace(directory=tmp_path)
+    widget.download()
+    until(lambda: not widget._busy)
+    assert client.download.call_args.args[0].installers == (full,)

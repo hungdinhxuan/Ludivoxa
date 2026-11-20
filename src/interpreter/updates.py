@@ -5,10 +5,12 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
@@ -18,6 +20,7 @@ REPOSITORY = "hungdinhxuan/Ludivoxa"
 RELEASES_URL = f"https://github.com/{REPOSITORY}/releases"
 API = f"https://api.github.com/repos/{REPOSITORY}/releases"
 CDN_HOSTS = {"release-assets.githubusercontent.com", "objects.githubusercontent.com"}
+DELTA_BASE_LIMIT = 4 * 1024 * 1024
 
 
 class UpdateError(Exception):
@@ -26,6 +29,10 @@ class UpdateError(Exception):
 
 class UpdateCancelled(UpdateError):
     pass
+
+
+class DeltaUnavailable(UpdateError):
+    """The user can retry with the standard installer."""
 
 
 def version_tuple(version):
@@ -49,6 +56,64 @@ def file_hash(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def verify_delta_base(raw, directory, check_cancel=lambda: None):
+    """Check managed files and reserve new paths without following reparse points."""
+    if _is_link(directory.lstat()):
+        return False
+    listings = {}
+
+    def entries(folder):
+        if folder not in listings:
+            if folder != directory:
+                parent = entries(folder.parent)
+                entry = parent.get(folder.name.lower())
+                if entry is None:
+                    listings[folder] = {}
+                    return listings[folder]
+                info = entry.stat(follow_symlinks=False)
+                if not stat.S_ISDIR(info.st_mode) or _is_link(info):
+                    raise ValueError("Invalid directory in the delta base")
+            # DirEntry caches metadata on Windows, avoiding a separate stat for each file.
+            with os.scandir(folder) as scan:
+                listings[folder] = {entry.name.lower(): entry for entry in scan}
+        return listings[folder]
+
+    seen = set()
+    includes_exe = False
+    for line in raw.decode("utf-8").splitlines():
+        digest, separator, name = line.partition("  ")
+        parts = name.split("/")
+        key = name.casefold()
+        if (
+            not separator
+            or not re.fullmatch(r"[0-9a-f]{64}|-", digest)
+            or (name != "Interpreter.exe" and not (len(parts) > 1 and parts[0] == "_internal"))
+            or len(parts) > 128
+            or any(not part or part.endswith((".", " ")) or re.search(r'[\x00-\x1f\\:<>"|?*]', part) for part in parts)
+            or key in seen
+        ):
+            raise ValueError("Invalid delta base manifest")
+        seen.add(key)
+        includes_exe |= name == "Interpreter.exe" and digest != "-"
+        check_cancel()
+        path = directory.joinpath(*parts)
+        entry = entries(path.parent).get(path.name.lower())
+        if entry is None:
+            if digest == "-":
+                continue
+            return False
+        info = entry.stat(follow_symlinks=False)
+        if digest == "-" or not stat.S_ISREG(info.st_mode) or _is_link(info) or file_hash(path) != digest:
+            return False
+    return includes_exe
+
+
+def _is_link(info):
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    )
+
+
 @dataclass(frozen=True)
 class Asset:
     name: str
@@ -57,11 +122,19 @@ class Asset:
 
 
 @dataclass(frozen=True)
+class Delta:
+    installer: Asset
+    base: Asset
+    directory: Path
+
+
+@dataclass(frozen=True)
 class Release:
     tag: str
     notes: str
     assets: tuple[Asset, ...]
     app_only: bool
+    delta: Delta | None = None
 
     @property
     def version(self):
@@ -69,6 +142,8 @@ class Release:
 
     @property
     def installers(self):
+        if self.delta:
+            return (self.delta.installer,)
         prefix = f"Ludivoxa-{self.version}-"
         if self.app_only:
             names = [prefix + "App-Update.exe"]
@@ -89,7 +164,10 @@ class Release:
 
     @property
     def download_size(self):
-        return sum(a.size for a in self.installers)
+        return sum(a.size for a in self.installers) + (self.delta.base.size if self.delta else 0)
+
+    def standard(self):
+        return replace(self, delta=None)
 
 
 @dataclass(frozen=True)
@@ -107,9 +185,9 @@ class DownloadedUpdate:
         for asset in self.release.installers:
             path = root / asset.name
             if (
-                path.is_symlink()
-                or path.parent != root
+                path.parent != root
                 or not path.is_file()
+                or _is_link(path.lstat())
                 or path.stat().st_size != asset.size
                 or file_hash(path) != self.checksums.get(asset.name)
             ):
@@ -183,7 +261,7 @@ class GitHubUpdates:
                 raise UpdateError("The update metadata is too large.")
         return bytes(result)
 
-    def check(self, current):
+    def check(self, current, *, executable=None):
         try:
             data = json.loads(self._small(API + "/latest", "application/vnd.github+json", 1024 * 1024))
             tag = data["tag_name"]
@@ -216,6 +294,22 @@ class GitHubUpdates:
             _ = release.installers  # Validate before offering the download.
             if not any(a.name == "SHA256SUMS.txt" for a in assets):
                 raise UpdateError("This release does not contain update checksums.")
+            if executable is None and os.name == "nt" and getattr(sys, "frozen", False):
+                executable = sys.executable
+            base_version = current.removeprefix("v")
+            if release.app_only and executable and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", base_version):
+                executable = Path(executable).absolute()
+                prefix = f"Ludivoxa-{release.version}-Delta-from-{base_version}"
+                lookup = {asset.name: asset for asset in assets}
+                installer, base = lookup.get(prefix + ".exe"), lookup.get(prefix + ".base.sha256")
+                if (
+                    executable.name.lower() == "interpreter.exe"
+                    and installer
+                    and base
+                    and base.size <= DELTA_BASE_LIMIT
+                    and installer.size + base.size < release.download_size
+                ):
+                    release = replace(release, delta=Delta(installer, base, executable.parent))
             return release
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
             raise UpdateError("GitHub returned invalid release metadata.") from exc
@@ -232,27 +326,49 @@ class GitHubUpdates:
                 checksums[match[2]] = match[1].lower()
         except (ValueError, UnicodeError) as exc:
             raise UpdateError("The release checksum file is invalid.") from exc
-        if any(a.name not in checksums for a in release.installers):
+        if any(a.name not in checksums for a in release.standard().installers):
             raise UpdateError("The release is missing installer checksums.")
+        done = 0
+        total = release.download_size
+        if release.delta:
+            delta = release.delta
+            try:
+                if delta.installer.name not in checksums or delta.base.name not in checksums:
+                    raise ValueError("Missing delta checksums")
+                base = self._small(API + f"/assets/{delta.base.id}", "application/octet-stream", delta.base.size)
+                if (
+                    len(base) != delta.base.size
+                    or hashlib.sha256(base).hexdigest() != checksums[delta.base.name]
+                    or not (delta.directory / "config.yml").is_file()
+                    or not verify_delta_base(base, delta.directory, self._cancelled)
+                ):
+                    raise ValueError("Base files do not match")
+            except UpdateCancelled:
+                raise
+            except (OSError, ValueError, UpdateError) as exc:
+                raise DeltaUnavailable("The smaller update could not be verified for this installation.") from exc
+            done = len(base)
+            progress(done, total)
         root = Path(root).resolve() / release.tag
         root.mkdir(parents=True, exist_ok=True)
-        total = release.download_size
-        if shutil.disk_usage(root).free < total:
+        if _is_link(root.lstat()):
+            raise UpdateError("The update cache contains an unexpected directory link.")
+        if shutil.disk_usage(root).free < total - done:
             raise UpdateError("Not enough free space to download this update.")
-        done = 0
         for asset in release.installers:
             self._cancelled()
             path = root / asset.name
-            part = root / (asset.name + ".part")
-            if path.is_symlink() or part.is_symlink():
+            if os.path.lexists(path) and _is_link(path.lstat()):
                 raise UpdateError("The update cache contains an unexpected file link.")
             if path.is_file() and path.stat().st_size == asset.size and file_hash(path) == checksums[asset.name]:
                 done += asset.size
                 progress(done, total)
                 continue
             digest, count = hashlib.sha256(), 0
+            part = None
             try:
-                with part.open("wb") as output:
+                with tempfile.NamedTemporaryFile(dir=root, suffix=".part", delete=False) as output:
+                    part = Path(output.name)
                     for chunk in self._chunks(self._get(API + f"/assets/{asset.id}", "application/octet-stream")):
                         count += len(chunk)
                         if count > asset.size:
@@ -263,8 +379,15 @@ class GitHubUpdates:
                 if count != asset.size or digest.hexdigest() != checksums[asset.name]:
                     raise UpdateError("Update checksum mismatch. No installer was launched.")
                 part.replace(path)
+            except UpdateCancelled:
+                raise
+            except UpdateError as exc:
+                if not release.delta:
+                    raise
+                raise DeltaUnavailable("The smaller update download could not be verified.") from exc
             finally:
-                part.unlink(missing_ok=True)
+                if part is not None:
+                    part.unlink(missing_ok=True)
             done += count
         downloaded = DownloadedUpdate(release, root, checksums)
         downloaded.verify()

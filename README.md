@@ -9,10 +9,9 @@ Ludivoxa extends [Interpreter](https://github.com/bquenin/interpreter), retainin
 its capture → OCR → translation → overlay pipeline and Qt interface. This fork
 starts at **v1.0.0**; see [attribution and licenses](NOTICE.md).
 
-**Latest stable [v1.3.1](docs/releases/v1.3.1.md)** fixes repeated speech caused
-by speaker-name OCR and removes speaker labels from the translated dialogue. Update from
-**Updates**. For a new installation, start with the full offline v1.1.1
-package, then apply the app update. The update keeps your models and settings.
+**Latest stable [v1.4.0](docs/releases/v1.4.0.md)** adds smaller Windows updates
+for matching installations. For a new installation, start with the full offline
+v1.1.1 package, then apply the app update.
 
 ## Features
 
@@ -60,6 +59,7 @@ lower is faster.
 | v1.2.0 stable | Separate game test below | Not measured | Not measured |
 | v1.3.0 stable | Separate frame replay below | Separate frame replay below | Not measured |
 | v1.3.1 stable | Synthetic short replay below | **1,014.42 ms** in frame replay | Not measured |
+| v1.4.0 stable | Synthetic two-sentence replay | **1,108.41 ms** in frame replay | Not measured |
 
 Measured on Windows 11, Core i7-13700F and RTX 4090 24 GB, using the same saved
 dialogue crops, English OCR → Vietnamese, local HauhauCS Qwen3 4B Q4_K_M,
@@ -139,6 +139,9 @@ WASAPI. See [the individual results and scope](docs/PERFORMANCE.md#v130-windows-
 synthetic dialogue and **1,014.42 ms** for two English sentences, with three
 WASAPI trials each. [Individual trials and setup](docs/PERFORMANCE.md#v131-windows-frame-replay)
 
+**v1.4.0 Windows frame replay.** Median TTFA was **1,028.81 ms** for a short
+dialogue and **1,108.41 ms** for two sentences. [Trials and test conditions](docs/PERFORMANCE.md#v140-windows-frame-replay)
+
 ## Install on Windows
 
 The packaged release targets **Windows x64**. Download its setup EXE and **all
@@ -150,9 +153,11 @@ Python, English/Japanese OCR models, Vietnamese speech, Ollama 0.40.16 and
 HauhauCS Qwen3 4B Aggressive Q4_K_M are included. No separate model download is
 needed for that profile. The installer preserves an existing `config.yml`.
 
-Then open **Updates** to install v1.3.1 (also supported from v1.1.2rc1).
-For v1.0.0, or to update manually, run **Ludivoxa-1.3.1-App-Update.exe** from
-[v1.3.1](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.3.1) and select the existing
+Then open **Updates** to install v1.4.0 (also supported from v1.1.2rc1).
+To download the smaller v1.4.0 patch from an intact v1.3.1 installation, run
+the **Delta-from-1.3.1** installer manually. For v1.0.0 or a standard manual
+update, run **Ludivoxa-1.4.0-App-Update.exe** from
+[v1.4.0](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.4.0) and select the existing
 installation directory. This smaller package preserves your models, runtime
 and settings. Public release checks and downloads need no GitHub token or sign-in.
 

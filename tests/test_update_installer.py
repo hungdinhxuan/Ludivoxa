@@ -11,6 +11,35 @@ ROOT = Path(__file__).resolve().parents[1]
 COMPILER = ROOT / "build/tools/InnoSetup/ISCC.exe"
 
 
+def isolated_definition(tmp_path):
+    text = (ROOT / "packaging/windows_installer.iss").read_text()
+    text = text.replace(
+        "AppId={{6C80F14D-818C-4A3F-B431-5389B73CA221}",
+        "AppId=Ludivoxa-Isolated-Updater-Test\nUninstallable=no\nCreateUninstallRegKey=no\nUsePreviousAppDir=no",
+    )
+    text = text.replace("SetupMutex=LudivoxaSetup", "SetupMutex=LudivoxaIsolatedSetupTest")
+    # Keep the production [Files] and restart checks, but make this fixture
+    # incapable of creating production uninstall entries or Start menu icons.
+    start, end = text.index("[Icons]"), text.index("[Run]")
+    text = text[:start] + text[end:]
+    text = text.replace(
+        'Filename: "{app}\\Interpreter.exe"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: IsUpdateRestart',
+        'Filename: "{sys}\\WindowsPowerShell\\v1.0\\powershell.exe"; '
+        'Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\\_internal\\restart-test.ps1"""; '
+        'WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: IsUpdateRestart',
+    )
+    for old, new in (
+        (r"..\LICENSE", ROOT / "LICENSE"),
+        (r"..\src\interpreter\resources\icons\icon.ico", ROOT / "src/interpreter/resources/icons/icon.ico"),
+        ('"Stop-LocalRuntime.ps1"', '"' + str(ROOT / "packaging/Stop-LocalRuntime.ps1") + '"'),
+        ('"THIRD_PARTY_NOTICES.txt"', '"' + str(ROOT / "packaging/THIRD_PARTY_NOTICES.txt") + '"'),
+    ):
+        text = text.replace(old, str(new))
+    definition = tmp_path / "isolated.iss"
+    definition.write_text(text, encoding="utf-8-sig")
+    return definition
+
+
 @pytest.mark.skipif(os.name != "nt" or not COMPILER.is_file(), reason="Native Inno Setup compiler required")
 @pytest.mark.parametrize("app_version", ["1.0.1", "1.1.2rc1"])
 def test_app_update_preserves_models_and_configuration_in_isolated_install(tmp_path, app_version):
@@ -38,30 +67,7 @@ def test_app_update_preserves_models_and_configuration_in_isolated_install(tmp_p
     for name in ("models", "llm-models", "runtime"):
         (destination / name).mkdir()
         (destination / name / "keep.dat").write_bytes(b"original-local-data")
-    text = (ROOT / "packaging/windows_installer.iss").read_text()
-    text = text.replace(
-        "AppId={{6C80F14D-818C-4A3F-B431-5389B73CA221}",
-        "AppId=Ludivoxa-Isolated-Updater-Test\nUninstallable=no\nCreateUninstallRegKey=no\nUsePreviousAppDir=no",
-    )
-    # Keep the production [Files] and restart checks, but make this fixture
-    # incapable of creating production uninstall entries or Start menu icons.
-    start, end = text.index("[Icons]"), text.index("[Run]")
-    text = text[:start] + text[end:]
-    text = text.replace(
-        'Filename: "{app}\\Interpreter.exe"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: IsUpdateRestart',
-        'Filename: "{sys}\\WindowsPowerShell\\v1.0\\powershell.exe"; '
-        'Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\\_internal\\restart-test.ps1"""; '
-        'WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: IsUpdateRestart',
-    )
-    for old, new in (
-        (r"..\LICENSE", ROOT / "LICENSE"),
-        (r"..\src\interpreter\resources\icons\icon.ico", ROOT / "src/interpreter/resources/icons/icon.ico"),
-        ('"Stop-LocalRuntime.ps1"', '"' + str(ROOT / "packaging/Stop-LocalRuntime.ps1") + '"'),
-        ('"THIRD_PARTY_NOTICES.txt"', '"' + str(ROOT / "packaging/THIRD_PARTY_NOTICES.txt") + '"'),
-    ):
-        text = text.replace(old, str(new))
-    definition = tmp_path / "isolated.iss"
-    definition.write_text(text, encoding="utf-8-sig")
+    definition = isolated_definition(tmp_path)
     result = subprocess.run(
         [
             str(COMPILER),
@@ -126,3 +132,69 @@ def test_app_update_preserves_models_and_configuration_in_isolated_install(tmp_p
     )
     assert rejected.returncode != 0
     assert not (fresh / "Interpreter.exe").exists()
+
+
+@pytest.mark.skipif(os.name != "nt" or not COMPILER.is_file(), reason="Native Inno Setup compiler required")
+def test_delta_installer_verifies_base_and_only_replaces_changed_files(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "packaging"))
+    from build_delta_update import build
+
+    destination = tmp_path / "install with spaces"
+    target = tmp_path / "new app"
+    library_name = "_internal/libs/Bình (shared).dll"
+    shared = b"unchanged native dependency"
+    for root, version in ((destination, "1.0.0"), (target, "1.0.1")):
+        info = root / f"_internal/interpreter_v2-{version}.dist-info"
+        info.mkdir(parents=True)
+        (info / "METADATA").write_text(f"Version: {version}\n")
+        (root / "Interpreter.exe").write_bytes(version.encode())
+        (root / library_name).parent.mkdir()
+        (root / library_name).write_bytes(shared)
+    (destination / "_internal/old.dll").write_bytes(b"obsolete")
+    (target / "_internal/new data").mkdir()
+    (target / "_internal/new data/file.txt").write_text("new file")
+    (target / "_internal/restart-test.ps1").write_text(
+        "[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'restart-observed.txt'), 'ok')"
+    )
+    keep = [destination / path for path in ("config.yml", "models/keep", "runtime/keep", "llm-models/keep")]
+    for path in keep:
+        path.parent.mkdir(exist_ok=True)
+        path.write_text("user data")
+
+    installer, _base = build(
+        destination, target, tmp_path / "dist", COMPILER, "1.0.0", "1.0.1", definition=isolated_definition(tmp_path)
+    )
+    command = [
+        str(installer),
+        "/VERYSILENT",
+        "/SUPPRESSMSGBOXES",
+        "/NORESTART",
+        "/NOICONS",
+        f"/DIR={destination}",
+    ]
+    library = destination / library_name
+    library.write_bytes(b"wrong base dependency")
+    rejected = subprocess.run([*command, f"/LOG={tmp_path / 'rejected.log'}"], timeout=30)
+    assert rejected.returncode == 7
+    assert "does not match the smaller update" in (tmp_path / "rejected.log").read_text(encoding="utf-8-sig")
+    assert (destination / "Interpreter.exe").read_bytes() == b"1.0.0"
+    assert (destination / "_internal/old.dll").is_file()
+    assert not (destination / "_internal/new data/file.txt").exists()
+    library.write_bytes(shared)
+    os.utime(library, (1_700_000_000, 1_700_000_000))
+    original_mtime = library.stat().st_mtime_ns
+
+    result = subprocess.run([*command, "/LUDIVOXARESTART=1", f"/LOG={tmp_path / 'installed.log'}"], timeout=30)
+    assert result.returncode == 0, (tmp_path / "installed.log").read_text(encoding="utf-8-sig")
+    assert (destination / "Interpreter.exe").read_bytes() == b"1.0.1"
+    assert library.stat().st_mtime_ns == original_mtime
+    assert not (destination / "_internal/old.dll").exists()
+    assert not (destination / "_internal/interpreter_v2-1.0.0.dist-info").exists()
+    assert (destination / "_internal/interpreter_v2-1.0.1.dist-info/METADATA").is_file()
+    assert (destination / "_internal/new data/file.txt").read_text() == "new file"
+    assert all(path.read_text() == "user data" for path in keep)
+    marker = destination / "_internal/restart-observed.txt"
+    deadline = time.monotonic() + 5
+    while not marker.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert marker.read_text() == "ok"
