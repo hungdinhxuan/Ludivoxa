@@ -173,9 +173,13 @@ cửa sổ, cùng cách lưu vùng OCR, ngưỡng tin cậy và giọng theo nh�
 
 - **Source language** đặt riêng ngôn ngữ của game. Chọn **Use Engines setting**
   để dùng ngôn ngữ mặc định.
-- **LLM system prompt** ghi đè prompt ở **Engines** cho game đó. Prompt có thể
-  dùng `{source_language}` và `{target_language}`. App đổi bộ nhớ hội thoại
-  khi chuyển game để giữ tên và ngữ cảnh đúng với nguồn đang dịch.
+- **Prompt mode** chọn **Append to Engines prompt** để giữ quy tắc dịch chung
+  rồi thêm hướng dẫn riêng, hoặc **Override Engines prompt** để thay prompt
+  chung. Profile mới mặc định Append. Profile đã lưu prompt giữ chế độ Override.
+- **LLM system prompt** có thể viết bằng tiếng Việt hoặc ngôn ngữ khác mà model
+  hiểu. Dùng `{source_language}` và `{target_language}` để điền ngôn ngữ tự động.
+  Để trống ô này để dùng prompt trong **Engines**. App làm mới ngữ cảnh dịch khi
+  chuyển game hoặc đổi prompt.
 - **Ignore OCR phrases** nhận một cụm hoàn chỉnh mỗi dòng, ví dụ `Press START`.
   Bộ lọc bỏ qua khác biệt về chữ hoa, chữ thường và khoảng trắng. Một cụm dài
   có chứa cụm đã lọc vẫn được dịch nếu không trùng toàn bộ dòng OCR.

@@ -287,10 +287,15 @@ class ProcessWorker(QObject):
             if translator is None or self._translation_failed:
                 raise ValueError("Translation engine is unavailable. Check Engines and try again.")
             if isinstance(translator, LLMTranslator):
-                profile = self._config.game_profiles.get(entry.profile_title)
-                prompt = {"system_prompt": profile.system_prompt} if profile and profile.system_prompt else {}
+                profile = self._config.game_profiles.get(entry.profile_title) or GameProfile()
                 parts = [
-                    translator.retranslate(text, source_language=entry.source_language, speaker=entry.speaker, **prompt)
+                    translator.retranslate(
+                        text,
+                        source_language=entry.source_language,
+                        speaker=entry.speaker,
+                        system_prompt=profile.system_prompt,
+                        prompt_mode=profile.prompt_mode,
+                    )
                     for text in entry.source
                 ]
                 target = translator.target_language
@@ -1260,7 +1265,12 @@ class ProcessWorker(QObject):
             self.ocr_diagnostics = (generation, ocr_ms, raw_count, ignored, "Repeat suppressed")
             return
         if profile_title and isinstance(self._translator, LLMTranslator):
-            self._translator.set_capture_profile(profile_title, language, profile.system_prompt if profile else "")
+            self._translator.set_capture_profile(
+                profile_title,
+                language,
+                profile.system_prompt if profile else "",
+                prompt_mode=profile.prompt_mode if profile else "override",
+            )
         translation_context = {}
         if voice_binding is not None and isinstance(self._translator, LLMTranslator):
             if self._character_settling and not name_wait_expired:

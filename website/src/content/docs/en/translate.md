@@ -18,3 +18,7 @@ Select **Chinese** with PaddleOCR for Simplified or Traditional Chinese. Select 
 **History** keeps up to 100 translated entries for the session. Select a line to replay its configured voice, copy the translation, or translate it again. On Windows, the floating **History** button is available during game-window capture.
 
 Use **Game profile…** to set the source language, LLM prompt, or full OCR lines to ignore for that game. For example, add `Press START` to skip a matching OCR line. The app resets translation context on game changes.
+
+Choose **Append to Engines prompt** to keep the shared translation rules and add game-specific instructions, such as a glossary or forms of address. Choose **Override Engines prompt** to supply the full translation prompt for that game. A blank field uses the Engines prompt, with the built-in prompt as fallback. Existing profiles with a saved prompt retain Override mode.
+
+You can write game instructions in Vietnamese or another language your LLM understands. Ludivoxa fills in `{source_language}` and `{target_language}` in both prompt modes. The translation target comes from **Engines → Translate to** when the shared prompt is used. Include the desired target or `{target_language}` in a full override.

@@ -52,7 +52,7 @@ DEFAULT_BASE_URLS = {
 }
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You translate text captured by OCR from a {source_language} retro video game. "
+    "You translate text captured by OCR from video games. "
     "Translate the user's message from {source_language} into {target_language}. "
     "Preserve the original meaning, tone, emotion, register and intensity. "
     "Keep profanity, insults, slang and sexual wording as direct or euphemistic as the original; "
@@ -265,6 +265,7 @@ class LLMTranslator:
         self._preview = None
         self._capture_scope = None
         self._profile_prompt = ""
+        self._profile_prompt_mode = "override"
 
     @property
     def name(self) -> str:
@@ -287,23 +288,26 @@ class LLMTranslator:
     @property
     def system_prompt(self) -> str:
         return self._format_system_prompt(
-            self._detected_language if self._source_language == "Auto" else self._source_language
+            self._detected_language if self._source_language == "Auto" else self._source_language,
+            self._profile_prompt,
+            self._profile_prompt_mode,
         )
 
-    def _format_system_prompt(self, source_language, profile_prompt=None):
-        if profile_prompt is None:
-            profile_prompt = self._profile_prompt
-        template = profile_prompt or self._settings.system_prompt or DEFAULT_SYSTEM_PROMPT
+    def _format_system_prompt(self, source_language, profile_prompt, prompt_mode):
+        template = self._settings.system_prompt or DEFAULT_SYSTEM_PROMPT
+        if profile_prompt:
+            template = f"{template}\n\n{profile_prompt}" if prompt_mode == "append" else profile_prompt
         return template.replace("{target_language}", self.target_language).replace("{source_language}", source_language)
 
-    def set_capture_profile(self, title, source_language, system_prompt):
+    def set_capture_profile(self, title, source_language, system_prompt, *, prompt_mode="override"):
         """Switch prompt and language without warming up an already loaded model."""
-        scope = (title, source_language, system_prompt)
+        scope = (title, source_language, system_prompt, prompt_mode)
         if self._capture_scope == scope:
             return
         self._capture_scope = scope
         self._source_language = source_language
         self._profile_prompt = system_prompt
+        self._profile_prompt_mode = prompt_mode
         self._detected_language = "English"
         self._cache.clear()
         self._history.clear()
@@ -372,11 +376,11 @@ class LLMTranslator:
             self._remember(text, result, speaker)
         return result, False
 
-    def retranslate(self, text, *, source_language, speaker=None, system_prompt=""):
+    def retranslate(self, text, *, source_language, speaker=None, system_prompt="", prompt_mode="override"):
         """Make a fresh request for a history entry without changing the live conversation."""
         language = detect_language(text) if source_language == "Auto" else source_language
         messages = self._build_messages(
-            text, speaker, history=(), prompt=self._format_system_prompt(language, system_prompt)
+            text, speaker, history=(), prompt=self._format_system_prompt(language, system_prompt, prompt_mode)
         )
         return self._translate_request(text, speaker, messages)
 

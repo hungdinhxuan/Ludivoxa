@@ -378,6 +378,23 @@ def test_auto_context_mixed_text_and_manual_override(endpoint):
 
 
 @pytest.mark.parametrize("provider,path", [("ollama", "/api/chat"), ("openai", "/v1/chat/completions")])
+def test_vietnamese_game_instructions_reach_local_endpoint(endpoint, provider, path):
+    base, calls = endpoint
+    settings = LLMSettings(provider=provider, base_url=base, model="local-test", target_language="Korean")
+    translator = LLMTranslator(settings, source_language="Auto")
+    translator.load()
+    translator.set_capture_profile(
+        "Game", "Auto", "Giữ nguyên tên gốc {source_language} khi dịch sang {target_language}.", prompt_mode="append"
+    )
+    translator.translate(SAMPLE_TEXT["Japanese"])
+    got_path, payload = calls[-1]
+    prompt = payload["messages"][0]["content"]
+    assert got_path == path
+    assert "from Japanese into Korean." in prompt
+    assert prompt.endswith("\n\nGiữ nguyên tên gốc Japanese khi dịch sang Korean.")
+
+
+@pytest.mark.parametrize("provider,path", [("ollama", "/api/chat"), ("openai", "/v1/chat/completions")])
 def test_lan_route_and_failure_has_no_fallback(provider, path):
     translator = LLMTranslator(LLMSettings(provider=provider, base_url="http://192.168.1.50:8000", model="local"))
     translator._loaded = True

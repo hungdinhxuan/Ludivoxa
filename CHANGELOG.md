@@ -3,6 +3,15 @@
 All notable Ludivoxa changes are recorded here using version tags such as
 `v1.0.0`.
 
+## [2.2.0] - 2026-11-22
+
+- Append game-specific translation instructions to the shared Engines prompt
+  or override it. New profiles default to Append. Profiles with existing
+  prompts retain Override.
+- Apply the selected mode to live translation and History retranslation.
+  Custom prompts accept Unicode, including Vietnamese, and both language
+  placeholders.
+
 ## [2.1.0] - 2026-11-22
 
 - Add optional offline voice cloning for English, Japanese, Korean and Chinese

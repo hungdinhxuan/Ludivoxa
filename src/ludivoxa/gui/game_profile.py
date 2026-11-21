@@ -26,13 +26,18 @@ class GameProfileDialog(QDialog):
             if language:
                 self.language.addItem(language, language)
         self.language.setCurrentIndex(self.language.findData(profile.source_language))
+        self.prompt_mode = QComboBox()
+        self.prompt_mode.addItem("Append to Engines prompt", "append")
+        self.prompt_mode.addItem("Override Engines prompt", "override")
+        self.prompt_mode.setCurrentIndex(self.prompt_mode.findData(profile.prompt_mode))
         self.prompt = QPlainTextEdit(profile.system_prompt)
-        self.prompt.setPlaceholderText("Leave blank to use the prompt from Engines.")
+        self.prompt.setPlaceholderText("Game-specific instructions. Leave blank to use the prompt from Engines.")
         self.ignored = QPlainTextEdit("\n".join(profile.ignore_phrases))
         self.ignored.setPlaceholderText("Enter one complete phrase per line.")
 
         for text, field in (
             ("Source language", self.language),
+            ("Prompt mode", self.prompt_mode),
             ("LLM system prompt", self.prompt),
             ("Ignore OCR phrases", self.ignored),
         ):
@@ -55,6 +60,7 @@ class GameProfileDialog(QDialog):
             {
                 "source_language": self.language.currentData(),
                 "system_prompt": self.prompt.toPlainText(),
+                "prompt_mode": self.prompt_mode.currentData(),
                 "ignore_phrases": self.ignored.toPlainText().splitlines(),
             }
         )

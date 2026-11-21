@@ -230,6 +230,7 @@ class GameProfile:
     source_language: str = ""
     system_prompt: str = ""
     ignore_phrases: tuple[str, ...] = ()
+    prompt_mode: str = "append"
     ignore_keys: frozenset[str] = dataclass_field(init=False, repr=False)
 
     def __post_init__(self):
@@ -243,13 +244,19 @@ class GameProfile:
         key = language.strip().casefold() if isinstance(language, str) else ""
         source = next((name for name in SOURCE_LANGUAGES if name.casefold() == key), "")
         prompt = data.get("system_prompt")
+        prompt = prompt.strip() if isinstance(prompt, str) else ""
+        prompt_mode = data.get("prompt_mode")
+        if prompt_mode not in ("append", "override"):
+            # Saved prompts without a mode used to replace the global prompt.
+            prompt_mode = "override" if prompt else "append"
         phrases = data.get("ignore_phrases")
         return cls(
             source,
-            prompt.strip() if isinstance(prompt, str) else "",
+            prompt,
             tuple(dict.fromkeys(phrase.strip() for phrase in phrases if isinstance(phrase, str) and phrase.strip()))
             if isinstance(phrases, list)
             else (),
+            prompt_mode,
         )
 
     def to_dict(self):
@@ -258,6 +265,7 @@ class GameProfile:
             for key, value in (
                 ("source_language", self.source_language),
                 ("system_prompt", self.system_prompt),
+                ("prompt_mode", self.prompt_mode if self.system_prompt or self.prompt_mode == "override" else ""),
                 ("ignore_phrases", list(self.ignore_phrases)),
             )
             if value
