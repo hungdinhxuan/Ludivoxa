@@ -9,9 +9,10 @@ Ludivoxa extends [Interpreter](https://github.com/bquenin/interpreter), retainin
 its capture → OCR → translation → overlay pipeline and Qt interface. This fork
 starts at **v1.0.0**; see [attribution and licenses](NOTICE.md).
 
-**Latest stable [v1.4.0](docs/releases/v1.4.0.md)** adds smaller Windows updates
-for matching installations. For a new installation, start with the full offline
-v1.1.1 package, then apply the app update.
+**Latest stable [v1.5.0](docs/releases/v1.5.0.md)** adds dialogue history,
+per-game profiles, capture and audio diagnostics, and independent speech
+volume. For a new installation, use the full offline v1.1.1 package, then
+apply the app update.
 
 ## Features
 
@@ -31,12 +32,47 @@ v1.1.1 package, then apply the app update.
   TTS reads the dialogue itself.
 - Background OCR/speech, bounded frame/prefetch queues, cached models/results,
   visual duplicate suppression and streaming native audio for Nano speech.
+- Dialogue history with replay and retranslation, per-game prompts and ignored
+  phrases, and capture/audio diagnostics.
+- Optional clearing of stale overlay text and independent speech volume.
 - Private bundled Ollama stops with the last app instance, including forced
   termination of a running app. External/local shared and LAN servers are retained.
 - Existing MeikiOCR, Sugoi V4, owocr and capture backends remain available.
 - An Updates page with opt-in startup checks,
   verified background downloads and explicit install/restart, with app-only
   update packages that keep local models and settings.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    accTitle: Ludivoxa architecture
+    accDescr: Ludivoxa captures game frames, reads dialogue locally, and sends translated text to an overlay or local speech. The LLM backend calls a configured endpoint.
+
+    Source["Game window<br/>or video input"]
+    Endpoint["Local or LAN LLM<br/>Ollama or<br/>OpenAI-compatible API"]
+
+    subgraph App["Ludivoxa desktop app · Qt"]
+        Capture["Frame capture<br/>Select OCR regions"]
+        OCR["Offline OCR<br/>Dialogue and speaker name"]
+        Dialogue["Dialogue processing<br/>Language and text settling<br/>Repeat suppression"]
+        Translation["Translation worker<br/>Prompts, context, cache"]
+        Overlay["On-screen overlay"]
+        Speech["Local Vietnamese speech<br/>VieNeu Nano or Piper"]
+
+        Capture --> OCR --> Dialogue --> Translation
+        Translation --> Overlay
+        Translation --> Speech
+    end
+
+    Source -->|Frames| Capture
+    Translation <-->|Chat API| Endpoint
+```
+
+When configured, speaker-name OCR supplies context to the LLM and selects the
+voice for speech. Sugoi V4 is an alternative translation backend for Japanese.
+The Windows updater checks GitHub Releases separately from the translation
+pipeline.
 
 ## TTFA benchmarks by version
 
@@ -60,6 +96,7 @@ lower is faster.
 | v1.3.0 stable | Separate frame replay below | Separate frame replay below | Not measured |
 | v1.3.1 stable | Synthetic short replay below | **1,014.42 ms** in frame replay | Not measured |
 | v1.4.0 stable | Synthetic two-sentence replay | **1,108.41 ms** in frame replay | Not measured |
+| v1.5.0 stable | Synthetic two-sentence replay | **914.23 ms** in frame replay | Not measured |
 
 Measured on Windows 11, Core i7-13700F and RTX 4090 24 GB, using the same saved
 dialogue crops, English OCR → Vietnamese, local HauhauCS Qwen3 4B Q4_K_M,
@@ -142,6 +179,9 @@ WASAPI trials each. [Individual trials and setup](docs/PERFORMANCE.md#v131-windo
 **v1.4.0 Windows frame replay.** Median TTFA was **1,028.81 ms** for a short
 dialogue and **1,108.41 ms** for two sentences. [Trials and test conditions](docs/PERFORMANCE.md#v140-windows-frame-replay)
 
+**v1.5.0 Windows frame replay.** Median TTFA was **910.24 ms** for a short
+dialogue and **914.23 ms** for two sentences. [Trials and test conditions](docs/PERFORMANCE.md#v150-windows-frame-replay)
+
 ## Install on Windows
 
 The packaged release targets **Windows x64**. Download its setup EXE and **all
@@ -153,11 +193,10 @@ Python, English/Japanese OCR models, Vietnamese speech, Ollama 0.40.16 and
 HauhauCS Qwen3 4B Aggressive Q4_K_M are included. No separate model download is
 needed for that profile. The installer preserves an existing `config.yml`.
 
-Then open **Updates** to install v1.4.0 (also supported from v1.1.2rc1).
-To download the smaller v1.4.0 patch from an intact v1.3.1 installation, run
-the **Delta-from-1.3.1** installer manually. For v1.0.0 or a standard manual
-update, run **Ludivoxa-1.4.0-App-Update.exe** from
-[v1.4.0](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.4.0) and select the existing
+Then open **Updates** to install v1.5.0 (also supported from v1.1.2rc1).
+The v1.4.0 updater offers the smaller patch when the installed files match.
+For v1.0.0 or a standard manual update, run **Ludivoxa-1.5.0-App-Update.exe**
+from [v1.5.0](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.5.0) and select the existing
 installation directory. This smaller package preserves your models, runtime
 and settings. Public release checks and downloads need no GitHub token or sign-in.
 
@@ -202,6 +241,7 @@ release or [source instructions](docs/DEVELOPMENT.md) for this fork.
 - [Development, provisioning and Windows builds](docs/DEVELOPMENT.md)
 - [Release process and tagged artifacts](docs/RELEASING.md)
 - [Measurements and limitations](docs/PERFORMANCE.md)
+- [OneOCR and PaddleOCR pixel-dialogue comparison](benchmark/ocr/README.md#oneocr-and-paddleocr-on-pixel-dialogue)
 - [MIT application license](LICENSE) and [third-party attribution](NOTICE.md)
 
 OCR and synthesis timings depend on text length, font, region size and hardware.

@@ -746,6 +746,7 @@ class SpeechController(QObject):
         self._enabled = True
         self._closed = self._working = self._playing = False
         self._generation = self._request = 0
+        self._replay_request = None
         self._last_text = ""
         self._playing_text = ""
         self._pending = self._ready = None
@@ -753,6 +754,10 @@ class SpeechController(QObject):
         self._playing_audio = self._input_stream = None
         self._last_spoken_translation = None
         self._last_character_voice = None
+
+    def set_volume(self, percent: int):
+        """Set playback gain for the next utterance, including manual replay."""
+        self._player.setVolume(percent / 100)
 
     @staticmethod
     def _character_voice(stream):
@@ -763,6 +768,15 @@ class SpeechController(QObject):
     @property
     def _busy(self):
         return bool(self._working or self._playing or self._pending or self._ready)
+
+    def diagnostic_state(self):
+        if self._playing:
+            state = "Playing"
+        elif self._working:
+            state = "Synthesizing"
+        else:
+            state = "Idle" if self._enabled else "Automatic speech off"
+        return state, getattr(self._player, "diagnostics", {})
 
     def prepare(self, model_path):
         key = model_path or DEFAULT_VOICE_PATH
@@ -828,6 +842,17 @@ class SpeechController(QObject):
         enabled, self._enabled = self._enabled, True
         self.submit("Xin chào. Bạn đang nghe thử giọng đọc tiếng Việt.", model_path, speaker_id, rate, reference_audio)
         self._enabled = enabled
+
+    def replay(self, text, model_path, speaker_id=0, rate=1.0, reference_audio=""):
+        """Play one history entry without changing automatic speech repeat guards."""
+        text = clean_speech_text(text)
+        if self._closed or self._busy or not _speech_text_key(text):
+            return False
+        self._request += 1
+        self._replay_request = self._request
+        self._pending = (self._request, text, model_path or DEFAULT_VOICE_PATH, speaker_id, rate, reference_audio)
+        self._start_pending()
+        return True
 
     def _start_pending(self):
         if self._working or not self._pending or self._closed:
@@ -961,23 +986,27 @@ class SpeechController(QObject):
         if generation != self._generation or request != self._request or self._closed:
             self._start_pending()
             return
+        text_key = None if request == self._replay_request else self._last_text
         if isinstance(result, str):
             self.status_changed.emit(result)
         elif isinstance(result, SpeechStream):
             if not self._busy:
                 self.status_changed.emit("Ready")
         elif self._playing:
-            self._ready = (result, self._last_text)
+            self._ready = (result, text_key)
         else:
-            self._play(result, self._last_text)
+            self._play(result, text_key)
         self._start_pending()
 
     def _play(self, audio, text_key):
         self._playing = True
         self._playing_audio = audio
         self._playing_text = text_key
-        self._last_spoken_translation = audio if isinstance(audio, SpeechStream) else text_key
-        self._last_character_voice = self._character_voice(audio.source) if isinstance(audio, SpeechStream) else None
+        if text_key is not None:  # Manual replay does not replace the last automatically spoken line.
+            self._last_spoken_translation = audio if isinstance(audio, SpeechStream) else text_key
+            self._last_character_voice = (
+                self._character_voice(audio.source) if isinstance(audio, SpeechStream) else None
+            )
         logger.info(
             "speech playback started",
             request=self._request,
@@ -1001,13 +1030,15 @@ class SpeechController(QObject):
             self.status_changed.emit("Ready")
 
     def _playback_error(self, message):
+        manual_replay = self._playing_text is None
         self._playing = False
         self._playing_text = ""
         if isinstance(self._playing_audio, SpeechStream):
             self._playing_audio.cancel()
         self._playing_audio = None
-        self._last_spoken_translation = None
-        self._last_character_voice = None
+        if not manual_replay:
+            self._last_spoken_translation = None
+            self._last_character_voice = None
         self._cancel_waiting_streams()
         self._pending = self._ready = None
         self._generation += 1

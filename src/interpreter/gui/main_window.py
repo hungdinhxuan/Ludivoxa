@@ -1,6 +1,7 @@
 """Main application window with settings and controls."""
 
 import math
+import sys
 import threading
 import time
 
@@ -11,6 +12,7 @@ from PySide6.QtGui import QFont, QImage, QKeySequence, QPixmap
 from PySide6.QtMultimedia import QMediaDevices
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QColorDialog,
     QComboBox,
     QDialog,
@@ -42,6 +44,7 @@ from ..capture.convert import bgra_to_rgb_pil
 from ..capture.video_device import VideoDeviceCapture, device_id, find_video_device, list_video_devices
 from ..config import (
     Config,
+    GameProfile,
     LLMSettings,
     OCRBackend,
     OutputMode,
@@ -82,6 +85,9 @@ from ..speech import DEFAULT_VOICE_PATH, SpeechController, SpeechStream, availab
 from ..translate import SUGOI_ONLY_JAPANESE, SUGOI_SOURCE_LANGUAGE
 from . import keyboard
 from .character_voices import CharacterVoicesDialog
+from .diagnostics import DiagnosticsDialog
+from .game_profile import GameProfileDialog
+from .history_page import HistoryPage
 from .ocr_config import OCRConfigDialog
 from .theme import ERROR, OK, set_role
 from .updates_page import UpdatesPage
@@ -122,6 +128,7 @@ class MainWindow(QMainWindow):
         self._config = config
         self._speech = SpeechController(self)
         self._speech.set_enabled(config.tts_enabled)
+        self._speech.set_volume(config.tts_volume)
         self._last_ocr_results: list = []
         self._preview_pixmap: QPixmap | None = None
 
@@ -138,6 +145,8 @@ class MainWindow(QMainWindow):
         self._ocr_config_dialog = None  # Reference to open OCR config dialog
         self._character_dialog = None
         self._detected_character = ""
+        self._history_overlay = None
+        self._diagnostics_dialog = None
         # Wayland session detection (from capture module, uses D-Bus portal check)
         self._is_wayland_session = _is_wayland_session
         self._wayland_portal = None  # WaylandPortalCapture instance (for managing portal session lifecycle)
@@ -228,6 +237,8 @@ class MainWindow(QMainWindow):
         worker.speech_stream_ready.connect(self._on_speech_ready)
         worker.speech_scene_reset.connect(self._on_speech_scene_reset)
         worker.character_detected.connect(self._on_character_detected)
+        worker.dialogue_translated.connect(self._on_dialogue_translated)
+        worker.dialogue_retranslated.connect(self._on_dialogue_retranslated)
         worker.ocr_results_ready.connect(self._on_ocr_results_ready)
         worker.models_ready.connect(self._on_models_ready)
         worker.models_failed.connect(self._on_models_failed)
@@ -267,7 +278,7 @@ class MainWindow(QMainWindow):
         self._nav = QListWidget()
         self._nav.setProperty("role", "nav")
         self._nav.setFixedWidth(170)
-        for name in ("Play", "Overlay", "Engines", "Updates"):
+        for name in ("Play", "Overlay", "Engines", "Updates", "History"):
             self._nav.addItem(name)
         nav_box = QWidget()
         nav_layout = QVBoxLayout(nav_box)
@@ -286,6 +297,19 @@ class MainWindow(QMainWindow):
         self._updates_page = UpdatesPage(self._config, __version__, self)
         self._updates_page.update_available.connect(self._on_update_available)
         self._pages.addWidget(self._updates_page)
+        self._history = HistoryPage(self)
+        self._history.replay_requested.connect(self._replay_history)
+        self._history.retranslation_requested.connect(self._retranslate_history)
+        history_host = QWidget()
+        history_layout = QVBoxLayout(history_host)
+        history_layout.setContentsMargins(0, 0, 0, 0)
+        history_layout.addWidget(self._history)
+        self._pages.addWidget(history_host)
+        if sys.platform == "win32":
+            from .history_overlay import HistoryOverlay
+
+            self._history_overlay = HistoryOverlay(self._history, history_host)
+            self._process_timer.timeout.connect(self._sync_history_overlay)
         self._nav.currentRowChanged.connect(self._pages.setCurrentIndex)
         self._nav.setCurrentRow(0)
         body.addWidget(self._pages, 1)
@@ -405,6 +429,24 @@ class MainWindow(QMainWindow):
         rate_row.addWidget(preview_voice)
         rate_row.addStretch()
         session_layout.addLayout(rate_row)
+        volume_row = QHBoxLayout()
+        volume_label = QLabel("Speech volume:")
+        volume_slider = QSlider(Qt.Orientation.Horizontal)
+        volume_slider.setAccessibleName("Speech volume")
+        volume_slider.setRange(0, 100)
+        volume_slider.setPageStep(10)
+        volume_slider.setTracking(False)
+        volume_slider.setValue(self._config.tts_volume)
+        volume_slider.setToolTip("Applies to the next line, including Test voice and History replay.")
+        volume_label.setBuddy(volume_slider)
+        volume_value = QLabel(f"{self._config.tts_volume}%")
+        volume_slider.sliderMoved.connect(lambda percent: volume_value.setText(f"{percent}%"))
+        volume_slider.valueChanged.connect(lambda percent: volume_value.setText(f"{percent}%"))
+        volume_slider.valueChanged.connect(self._on_speech_volume_changed)
+        volume_row.addWidget(volume_label)
+        volume_row.addWidget(volume_slider, 1)
+        volume_row.addWidget(volume_value)
+        session_layout.addLayout(volume_row)
         self._refresh_voice_models()
         self._tts_voice_combo.currentIndexChanged.connect(self._on_voice_model_changed)
         self._tts_speaker_combo.currentIndexChanged.connect(self._on_speech_settings_changed)
@@ -455,6 +497,14 @@ class MainWindow(QMainWindow):
         self._character_voices_btn.setMinimumHeight(44)
         self._character_voices_btn.clicked.connect(self._open_character_voices)
         actions.addWidget(self._character_voices_btn)
+        profile_btn = QPushButton("Game profile…")
+        profile_btn.setMinimumHeight(44)
+        profile_btn.clicked.connect(self._open_game_profile)
+        actions.addWidget(profile_btn)
+        diagnostics_btn = QPushButton("Diagnostics")
+        diagnostics_btn.setMinimumHeight(44)
+        diagnostics_btn.clicked.connect(self._open_diagnostics)
+        actions.addWidget(diagnostics_btn)
         actions.addStretch()
         outer_layout.addLayout(actions)
         return header
@@ -657,6 +707,16 @@ class MainWindow(QMainWindow):
         mode_row.addWidget(self._pause_hotkey)
 
         appearance_layout.addWidget(self._mode_row_widget)
+        hide_stale = QCheckBox("Clear translation when dialogue changes")
+        hide_stale.setChecked(self._config.hide_stale_overlay)
+        hide_stale.setToolTip("Clear the overlay while the new dialogue is being translated.")
+        hide_stale.toggled.connect(self._set_hide_stale_overlay)
+        appearance_layout.addWidget(hide_stale)
+        if sys.platform == "win32":
+            history_overlay = QCheckBox("Show History button over the game")
+            history_overlay.setChecked(self._config.history_overlay_enabled)
+            history_overlay.toggled.connect(self._set_history_overlay_enabled)
+            appearance_layout.addWidget(history_overlay)
 
         # Visual settings grid
         visual_grid = QGridLayout()
@@ -954,6 +1014,16 @@ class MainWindow(QMainWindow):
         if translation_backend == TranslationBackend.SUGOI and source_language != SUGOI_SOURCE_LANGUAGE:
             self._set_pair_error(SUGOI_ONLY_JAPANESE)
             return
+        if self._capturing:
+            error = self._profile_language_error(
+                self._current_window_title,
+                default_language=source_language,
+                backend=translation_backend,
+                ocr_backend=ocr_backend,
+            )
+            if error:
+                self._set_pair_error(error)
+                return
         llm = self._llm_settings_from_ui()  # carries the target language from the pair card
         if translation_backend == TranslationBackend.LLM and not llm.model:
             self._set_llm_result("Pick a model before applying.", error=True)
@@ -1339,7 +1409,7 @@ class MainWindow(QMainWindow):
 
     def _on_models_failed(self, error: str):
         """Handle model loading failure from worker thread."""
-        self._start_btn.setEnabled(False)
+        self._start_btn.setEnabled(self._capturing)
         self._show_fix_models_button()
         self.statusBar().showMessage(f"Model loading failed: {error[:120]}")
         # Full message on hover, since the status bar truncates
@@ -1448,10 +1518,14 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Downloading models...")
 
         # Stop and restart the worker to reload models
+        self._history.cancel_retranslation()
         self._process_worker.stop()
         self._process_worker = self._create_worker()
+        self._process_worker.set_capture_source(self._current_window_title if self._capturing else "")
         self._process_worker.set_mode(self._mode)
-        self._process_worker.start(self._config.ocr_confidence)
+        self._process_worker.start(
+            self._config.get_ocr_confidence(self._current_window_title if self._capturing else None)
+        )
 
     def _refresh_sources(self):
         """Refresh the source list: windows (or the Wayland picker) followed by video devices.
@@ -1559,6 +1633,9 @@ class MainWindow(QMainWindow):
 
         window = self._windows_list[value]
         title = window.get("title", "")
+        if error := self._profile_language_error(title):
+            self.statusBar().showMessage(error)
+            return
         window_id = window.get("id")
         bounds = window.get("bounds")
 
@@ -1601,6 +1678,7 @@ class MainWindow(QMainWindow):
         self._config.video_device = ""
         self._config.video_device_id = ""
         self._current_window_title = title  # Store for exclusion zone lookup
+        self._process_worker.set_capture_source(title)
 
         # Set per-window OCR confidence
         confidence = self._config.get_ocr_confidence(title)
@@ -1611,6 +1689,9 @@ class MainWindow(QMainWindow):
 
     def _start_video_capture(self, name: str, id_text: str = ""):
         """Start capturing a video device (capture card, webcam), by id when known, else by name."""
+        if error := self._profile_language_error(name):
+            self.statusBar().showMessage(error)
+            return
         device = find_video_device(name, id_text)
         if device is None:
             self.statusBar().showMessage(f"Video device not found: {name[:40]}")
@@ -1647,6 +1728,7 @@ class MainWindow(QMainWindow):
         self._config.video_device = name
         self._config.video_device_id = device_id(device)
         self._current_window_title = name
+        self._process_worker.set_capture_source(name)
         self._process_worker.set_confidence_threshold(self._config.get_ocr_confidence(name))
 
         # Nothing on screen to draw over: banner mode for the whole session
@@ -1682,6 +1764,9 @@ class MainWindow(QMainWindow):
 
         # Guard against duplicate selection requests.
         if self._wayland_selecting:
+            return
+        if error := self._profile_language_error("Wayland Capture"):
+            self.statusBar().showMessage(error)
             return
         self._wayland_selecting = True
 
@@ -1727,6 +1812,7 @@ class MainWindow(QMainWindow):
 
             # Store window title for exclusion zone lookup (Wayland doesn't have window titles)
             self._current_window_title = "Wayland Capture"
+            self._process_worker.set_capture_source(self._current_window_title)
             self._config.video_device = ""
             self._config.video_device_id = ""
 
@@ -1755,6 +1841,8 @@ class MainWindow(QMainWindow):
         """Stop capturing."""
         if hasattr(self, "_speech"):
             self._speech.stop(reset=True, reason="capture stopped")
+        if getattr(self, "_history_overlay", None) is not None:
+            self._history_overlay.hide()
         self._process_timer.stop()
         self._capture_idle_timer.stop()
         self._last_ocr_capture = None
@@ -1822,6 +1910,8 @@ class MainWindow(QMainWindow):
             self._banner_overlay.hide()
             self._inplace_overlay.clear_regions()
             self._inplace_overlay.hide()
+            if getattr(self, "_history_overlay", None) is not None:
+                self._history_overlay.hide()
         else:
             self._pause_btn.setText("Hide")
             self._show_overlay()
@@ -1984,6 +2074,31 @@ class MainWindow(QMainWindow):
             self._capture_frame_ready.emit(capture)
         except RuntimeError:
             pass  # Capture notification raced with Qt teardown.
+
+    @Slot(bool)
+    def _set_history_overlay_enabled(self, enabled):
+        self._config.history_overlay_enabled = enabled
+        self._sync_history_overlay()
+        self._config.save()
+
+    def _set_hide_stale_overlay(self, enabled):
+        self._config.hide_stale_overlay = enabled
+        self._config.save()
+
+    @Slot()
+    def _sync_history_overlay(self):
+        overlay, capture = self._history_overlay, self._capture
+        if overlay is None:
+            return
+        if (
+            not self._capturing
+            or self._paused
+            or not self._config.history_overlay_enabled
+            or not isinstance(capture, WindowCapture)
+        ):
+            overlay.hide()
+            return
+        overlay.sync(capture.bounds, capture.is_foreground(), capture.window_id)
 
     @Slot(object)
     def _on_capture_frame_ready(self, capture):
@@ -2170,6 +2285,28 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         self._fit_preview()
 
+    @Slot(object, int)
+    def _on_dialogue_translated(self, entry, generation):
+        if self.sender() is self._process_worker and self._capturing and generation == self._capture_generation:
+            self._history.append(entry)
+
+    def _replay_history(self, entry):
+        if entry is None or not entry.can_replay:
+            return
+        if self._speech.replay(entry.translation, *entry.voice):
+            self._history.status.setText("Replay requested.")
+        else:
+            self._history.status.setText("Replay unavailable. Wait for current speech to finish and try again.")
+
+    def _retranslate_history(self, entry):
+        if not self._process_worker.request_retranslation(entry):
+            self._history.finish_retranslation(entry, "Translation engine is busy or unavailable. Try again.")
+
+    @Slot(object, object)
+    def _on_dialogue_retranslated(self, entry, result):
+        if self.sender() is self._process_worker:
+            self._history.finish_retranslation(entry, result)
+
     def _on_text_ready(self, translated: str, generation: int):
         """Handle translated text (banner mode)."""
         if (
@@ -2236,17 +2373,80 @@ class MainWindow(QMainWindow):
         if getattr(self, "_character_dialog", None) is not None:
             self._character_dialog.set_detected_name(name)
 
-    def _open_character_voices(self):
+    def _profile_source_title(self):
         if self._capturing:
-            title = self._current_window_title
+            return self._current_window_title
+        kind, value = self._window_combo.currentData() or (None, None)
+        if kind == "window" and 0 <= value < len(self._windows_list):
+            return self._windows_list[value].get("title", "")
+        if kind == "device":
+            return value[1]
+        if kind == "portal":
+            return "Wayland Capture"
+        return ""
+
+    def capture_diagnostics(self):
+        if not self._capturing or self._capture is None:
+            return "Idle", "—", "—"
+        if isinstance(self._capture, WindowCapture):
+            backend = self._capture.backend
+        elif isinstance(self._capture, VideoDeviceCapture):
+            backend = "Video device"
         else:
-            kind, value = self._window_combo.currentData() or (None, None)
-            if kind == "window" and 0 <= value < len(self._windows_list):
-                title = self._windows_list[value].get("title", "")
-            elif kind == "device":
-                _, title = value
-            else:
-                title = ""
+            backend = "Wayland portal"
+        waiting = self._last_frame is None or self._frames_missing > 0
+        size = "—" if self._last_frame is None else f"{self._last_frame.shape[1]} × {self._last_frame.shape[0]}"
+        return "Waiting for frames" if waiting else "Receiving frames", backend, size
+
+    def _open_diagnostics(self):
+        if self._diagnostics_dialog is None:
+            self._diagnostics_dialog = DiagnosticsDialog(self)
+        self._diagnostics_dialog.show()
+        self._diagnostics_dialog.raise_()
+        self._diagnostics_dialog.activateWindow()
+
+    def _profile_language_error(self, title, language=None, *, default_language=None, backend=None, ocr_backend=None):
+        config = self._config
+        if language is None:
+            profile = config.game_profiles.get(title)
+            language = profile.source_language if profile else ""
+        if (ocr_backend or config.ocr_backend) == OCRBackend.MEIKI and language and language != "Japanese":
+            return "MeikiOCR only reads Japanese. Select PaddleOCR or owocr in Engines for this game profile."
+        language = language or default_language or config.source_language
+        if (backend or config.translation_backend) == TranslationBackend.SUGOI and language != SUGOI_SOURCE_LANGUAGE:
+            return "The game profile requires an LLM endpoint for this source language. " + SUGOI_ONLY_JAPANESE
+        return ""
+
+    def _open_game_profile(self):
+        title = self._profile_source_title()
+        if not title:
+            self.statusBar().showMessage("Select a capture source first.")
+            return
+        profile = self._config.game_profiles.get(title) or GameProfile()
+        dialog = GameProfileDialog(
+            title,
+            profile,
+            self._config.source_language,
+            lambda language: self._profile_language_error(title, language),
+            self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        updated = dialog.profile()
+        if updated != profile:
+            self._config.set_game_profile(title, updated)
+            self._config.save()
+            if self._capturing and title == self._current_window_title:
+                self._capture_generation += 1
+                self._last_ocr_capture = None
+                self._process_worker.discard_pending_frames()
+                self._speech.stop(reset=True, reason="game profile changed")
+                self._banner_overlay.set_text("")
+                self._inplace_overlay.clear_regions()
+        self.statusBar().showMessage("Game profile saved")
+
+    def _open_character_voices(self):
+        title = self._profile_source_title()
         if not title:
             self.statusBar().showMessage("Select a capture source first. On Wayland, start capture to choose a window.")
             return
@@ -2371,6 +2571,11 @@ class MainWindow(QMainWindow):
         self._config.tts_rate = self._tts_rate_spin.value()
         self._speech.stop(reset=True, reason="voice settings changed")
         self._speech.prepare(self._config.tts_model_path)
+        self._config.save()
+
+    def _on_speech_volume_changed(self, percent):
+        self._config.tts_volume = percent
+        self._speech.set_volume(percent)
         self._config.save()
 
     def _on_regions_ready(self, regions: list, generation: int):
@@ -2637,3 +2842,5 @@ class MainWindow(QMainWindow):
         self._process_worker.stop()
         self._banner_overlay.close()
         self._inplace_overlay.close()
+        if self._history_overlay is not None:
+            self._history_overlay.close()

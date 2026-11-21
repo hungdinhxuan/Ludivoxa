@@ -40,6 +40,7 @@ class Player(QObject):
         self.stop = MagicMock()
         self.setSource = MagicMock()
         self.setAudioOutput = MagicMock()
+        self.setVolume = MagicMock()
 
 
 @pytest.fixture(scope="module")
@@ -81,6 +82,26 @@ def test_reads_new_text_once_and_keeps_only_latest_pending(speech):
     assert synth.synthesize.call_args.args[0] == "Dòng mới nhất"
     assert player.play.call_args.args[0] == "Dòng mới nhất".encode()
     assert 2 <= synth.synthesize.call_count <= 3
+
+
+def test_history_replay_uses_saved_voice_and_leaves_automatic_repeat_guard_in_place(speech):
+    controller, synth, player, _ = speech
+    controller.submit("Câu đang hiện", "current.onnx")
+    until(lambda: player.play.call_count == 1)
+    assert not controller.replay("Câu đã lưu", "old.onnx")
+    player.finished.emit()
+    assert controller.replay("Câu đã lưu", "old.onnx", 7, 1.25, "reference.wav")
+    until(lambda: player.play.call_count == 2)
+    synth.synthesize.assert_called_with("Câu đã lưu", "old.onnx", 7, 1.25, reference_audio="reference.wav")
+    player.finished.emit()
+    controller.submit("Câu đang hiện", "current.onnx")
+    assert synth.synthesize.call_count == 2
+    assert controller.replay("Câu đã lưu", "old.onnx")
+    until(lambda: player.play.call_count == 3)
+    player.finished.emit()
+    controller.set_enabled(False)
+    assert controller.replay("Câu đã lưu", "old.onnx")
+    until(lambda: player.play.call_count == 4)
 
 
 def test_background_synthesis_and_stale_completion_after_stop(speech):
@@ -270,7 +291,7 @@ def test_output_and_voice_config_migrate_and_roundtrip(tmp_path):
 def test_voice_catalog_and_ui_speaker_selection(speech, tmp_path):
     import json
 
-    from PySide6.QtWidgets import QGroupBox, QMainWindow, QWidget
+    from PySide6.QtWidgets import QGroupBox, QMainWindow, QSlider, QWidget
 
     model = tmp_path / "vi_VN-vivos-x_low.onnx"
     model.touch()
@@ -293,6 +314,11 @@ def test_voice_catalog_and_ui_speaker_selection(speech, tmp_path):
     win._output_combo.setCurrentIndex(win._output_combo.findData("overlay"))
     assert not win._config.tts_enabled
     win._speech.set_enabled.assert_called_with(False)
+    (volume,) = page.findChildren(QSlider)
+    assert volume.accessibleName() == "Speech volume"
+    volume.setValue(45)
+    assert win._config.tts_volume == 45
+    win._speech.set_volume.assert_called_once_with(45)
     page.close()
 
 
@@ -379,6 +405,29 @@ def test_preview_works_without_enabling_automatic_speech(speech):
     controller.preview("voice.onnx", 0, 1.0)
     until(lambda: player.play.call_count == 1)
     assert not controller._enabled
+
+
+def test_speech_volume_is_saved_and_applied_without_stopping_playback(speech, tmp_path):
+    from PySide6.QtWidgets import QMainWindow
+
+    controller, _, player, _ = speech
+    config = Config(config_path=str(tmp_path / "config.yml"))
+    assert config.tts_volume == 100 and not config.hide_stale_overlay
+    controller.submit("Xin chào.", "voice.onnx")
+    until(lambda: player.play.call_count == 1)
+    player.stop.reset_mock()
+    window = MainWindow.__new__(MainWindow)
+    QMainWindow.__init__(window)
+    window._config, window._speech = config, controller
+    window._on_speech_volume_changed(35)
+    window._set_hide_stale_overlay(True)
+    player.setVolume.assert_called_once_with(0.35)
+    player.stop.assert_not_called()
+    assert controller._playing
+    restored = Config.load(config.config_path)
+    assert restored.tts_volume == 35 and restored.hide_stale_overlay
+    assert Config(tts_volume="invalid").tts_volume == 100
+    assert Config(tts_volume=-20).tts_volume == 0
 
 
 def test_stopping_discards_prefetched_audio(speech):

@@ -266,6 +266,12 @@ class WindowCapture:
         return self._window_id
 
     @property
+    def backend(self) -> str:
+        if _system == "Windows":
+            return getattr(self._stream, "backend", "") or "Waiting for frames"
+        return "Quartz" if _system == "Darwin" else "X11"
+
+    @property
     def bounds(self) -> dict | None:
         """Get the bounds of the target window."""
         return self._last_bounds

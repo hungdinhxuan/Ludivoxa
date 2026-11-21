@@ -263,6 +263,8 @@ class LLMTranslator:
         self._session.trust_env = False
         self._loaded = False
         self._preview = None
+        self._capture_scope = None
+        self._profile_prompt = ""
 
     @property
     def name(self) -> str:
@@ -274,16 +276,38 @@ class LLMTranslator:
         return self._source_language
 
     @property
+    def target_language(self) -> str:
+        return self._settings.target_language or "Vietnamese"
+
+    @property
     def sample_text(self) -> str:
         """A line in the source language, for warm-up and the Test button."""
         return SAMPLE_TEXTS.get(self._source_language, WARMUP_TEXT)
 
     @property
     def system_prompt(self) -> str:
-        template = self._settings.system_prompt or DEFAULT_SYSTEM_PROMPT
-        return template.replace("{target_language}", self._settings.target_language or "Vietnamese").replace(
-            "{source_language}", self._detected_language if self._source_language == "Auto" else self._source_language
+        return self._format_system_prompt(
+            self._detected_language if self._source_language == "Auto" else self._source_language
         )
+
+    def _format_system_prompt(self, source_language, profile_prompt=None):
+        if profile_prompt is None:
+            profile_prompt = self._profile_prompt
+        template = profile_prompt or self._settings.system_prompt or DEFAULT_SYSTEM_PROMPT
+        return template.replace("{target_language}", self.target_language).replace("{source_language}", source_language)
+
+    def set_capture_profile(self, title, source_language, system_prompt):
+        """Switch prompt and language without warming up an already loaded model."""
+        scope = (title, source_language, system_prompt)
+        if self._capture_scope == scope:
+            return
+        self._capture_scope = scope
+        self._source_language = source_language
+        self._profile_prompt = system_prompt
+        self._detected_language = "English"
+        self._cache.clear()
+        self._history.clear()
+        self._preview = None
 
     def load(self) -> None:
         """Validate the endpoint with a warm-up request.
@@ -343,18 +367,29 @@ class LLMTranslator:
         if not self._loaded:
             self.load()
 
+        result = self._translate_request(text, speaker, self._build_messages(text, speaker))
+        if result:
+            self._remember(text, result, speaker)
+        return result, False
+
+    def retranslate(self, text, *, source_language, speaker=None, system_prompt=""):
+        """Make a fresh request for a history entry without changing the live conversation."""
+        language = detect_language(text) if source_language == "Auto" else source_language
+        messages = self._build_messages(
+            text, speaker, history=(), prompt=self._format_system_prompt(language, system_prompt)
+        )
+        return self._translate_request(text, speaker, messages)
+
+    def _translate_request(self, text, speaker, messages):
         try:
-            raw = self._chat(self._build_messages(text, speaker))
+            raw = self._chat(messages)
         except requests.RequestException as e:
             raise LLMTranslationError(describe_request_error(e, self._settings)) from e
 
         result = clean_output(raw, speaker_label=_speaker_label_pattern(speaker))
         if not result:
             logger.warning("empty translation from endpoint", text=text[:50])
-            return "", False
-
-        self._remember(text, result, speaker)
-        return result, False
+        return result
 
     @staticmethod
     def _speaker_input(text, speaker):
@@ -366,12 +401,13 @@ class LLMTranslator:
         self._cache.put(text, result, scope=speaker)
         self._history.append((text, result, speaker) if speaker is not None else (text, result))
 
-    def _build_messages(self, text: str, speaker=None) -> list[dict[str, str]]:
-        prompt = self.system_prompt
-        if speaker is not None or any(len(turn) == 3 for turn in self._history):
+    def _build_messages(self, text: str, speaker=None, *, history=None, prompt=None) -> list[dict[str, str]]:
+        history = self._history if history is None else history
+        prompt = self.system_prompt if prompt is None else prompt
+        if speaker is not None or any(len(turn) == 3 for turn in history):
             prompt += "\n\n" + SPEAKER_INSTRUCTIONS
         messages = [{"role": "system", "content": prompt}]
-        for source, translation, *context in self._history:
+        for source, translation, *context in history:
             messages.append({"role": "user", "content": self._speaker_input(source, context[0] if context else None)})
             messages.append({"role": "assistant", "content": translation})
         messages.append({"role": "user", "content": self._speaker_input(text, speaker)})

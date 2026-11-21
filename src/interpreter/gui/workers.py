@@ -5,6 +5,8 @@ import re
 import threading
 import time
 from concurrent.futures import CancelledError
+from dataclasses import dataclass, replace
+from queue import Empty, Full, Queue
 from typing import NamedTuple
 
 import cv2
@@ -12,12 +14,12 @@ import numpy as np
 from PySide6.QtCore import QObject, Signal
 
 from .. import log
-from ..config import Config, OutputMode, OverlayMode, character_name
+from ..config import Config, GameProfile, OutputMode, OverlayMode, character_name, ignore_phrase_key
 from ..languages import contains_japanese, contains_script  # noqa: F401  (contains_japanese kept for callers)
 from ..llm_translate import LLMTranslator
 from ..ocr import OCREngine, OCRResult, create_ocr, group_ocr_rows
 from ..speech import SpeechStream, voice_details, voice_gender
-from ..translate import TranslationEngine, create_translator
+from ..translate import SUGOI_SOURCE_LANGUAGE, TranslationEngine, create_translator
 
 logger = log.get_logger()
 
@@ -29,6 +31,21 @@ class _CharacterBinding(NamedTuple):
     voice_settings: tuple
     gender: str | None = None
     configured: bool = False
+
+
+@dataclass(frozen=True)
+class DialogueEntry:
+    source: tuple[str, ...]
+    translation: str
+    source_language: str
+    target_language: str
+    speaker: tuple[str, str] | None
+    voice: tuple[str, int, float, str]
+    profile_title: str = ""
+
+    @property
+    def can_replay(self):
+        return self.target_language.strip().casefold() in ("vietnamese", "vi", "vi-vn", "tiếng việt")
 
 
 # After this many consecutive runtime failures an engine is marked as failed
@@ -72,6 +89,11 @@ class FrameBuffer:
             self._closed = True
             self._condition.notify()
 
+    def peek(self):
+        """Inspect pending pixels without taking the next frame from the worker."""
+        with self._lock:
+            return self._frame
+
     def clear(self):
         """Discard a frame that has not been picked up by the worker yet."""
         with self._condition:
@@ -94,6 +116,8 @@ class ProcessWorker(QObject):
     speech_stream_ready = Signal(object, int)
     speech_scene_reset = Signal(int)  # A confirmed visible scene break, not an OCR-only miss.
     character_detected = Signal(str, bool, int)
+    dialogue_translated = Signal(object, int)
+    dialogue_retranslated = Signal(object, object)
 
     # Inplace mode: list of (text, bbox) regions
     regions_ready = Signal(list, int)
@@ -155,6 +179,11 @@ class ProcessWorker(QObject):
         self._character_preset_genders = {}
         self._character_signal = None
         self._spoken_character = ""
+        self._last_history_key = None
+        self._history_requests = Queue(maxsize=1)
+        self._capture_title = ""
+        self.ocr_diagnostics = None
+        self.translation_diagnostics = None
 
         # Track which models failed (for "Fix Models" button) and why
         self._ocr_failed = False
@@ -219,16 +248,57 @@ class ProcessWorker(QObject):
         except RuntimeError:  # "Signal source has been deleted": raced with teardown
             logger.debug("signal dropped after teardown")
 
+    def set_capture_source(self, title: str):
+        self._capture_title = title
+
     def submit_frame(
         self, frame, generation: int = 0, origin=(0, 0), preview_only=False, speaker_context=None, *, captured_at=None
     ):
         """Send a frame for processing (non-blocking)."""
         if self._running:
-            self._frame_buffer.put((frame, generation, origin, preview_only, speaker_context, captured_at))
+            profile_title = self._capture_title
+            profile = self._config.game_profiles.get(profile_title)
+            self._frame_buffer.put(
+                (frame, generation, origin, preview_only, speaker_context, captured_at, profile_title, profile)
+            )
 
     def discard_pending_frames(self):
         """Drop queued work when capture stops; in-flight results retain their generation."""
         self._frame_buffer.clear()
+
+    def request_retranslation(self, entry):
+        if not self._running:
+            return False
+        try:
+            self._history_requests.put_nowait(entry)
+        except Full:
+            return False
+        return True
+
+    def _retranslate_dialogue(self, entry):
+        translator = self._translator
+        try:
+            if translator is None or self._translation_failed:
+                raise ValueError("Translation engine is unavailable. Check Engines and try again.")
+            if isinstance(translator, LLMTranslator):
+                profile = self._config.game_profiles.get(entry.profile_title)
+                prompt = {"system_prompt": profile.system_prompt} if profile and profile.system_prompt else {}
+                parts = [
+                    translator.retranslate(text, source_language=entry.source_language, speaker=entry.speaker, **prompt)
+                    for text in entry.source
+                ]
+                target = translator.target_language
+            else:
+                if not all(contains_script(text, SUGOI_SOURCE_LANGUAGE) for text in entry.source):
+                    raise ValueError("Sugoi V4 can only retranslate Japanese dialogue.")
+                parts = [translator.translate(text, fresh=True)[0] for text in entry.source]
+                target = "English"
+            if not all(part.strip() for part in parts):
+                raise ValueError("The translator returned an empty result.")
+            result = replace(entry, translation="\n".join(parts), target_language=target)
+        except Exception as error:
+            result = str(error) or "Could not retranslate this dialogue."
+        self._emit(self.dialogue_retranslated, entry, result)
 
     def reload_ocr(self):
         """Rebuild the OCR engine from the current config (after a settings change).
@@ -280,6 +350,13 @@ class ProcessWorker(QObject):
                 self._reload_translation = False
                 self._load_translator()
                 self._emit_models_status()
+
+            try:
+                entry = self._history_requests.get_nowait()
+            except Empty:
+                pass
+            else:
+                self._retranslate_dialogue(entry)
 
             pending = self._frame_buffer.get(timeout=0.5)
             # Only process frames if both models loaded successfully
@@ -632,6 +709,22 @@ class ProcessWorker(QObject):
             frame, regions, self._spoken_snapshot, self._spoken_image_cache, self._spoken_source
         )
 
+    def _overlay_result_is_current(self, frame, regions, generation, origin, source_key):
+        if not self._config.hide_stale_overlay or self._config.output_mode == OutputMode.TTS:
+            return True
+        pending = self._frame_buffer.peek()
+        if pending is None:
+            return True
+        newer, newer_generation, newer_origin, preview_only, *_ = pending
+        if newer_generation != generation or newer_origin != origin or preview_only:
+            return False
+        if newer is frame:
+            return True
+        snapshot = self._text_snapshot(frame, regions)
+        # Some OCR providers omit boxes. The next OCR pass can still clear
+        # the overlay on a text change in that case.
+        return snapshot is None or self._same_dialogue_image(newer, [], snapshot, [], source_key)
+
     def _same_dialogue_image(self, frame, regions, snapshot, image_cache, reference_key=""):
         """Compare positioned glyphs for either pending or already spoken text."""
         if not snapshot or not isinstance(frame, np.ndarray) or frame.ndim != 3 or frame.shape[2] < 3:
@@ -887,7 +980,15 @@ class ProcessWorker(QObject):
         )
 
     def _process_frame(
-        self, frame, generation: int = 0, origin=(0, 0), preview_only=False, speaker_context=None, captured_at=None
+        self,
+        frame,
+        generation: int = 0,
+        origin=(0, 0),
+        preview_only=False,
+        speaker_context=None,
+        captured_at=None,
+        profile_title="",
+        profile: GameProfile | None = None,
     ):
         """Process a frame through OCR and translation."""
         if self._ocr is None:
@@ -909,6 +1010,7 @@ class ProcessWorker(QObject):
             self._ocr_failures = 0
         except Exception as e:
             logger.error("OCR error", error=str(e))
+            self.ocr_diagnostics = (generation, None, 0, 0, "OCR failed")
             self._record_ocr_failure(e)
             return
         if self._stopped:
@@ -920,9 +1022,22 @@ class ProcessWorker(QObject):
         )
         self._emit(self.ocr_results_ready, display_regions, generation)
         if preview_only:
+            self.ocr_diagnostics = (generation, ocr_ms, len(display_regions), 0, "OCR editor preview")
             return  # The OCR editor previews detection without translating/speaking edits.
         regions = self._dialogue_regions(regions, frame)
+        dialogue_count = len(regions)
+        if profile and profile.ignore_keys:
+            regions = [region for region in regions if ignore_phrase_key(region.text) not in profile.ignore_keys]
         text = " ".join(r.text for r in regions if r.text)
+        if profile and profile.ignore_keys and ignore_phrase_key(text) in profile.ignore_keys:
+            regions, text = [], ""
+        ignored = dialogue_count - len(regions)
+        language = (profile.source_language if profile else "") or self._config.source_language
+        raw_count = len(display_regions)
+        ocr_status = language
+        if not text:
+            ocr_status = "All dialogue ignored" if ignored else "No dialogue detected"
+        self.ocr_diagnostics = (generation, ocr_ms, raw_count, ignored, ocr_status)
         captured_text = text
 
         # Speech follows stable source text, not each intermediate typewriter
@@ -995,8 +1110,10 @@ class ProcessWorker(QObject):
         if (
             source_key != self._speech_candidate
             and self._speech_candidate
-            and self._config.tts_enabled
-            and self._config.output_mode != OutputMode.OVERLAY
+            and (
+                self._config.hide_stale_overlay
+                or (self._config.tts_enabled and self._config.output_mode != OutputMode.OVERLAY)
+            )
             and self._same_dialogue_image(
                 frame,
                 regions,
@@ -1013,6 +1130,16 @@ class ProcessWorker(QObject):
             regions = self._speech_candidate_regions
         if source_key != self._speech_candidate:
             previous = self._speech_candidate
+            if (
+                previous
+                and source_key
+                and self._config.hide_stale_overlay
+                and self._config.output_mode != OutputMode.TTS
+            ):
+                if self._mode == OverlayMode.INPLACE:
+                    self._emit(self.regions_ready, [], generation)
+                else:
+                    self._emit(self.text_ready, "", generation)
             growing = (
                 bool(previous)
                 and len(source_key) > len(previous)
@@ -1105,6 +1232,8 @@ class ProcessWorker(QObject):
                 self._emit(self.speech_scene_reset, generation)
 
         if not text:
+            if now - self._speech_candidate_since >= 1.5:
+                self._last_history_key = None
             if self._mode == OverlayMode.INPLACE:
                 self._emit(self.regions_ready, [], generation)
             else:
@@ -1112,8 +1241,8 @@ class ProcessWorker(QObject):
             return
 
         # Skip translation when nothing looks like the source language (OCR garbage)
-        language = self._config.source_language
         if not contains_script(text, language):
+            self.ocr_diagnostics = (generation, ocr_ms, raw_count, ignored, f"No {language} text")
             logger.debug("skipping translation - no source-language text detected", language=language)
             if self._mode == OverlayMode.INPLACE:
                 self._emit(self.regions_ready, [], generation)
@@ -1126,7 +1255,10 @@ class ProcessWorker(QObject):
         if not text:
             return
         if self._config.output_mode == OutputMode.TTS and source_key == self._spoken_source:
+            self.ocr_diagnostics = (generation, ocr_ms, raw_count, ignored, "Repeat suppressed")
             return
+        if profile_title and isinstance(self._translator, LLMTranslator):
+            self._translator.set_capture_profile(profile_title, language, profile.system_prompt if profile else "")
         translation_context = {}
         if voice_binding is not None and isinstance(self._translator, LLMTranslator):
             if self._character_settling and not name_wait_expired:
@@ -1142,6 +1274,7 @@ class ProcessWorker(QObject):
             and callable(getattr(type(self._translator), "preview_translation", None))
         )
         if can_preview and not speech_stable:
+            self.ocr_diagnostics = (generation, ocr_ms, raw_count, ignored, "Waiting for stable dialogue")
             # Use the existing settle window, not a shorter duplicate guard.
             # Only speculate on terminal punctuation observed on multiple frames,
             # at most once per 750 ms. A changed candidate never commits context.
@@ -1160,11 +1293,23 @@ class ProcessWorker(QObject):
                     self._record_translation_failure(exc)
             return
         if self._config.output_mode == OutputMode.TTS and not speech_stable:
+            self.ocr_diagnostics = (generation, ocr_ms, raw_count, ignored, "Waiting for stable dialogue")
             return
         # Take the copy before a potentially slow translation, not afterwards.
         snapshot = self._text_snapshot(frame, regions) if speech_stable and source_key != self._spoken_source else None
+        history_speaker = (voice_binding.name, voice_binding.gender or "unknown") if voice_binding and speaker else None
+        history_key = (generation, source_key, history_speaker)
+        capture_history = speech_stable and history_key != self._last_history_key
+        if capture_history:
+            model, preset, rate, reference = (
+                voice_binding.voice_settings if voice_binding else self._voice_settings_key()
+            )
+            if voice_binding:
+                preset, reference = voice_binding.preset, voice_binding.reference
+            history_voice = (model, preset, rate, reference)
         translate_start = time.perf_counter()
         speech_parts = []
+        translated_sources = []
         streamed = False
         if self._mode == OverlayMode.INPLACE and self._config.output_mode != OutputMode.TTS:
             translated_regions = []
@@ -1179,6 +1324,8 @@ class ProcessWorker(QObject):
                         translated, cached = self._translator.translate(region.text, **translation_context)
                         if translated:
                             speech_parts.append(translated)
+                            if capture_history:
+                                translated_sources.append(region.text)
                         if not cached:
                             all_cached = False
                         self._translation_failures = 0
@@ -1194,6 +1341,8 @@ class ProcessWorker(QObject):
             translate_ms = int((time.perf_counter() - translate_start) * 1000)
             was_cached = all_cached and len(translated_regions) > 0
 
+            if not self._overlay_result_is_current(frame, regions, generation, origin, source_key):
+                translated_regions = []
             self._emit(self.regions_ready, translated_regions, generation)
         else:
             if self._translator:
@@ -1238,6 +1387,8 @@ class ProcessWorker(QObject):
                         translated, was_cached = self._translator.translate(text, **translation_context)
                     if translated:
                         speech_parts.append(translated)
+                        if capture_history:
+                            translated_sources.append(text)
                     self._translation_failures = 0
                 except CancelledError:
                     return  # Session/output stopped; this is not an endpoint failure.
@@ -1254,7 +1405,10 @@ class ProcessWorker(QObject):
                 translated = text
             translate_ms = int((time.perf_counter() - translate_start) * 1000)
 
-            self._emit(self.text_ready, translated, generation)
+            visible = (
+                translated if self._overlay_result_is_current(frame, regions, generation, origin, source_key) else ""
+            )
+            self._emit(self.text_ready, visible, generation)
 
         if (
             speech_parts
@@ -1283,6 +1437,23 @@ class ProcessWorker(QObject):
                 self._emit(self.speech_stream_ready, utterance, generation)
             else:
                 self._emit(self.speech_ready, " ".join(speech_parts), generation)
+        if translated_sources:
+            self._last_history_key = history_key
+            llm = self._translator if isinstance(self._translator, LLMTranslator) else None
+            self._emit(
+                self.dialogue_translated,
+                DialogueEntry(
+                    tuple(translated_sources),
+                    "\n".join(speech_parts),
+                    llm.source_language if llm else language,
+                    llm.target_language if llm else "English",
+                    history_speaker,
+                    history_voice,
+                    profile_title,
+                ),
+                generation,
+            )
+        self.translation_diagnostics = (generation, translate_ms, was_cached, bool(speech_parts))
         total_ms = int((time.perf_counter() - frame_start) * 1000)
         translate_str = f"{translate_ms} (cached)" if was_cached else str(translate_ms)
         logger.debug(

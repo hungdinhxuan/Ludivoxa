@@ -5,6 +5,16 @@ such as `v1.0.0`; numbering is independent of the upstream Interpreter project.
 
 ## Unreleased
 
+## [1.5.0] - 2026-11-21
+
+- Review, replay, copy and retranslate recent dialogue from History, including
+  a floating History view for Windows game windows.
+- Set per-game source language, prompt and ignored OCR phrases. Inspect capture,
+  OCR, translation and audio state in Diagnostics.
+- Optionally clear an old overlay when dialogue changes while keeping completed
+  translations in History. Adjust speech volume independently for automatic
+  playback, voice previews and History replay.
+
 ## [1.4.0] - 2026-11-20
 
 - Download smaller Windows updates when a release supplies a delta for the

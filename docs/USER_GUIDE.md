@@ -65,8 +65,16 @@ cũng dừng TTS.
 
 Chọn **Voice model**, **Speaker**, chỉnh **Speaking speed**, rồi dùng **Test
 voice** để nghe thử. Bản đầy đủ có 11 preset VieNeu Nano và 67 lựa chọn Piper.
+Thanh **Speech volume** chỉnh riêng âm lượng giọng đọc từ 0% đến 100%. Mức mới
+áp dụng từ lượt phát tiếp theo, kể cả **Test voice** và **Replay** trong History.
 Với Nano, **Clone from audio** nhận một file ghi âm sạch trên máy; không cần
 transcript. Để trống thì dùng preset. File tham chiếu không được upload.
+
+Trong **Overlay**, bật **Clear translation when dialogue changes** để xóa
+bản dịch cũ khi OCR nhận ra câu mới. Nếu khung hình mới đã chờ xử lý khi bản
+dịch cũ về, app so sánh vùng chữ đã nhận dạng để tránh hiện đè bản dịch cũ.
+Các câu đã ổn định vẫn được lưu trong History. Tùy chọn áp dụng cho cả Banner
+và In-place, mặc định tắt.
 
 Từ v1.1.0, app nhận từng câu dịch hoàn chỉnh và phát các đoạn audio
 ngay khi sẵn sàng, đồng thời tổng hợp phần tiếp theo. Ưu tiên **TTS only** hoặc
@@ -87,6 +95,55 @@ bị đầu ra cùng mức peak/RMS để phân biệt chờ OCR với vấn đ�
 Câu giống hệt ở cảnh mới được đọc lại sau khi vùng chữ có tọa độ thực sự
 trống liên tục ít nhất 1,5 giây. Chớp ảnh ngắn hoặc OCR mất kết quả trên ảnh
 còn chữ không xóa bộ nhớ chống lặp; câu đang phát không bị ngắt.
+
+### Lịch sử hội thoại
+
+Mở **History** ở thanh bên để xem câu gốc và bản dịch. App giữ tối đa 100 mục
+đã dịch trong bộ nhớ cho đến khi đóng app. Lịch sử vẫn xem được sau khi dừng
+capture.
+
+Trên Windows, khi đang capture cửa sổ game, nút **History** bán trong suốt nằm
+ở góc trên bên phải. Bấm để mở cùng lịch sử trong cửa sổ nổi, rồi dùng **Esc**
+hoặc bấm lại vào game để đóng cửa sổ nổi. Nút cũng dùng được ở chế độ **TTS only**. Tắt
+tùy chọn **Show History button over the game** trong trang **Overlay** nếu muốn
+ẩn nút.
+
+- **Replay** đọc lại bản dịch tiếng Việt với giọng đã dùng cho câu đó. Phát
+  thủ công cũng dùng được ở chế độ **Overlay only**. Chờ câu đang phát kết thúc
+  trước khi bấm nghe lại.
+- **Copy translation** sao chép bản dịch của mục đang chọn.
+- **Retranslate** dịch lại câu gốc bằng engine và thiết lập dịch hiện tại.
+  Kết quả cập nhật mục lịch sử đã chọn. Tên và giới tính người nói vẫn được
+  gửi nếu dùng LLM. Nếu game có prompt riêng, app dùng prompt hiện tại của
+  game đó.
+
+### Hồ sơ theo game
+
+Chọn nguồn trong **Play**, rồi bấm **Game profile…** trên đầu ứng dụng. Khi
+đang capture, nút mở cấu hình của cửa sổ đang chụp. Mỗi hồ sơ lưu theo đúng tên
+cửa sổ, cùng cách lưu vùng OCR, ngưỡng tin cậy và giọng theo nhân vật.
+
+- **Source language** đặt riêng ngôn ngữ của game. Chọn **Use Engines setting**
+  để dùng ngôn ngữ mặc định.
+- **LLM system prompt** ghi đè prompt ở **Engines** cho game đó. Prompt có thể
+  dùng `{source_language}` và `{target_language}`. App đổi bộ nhớ hội thoại
+  khi chuyển game để giữ tên và ngữ cảnh đúng với nguồn đang dịch.
+- **Ignore OCR phrases** nhận một cụm hoàn chỉnh mỗi dòng, ví dụ `Press START`.
+  Bộ lọc bỏ qua khác biệt về chữ hoa, chữ thường và khoảng trắng. Một cụm dài
+  có chứa cụm đã lọc vẫn được dịch nếu không trùng toàn bộ dòng OCR.
+
+Chỉnh vùng quét và ngưỡng tin cậy bằng **Configure OCR**, và chỉnh vùng tên
+cùng giọng nhân vật bằng **Character voices…**. Các phiên Wayland dùng chung
+hồ sơ **Wayland Capture** vì cổng chọn màn hình không cung cấp tên cửa sổ.
+
+### Chẩn đoán capture và âm thanh
+
+Mở **Diagnostics** để xem capture có nhận frame hay không, backend capture
+đang cấp frame, thời gian OCR/dịch gần nhất, số vùng bị lọc và trạng thái TTS.
+Trên Windows có thêm trạng thái Remote Desktop, tên thiết bị âm thanh mặc
+định hiện tại, thiết bị phát ở lượt gần nhất và mã lỗi PortAudio nếu có.
+**Copy report** sao chép thông tin kỹ thuật để báo lỗi. Bản sao bỏ tên thiết
+bị, tên cửa sổ, nội dung hội thoại và cài đặt endpoint.
 
 ### Giọng theo nhân vật (thử nghiệm từ v1.2.0)
 

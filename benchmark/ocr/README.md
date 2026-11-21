@@ -113,3 +113,71 @@ Run the non-networked unit tests with:
 ~~~powershell
 .\.venv\Scripts\pytest.exe tests\test_ocr_benchmark.py
 ~~~
+
+## OneOCR and PaddleOCR on pixel dialogue
+
+The pixel comparison runs both OCR engines locally on identical dialogue crops
+and reports character error rate, exact matches, empty results, and p50/p95
+wall time. It keeps each engine in its own process and times fresh recognitions
+with the model loaded. Paddle runs the production recognizer directly on CPU.
+OneOCR runs the native Snipping Tool engine through its Python wrapper in the
+benchmark environment. Capture, worker IPC, websocket transport, translation and
+speech are outside the timed interval.
+
+Generate the synthetic set on Windows and run each engine against its manifest.
+Install [`oneocr`](https://github.com/AuroraWright/oneocr) in the benchmark
+environment and point it at a local directory containing the three runtime
+files from Snipping Tool. Paddle needs the project’s `paddle` extra and local
+inference models. Engine binaries and models are provisioned separately.
+
+```powershell
+python benchmark/ocr/pixel_fixtures.py .test-results/pixel
+python benchmark/ocr/pixel_compare.py oneocr .test-results/pixel/manifest.json .test-results/pixel/oneocr.json --oneocr-dir C:/path/to/oneocr --repeats 7
+python benchmark/ocr/pixel_compare.py paddle .test-results/pixel/manifest.json .test-results/pixel/paddle.json --detector C:/path/to/detector --recognizer C:/path/to/recognizer --repeats 7
+```
+
+For your own captures, the manifest contains `samples`. Each item has `image`
+(relative to the manifest directory), `group` and a manually transcribed
+`text`. Use `--group` to select the same subset for each run. The reports
+include input hashes, transcriptions and predictions. Keep private samples
+and raw reports local.
+
+### Windows CPU measurements
+
+Intel Core i7-13700F, OneOCR wrapper 1.0.12 with Snipping Tool 11.2609.15.0,
+PaddleOCR 3.7.0 with ONNX, two Paddle intra-op threads, limit side 640 and
+recognition confidence 0.6. Three warmups and seven randomized timed
+repetitions per crop. The v5 run uses the English mobile recognizer for English
+and the general mobile recognizer for Japanese. Values show **p50 / p95 in
+milliseconds** and **CER**, with Unicode width and whitespace normalized.
+
+| Crops | Count | OneOCR | PP-OCRv5 Mobile | PP-OCRv6 Small |
+| --- | ---: | ---: | ---: | ---: |
+| Recorded GBA, English | 2 | 50.89 / 55.08 · 4.65% | 82.70 / 114.22 · 3.49% | 55.86 / 61.81 · 9.30% |
+| Synthetic English, 1× | 6 | 25.82 / 37.47 · 0.00% | 31.86 / 39.87 · 0.00% | 37.58 / 43.98 · 2.78% |
+| Synthetic English, 3× | 6 | 46.48 / 53.21 · 0.00% | 45.73 / 51.85 · 0.46% | 44.58 / 50.48 · 0.00% |
+| Synthetic Japanese, 1× | 6 | 40.42 / 49.29 · 1.47% | 35.09 / 37.90 · 1.47% | 36.51 / 40.79 · 0.00% |
+| Synthetic Japanese, 3× | 6 | 63.16 / 70.87 · 2.21% | 49.59 / 58.56 · 7.35% | 46.30 / 50.36 · 1.47% |
+
+OneOCR had 38% lower median latency than v5 on the two recorded crops. v5
+had the lowest aggregate character error on those crops. v6 Small did best
+on character error for the synthetic Japanese set. The synthetic samples
+reuse six passages per language at two scales. Only the English run includes
+two recorded crops, so this measures a narrow workload. The application
+continues to use its configured OCR engine.
+
+### Follow-up on recorded dialogue
+
+A follow-up used five randomized repetitions per image on the same two English
+crops and 15 full Japanese retro screenshots from the earlier OCR comparison.
+Both engines received identical images within each group.
+
+| Input | Images | OneOCR p50 / CER | PP-OCRv5 Mobile p50 / CER |
+| --- | ---: | ---: | ---: |
+| Recorded English dialogue crops | 2 | 176.29 ms / 4.65% | 116.99 ms / 3.49% |
+| Japanese retro screenshots | 15 | 273.89 ms / 24.15% | 594.75 ms / 31.72% |
+
+The English result reversed the ordering in the earlier run. The Japanese
+references cover dialogue within full screenshots, so text picked up elsewhere
+counts toward CER. These measurements cover warm OCR calls. Capture,
+translation and speech latency require a separate comparison.

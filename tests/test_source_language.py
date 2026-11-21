@@ -6,7 +6,15 @@ from unittest.mock import MagicMock
 import pytest
 from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QLineEdit, QPlainTextEdit, QPushButton
 
-from interpreter.config import Config, LLMSettings, OCRBackend, OverlayMode, OwocrSettings, TranslationBackend
+from interpreter.config import (
+    Config,
+    GameProfile,
+    LLMSettings,
+    OCRBackend,
+    OverlayMode,
+    OwocrSettings,
+    TranslationBackend,
+)
 from interpreter.gui.main_window import MainWindow
 from interpreter.gui.workers import ProcessWorker
 from interpreter.languages import (
@@ -188,7 +196,9 @@ class TestWorkerGate:
         worker, outputs = _worker("Japanese", self.REGIONS)
         worker._process_frame("frame")
         assert worker._translator.calls == ["こんにちは"]
-        assert json.loads(json.dumps(outputs)) == [[["<こんにちは>", {"x": 0, "y": 10, "width": 1, "height": 1}]]]  # Qt turns tuples into lists
+        assert json.loads(json.dumps(outputs)) == [
+            [["<こんにちは>", {"x": 0, "y": 10, "width": 1, "height": 1}]]
+        ]  # Qt turns tuples into lists
 
     def test_english_source_keeps_only_latin_regions(self):
         worker, outputs = _worker("English", self.REGIONS)
@@ -224,6 +234,7 @@ def _panel(config: Config) -> MainWindow:
     """A MainWindow with the OCR group's widgets plus what the Apply guards touch, skipping __init__."""
     win = MainWindow.__new__(MainWindow)
     win._config = config
+    win._capturing = False
     win._ocr_engine_combo = QComboBox()
     win._ocr_engine_combo.addItem("MeikiOCR", OCRBackend.MEIKI.value)
     win._ocr_engine_combo.addItem("owocr", OCRBackend.OWOCR.value)
@@ -356,6 +367,25 @@ class TestMainWindow:
         win._apply_engines()
 
         assert "model" in win._llm_result_label.toolTip()
+        config.save.assert_not_called()
+
+    @pytest.mark.parametrize("engine", ["ocr", "translation"])
+    def test_apply_refuses_engines_incompatible_with_an_active_profile(self, qapp, engine):
+        config = Config(
+            ocr_backend=OCRBackend.OWOCR, translation_backend=TranslationBackend.LLM, llm=LLMSettings(model="m")
+        )
+        config.set_game_profile("Retro", GameProfile(source_language="English"))
+        win = _panel(config)
+        win._capturing = True
+        win._current_window_title = "Retro"
+        if engine == "ocr":
+            win._ocr_engine_combo.setCurrentIndex(win._ocr_engine_combo.findData(OCRBackend.MEIKI.value))
+        else:
+            win._engine_combo.setCurrentIndex(win._engine_combo.findData(TranslationBackend.SUGOI.value))
+
+        win._apply_engines()
+
+        assert "game profile" in win._pair_hint.text()
         config.save.assert_not_called()
 
     def test_fix_models_does_not_delete_sugoi_for_a_language_conflict(self, qapp, monkeypatch):

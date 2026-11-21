@@ -174,6 +174,9 @@ class TranslationCache:
         self._max_size = max_size
         self._similarity_threshold = similarity_threshold
 
+    def clear(self):
+        self._cache.clear()
+
     def get(self, text: str, *, scope: tuple[str, str] | None = None) -> str | None:
         """Get cached translation, using fuzzy matching if exact match not found.
 
@@ -338,7 +341,7 @@ class Translator:
         device_info = "GPU" if device == "cuda" else "CPU"
         logger.info("sugoi v4 ready", device=device_info)
 
-    def translate(self, text: str) -> tuple[str, bool]:
+    def translate(self, text: str, *, fresh=False) -> tuple[str, bool]:
         """Translate Japanese text to English.
 
         Args:
@@ -351,7 +354,7 @@ class Translator:
             return "", False
 
         # Check cache first (includes fuzzy matching)
-        cached = self._cache.get(text)
+        cached = None if fresh else self._cache.get(text)
         if cached is not None:
             return cached, True
 
@@ -376,7 +379,8 @@ class Translator:
         result = normalize_output(result)
 
         # Store in cache
-        self._cache.put(text, result)
+        if not fresh:
+            self._cache.put(text, result)
 
         return result, False
 

@@ -210,6 +210,52 @@ def normalize_ocr_regions(value) -> list[dict]:
     return [region for entry in entries if (region := normalize_ocr_region(entry)) is not None]
 
 
+def ignore_phrase_key(text: str) -> str:
+    """Match a complete OCR phrase, allowing for case and OCR spacing differences."""
+    return " ".join(unicodedata.normalize("NFKC", text).casefold().split())
+
+
+@dataclass(frozen=True)
+class GameProfile:
+    """Overrides for one capture source. Bounds, confidence and voices use their existing maps."""
+
+    source_language: str = ""
+    system_prompt: str = ""
+    ignore_phrases: tuple[str, ...] = ()
+    ignore_keys: frozenset[str] = dataclass_field(init=False, repr=False)
+
+    def __post_init__(self):
+        object.__setattr__(self, "ignore_keys", frozenset(map(ignore_phrase_key, self.ignore_phrases)))
+
+    @classmethod
+    def from_dict(cls, data):
+        if not isinstance(data, dict):
+            return cls()
+        language = data.get("source_language")
+        key = language.strip().casefold() if isinstance(language, str) else ""
+        source = next((name for name in SOURCE_LANGUAGES if name.casefold() == key), "")
+        prompt = data.get("system_prompt")
+        phrases = data.get("ignore_phrases")
+        return cls(
+            source,
+            prompt.strip() if isinstance(prompt, str) else "",
+            tuple(dict.fromkeys(phrase.strip() for phrase in phrases if isinstance(phrase, str) and phrase.strip()))
+            if isinstance(phrases, list)
+            else (),
+        )
+
+    def to_dict(self):
+        return {
+            key: value
+            for key, value in (
+                ("source_language", self.source_language),
+                ("system_prompt", self.system_prompt),
+                ("ignore_phrases", list(self.ignore_phrases)),
+            )
+            if value
+        }
+
+
 CHARACTER_GENDERS = ("male", "female", "nonbinary", "unknown")
 
 
@@ -333,9 +379,15 @@ class Config:
         ocr_regions: dict | None = None,
         update_check_on_startup: bool = False,
         character_voices: dict | None = None,
+        history_overlay_enabled: bool = True,
+        game_profiles: dict | None = None,
+        hide_stale_overlay: bool = False,
+        tts_volume: int = 100,
     ):
         self.window_title = window_title
         self.update_check_on_startup = update_check_on_startup is True
+        self.history_overlay_enabled = history_overlay_enabled is True
+        self.hide_stale_overlay = hide_stale_overlay is True
         # Video device (capture card, webcam) captured last; empty means a window was captured last.
         # The name is what the user sees and what keys exclusion zones; the id tells two devices
         # of the same model apart (it is matched first, the name is the fallback).
@@ -361,6 +413,10 @@ class Config:
             self.tts_rate = min(2.0, max(0.75, float(tts_rate)))
         except (ValueError, TypeError, OverflowError):
             self.tts_speaker_id, self.tts_rate = 0, 1.0
+        try:
+            self.tts_volume = min(100, max(0, int(tts_volume)))
+        except (ValueError, TypeError, OverflowError):
+            self.tts_volume = 100
         self.source_language = source_language  # language of the game's text, see languages.SOURCE_LANGUAGES
         self.ocr_confidence = ocr_confidence  # Global default
         self.overlay_mode = overlay_mode
@@ -387,6 +443,11 @@ class Config:
         self.character_voices = {
             str(title): CharacterVoices.from_dict(value)
             for title, value in (character_voices.items() if isinstance(character_voices, dict) else [])
+        }
+        self.game_profiles = {
+            title: profile
+            for title, value in (game_profiles.items() if isinstance(game_profiles, dict) else [])
+            if isinstance(title, str) and title and (profile := GameProfile.from_dict(value)).to_dict()
         }
 
     @classmethod
@@ -457,6 +518,8 @@ class Config:
             return cls(
                 window_title=data.get("window_title", cls.DEFAULT_WINDOW_TITLE),
                 update_check_on_startup=data.get("update_check_on_startup", False) is True,
+                history_overlay_enabled=data.get("history_overlay_enabled", True) is True,
+                hide_stale_overlay=data.get("hide_stale_overlay", False) is True,
                 ocr_confidence=float(data.get("ocr_confidence", cls.DEFAULT_OCR_CONFIDENCE)),
                 overlay_mode=overlay_mode,
                 font_family=data.get("font_family"),  # None = system default
@@ -471,6 +534,7 @@ class Config:
                 exclusion_zones=data.get("exclusion_zones", {}),
                 ocr_regions=data.get("ocr_regions"),
                 character_voices=data.get("character_voices"),
+                game_profiles=data.get("game_profiles"),
                 ocr_confidence_per_window=data.get("ocr_confidence_per_window", {}),
                 translation_backend=translation_backend,
                 llm=LLMSettings.from_dict(data.get("llm")),
@@ -483,6 +547,7 @@ class Config:
                 output_mode=data.get("output_mode"),
                 tts_speaker_id=data.get("tts_speaker_id", 0),
                 tts_rate=data.get("tts_rate", 1.0),
+                tts_volume=data.get("tts_volume", 100),
                 source_language=source_language,
                 video_device=str(data.get("video_device") or ""),
                 video_device_id=str(data.get("video_device_id") or ""),
@@ -590,6 +655,12 @@ hotkeys:
         profile = self.character_voices.get(window_title)
         return CharacterVoices.from_dict(profile.to_dict()) if profile else CharacterVoices()
 
+    def set_game_profile(self, title: str, profile: GameProfile):
+        if profile.to_dict():
+            self.game_profiles[title] = profile
+        else:
+            self.game_profiles.pop(title, None)
+
     def set_character_voices(self, window_title: str, profile: CharacterVoices):
         self.character_voices[window_title] = CharacterVoices.from_dict(profile.to_dict())
 
@@ -688,12 +759,15 @@ hotkeys:
             data["owocr"] = self.owocr.to_dict()
         data["source_language"] = str(self.source_language)
         data["update_check_on_startup"] = self.update_check_on_startup
+        data["history_overlay_enabled"] = self.history_overlay_enabled
+        data["hide_stale_overlay"] = self.hide_stale_overlay
         data["tts_enabled"] = self.tts_enabled
         data["tts_model_path"] = self.tts_model_path
         data["tts_reference_audio"] = self.tts_reference_audio
         data["output_mode"] = self.output_mode.value
         data["tts_speaker_id"] = self.tts_speaker_id
         data["tts_rate"] = self.tts_rate
+        data["tts_volume"] = self.tts_volume
         # Only written while a video device is the selected source
         if self.video_device:
             data["video_device"] = str(self.video_device)
@@ -719,6 +793,8 @@ hotkeys:
             data["ocr_regions"] = {str(title): region.copy() for title, region in self.ocr_regions.items()}
         if self.character_voices:
             data["character_voices"] = {title: profile.to_dict() for title, profile in self.character_voices.items()}
+        if self.game_profiles:
+            data["game_profiles"] = {title: profile.to_dict() for title, profile in self.game_profiles.items()}
         if self.ocr_confidence_per_window:
             data["ocr_confidence_per_window"] = {str(k): float(v) for k, v in self.ocr_confidence_per_window.items()}
 

@@ -619,6 +619,7 @@ class WindowsCaptureStream:
         self._window_id = window_id
         self._latest_frame: NDArray[np.uint8] | None = None
         self._captured_at: float | None = None
+        self.backend = ""
         self._on_frame_ready = on_frame_ready
         self._frame_notification_pending = False
         self._frame_lock = threading.Lock()
@@ -650,6 +651,7 @@ class WindowsCaptureStream:
         with self._frame_lock:
             self._latest_frame = None
             self._captured_at = None
+            self.backend = ""
 
     def _publish_frame(self, frame: NDArray[np.uint8], captured_at: float, graphics_generation: int | None = None):
         with self._frame_lock:
@@ -659,6 +661,7 @@ class WindowsCaptureStream:
                 return
             self._latest_frame = frame
             self._captured_at = captured_at
+            self.backend = "Windows Graphics Capture" if graphics_generation is not None else "PrintWindow"
             self.error = None
             # Hold just one notification while the consumer is busy.
             notify = self._on_frame_ready is not None and not self._frame_notification_pending

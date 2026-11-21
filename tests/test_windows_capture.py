@@ -102,12 +102,15 @@ def test_frame_notifications_coalesce_and_obsolete_generations_cannot_publish():
     notify.assert_called_once()
     frame, stamp = stream.get_frame_with_timestamp()
     assert frame is latest and stamp == 1.25
+    assert stream.backend == "PrintWindow"
     stream._stop_graphics()
     stream._publish_frame(first, 1.5, graphics_generation=0)
     assert stream.get_frame_with_timestamp() == (None, None)
+    assert not stream.backend
     notify.assert_called_once()
-    stream._publish_frame(latest, 1.75)
+    stream._publish_frame(latest, 1.75, graphics_generation=stream._graphics_generation)
     assert notify.call_count == 2
+    assert stream.backend == "Windows Graphics Capture"
 
 
 @pytest.mark.parametrize("states", [[False, False, True, True], [True, False, True, True]])

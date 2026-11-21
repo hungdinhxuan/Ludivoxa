@@ -8,17 +8,17 @@ streaming speech and latency improvements. Use patch
 version **1.1.1** fixes OCR/TTS repeats and audio formats. The published v1.0.0 has no updater;
 its users must install the first updater-enabled version manually once.
 
-**v1.4.0 stable** uses Python/AppVersion `1.4.0` and Windows numeric version
-`1.4.0.0`. Build and test a fresh app stage. The app-only installers use the
+**v1.5.0 stable** uses Python/AppVersion `1.5.0` and Windows numeric version
+`1.5.0.0`. Build and test a fresh app stage. The app-only installers use the
 existing offline models and runtime.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1 -AppDirectory build/v1.4.0-app/Interpreter -OutputDirectory dist/app-update/v1.4.0
+powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1 -AppDirectory build/v1.5.0-app/Interpreter -OutputDirectory dist/app-update/v1.5.0
 ```
 
-Build the delta from the archived v1.3.1 onedir bundle and package both
+Build the delta from the archived v1.4.0 onedir bundle and package both
 installers using the [smaller Windows updates](#smaller-windows-updates)
-instructions. Publish `v1.4.0` with `prerelease=false` and `make_latest=true`.
+instructions. Publish `v1.5.0` with `prerelease=false` and `make_latest=true`.
 Verify anonymous downloads of both packages. New users install the full
 offline v1.1.1 package before this update.
 
@@ -118,7 +118,7 @@ version. Use the **exact archived PyInstaller onedir build** shipped with that
 version. A rebuild of the same tag can have different file hashes.
 
 ```powershell
-$previous = '1.3.1'
+$previous = '1.4.0'
 $version = '<new stable version>'
 $baseApp = "build/v$previous-app/Interpreter"
 $targetApp = "build/v$version-app/Interpreter"
