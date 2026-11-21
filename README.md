@@ -9,8 +9,8 @@ dialogue.
 [Download for Windows](#install-on-windows) · [Set up game translation](#translate-your-first-game-dialogue) ·
 [Documentation](https://ludivoxa.hungdx.com/en/) · [Tiếng Việt](README.vi.md)
 
-**Stable release v2.0.1** adds the Ludivoxa speech-wave icon to the app,
-Windows installer and wiki. [Release notes](docs/releases/v2.0.1.md)
+**Stable release v2.1.0** adds optional offline voice cloning for English,
+Japanese, Korean and Chinese. [Release notes](docs/releases/v2.1.0.md)
 
 ## Game translation features
 
@@ -63,7 +63,7 @@ archives are for development.
 **Already installed?** Use **Updates** or run the standard **App-Update.exe**
 from the [latest stable release](https://github.com/hungdinhxuan/Ludivoxa/releases/latest)
 and select the existing installation directory. The updater can use the smaller
-v2.0.1 patch when the v2.0.0 app files match. Older or modified installs use
+v2.1.0 patch when the v2.0.1 app files match. Older or modified installs use
 the standard update. Both packages retain your models, Ollama runtime and
 `config.yml`. GitHub downloads work without sign-in. The installer is unsigned.
 
@@ -83,8 +83,10 @@ the standard update. Both packages retain your models, Ollama runtime and
 The offline profile runs OCR, translation and speech on your PC after
 installation. Its private Ollama endpoint is `http://127.0.0.1:11435`.
 You can set another local endpoint or a LAN server in **Engines**. The app
-uses the configured endpoint without automatic cloud fallback. Other targets
-use the overlay automatically. The bundled voices read Vietnamese.
+uses the configured endpoint without automatic cloud fallback. The bundled
+voices read Vietnamese. From v2.1.0, Ludivoxa also supports optional offline
+voice cloning for English, Japanese, Korean and Chinese with a local speech server.
+[Multilingual voice cloning setup](docs/USER_GUIDE.md#clone-giọng-đa-ngôn-ngữ)
 [Local and LAN setup](docs/USER_GUIDE.md#ollama-local-và-gpu-server-lan)
 
 ## Architecture

@@ -17,6 +17,7 @@ from .. import log
 from ..config import Config, GameProfile, OCRBackend, OutputMode, OverlayMode, character_name, ignore_phrase_key
 from ..languages import contains_japanese, contains_script, is_vietnamese_target  # noqa: F401
 from ..llm_translate import LLMTranslator
+from ..local_tts import LocalCloneVoice, clone_language
 from ..ocr import PADDLE_LANGUAGE_MODELS, OCREngine, OCRResult, create_ocr, group_ocr_rows
 from ..speech import SpeechStream, voice_details, voice_gender
 from ..translate import SUGOI_SOURCE_LANGUAGE, TranslationEngine, create_translator
@@ -40,11 +41,15 @@ class DialogueEntry:
     source_language: str
     target_language: str
     speaker: tuple[str, str] | None
-    voice: tuple[str, int, float, str]
+    voice: tuple[str | LocalCloneVoice, int, float, str]
     profile_title: str = ""
 
     @property
     def can_replay(self):
+        model, _, _, reference = self.voice
+        if isinstance(model, LocalCloneVoice):
+            language = clone_language(self.target_language)
+            return bool(reference and language and language[0] == model.language)
         return is_vietnamese_target(self.target_language)
 
 
@@ -296,7 +301,8 @@ class ProcessWorker(QObject):
                 target = "English"
             if not all(part.strip() for part in parts):
                 raise ValueError("The translator returned an empty result.")
-            result = replace(entry, translation="\n".join(parts), target_language=target)
+            voice = entry.voice if target == entry.target_language else self._config.speech_voice_settings
+            result = replace(entry, translation="\n".join(parts), target_language=target, voice=voice)
         except Exception as error:
             result = str(error) or "Could not retranslate this dialogue."
         self._emit(self.dialogue_retranslated, entry, result)
@@ -904,6 +910,7 @@ class ProcessWorker(QObject):
         if not profile.enabled or not isinstance(frame, np.ndarray) or not frame.size:
             self._character_settling = False
             return None
+        voice_settings = self._config.speech_voice_settings
         settings = (title, repr(profile.to_dict()), self._config.tts_model_path)
         if settings != self._character_context_key:
             self._character_context_key = settings
@@ -933,9 +940,9 @@ class ProcessWorker(QObject):
                     self._character_settling = False
                     return _CharacterBinding(
                         "",
-                        self._config.tts_speaker_id,
-                        self._config.tts_reference_audio,
-                        self._voice_settings_key(),
+                        voice_settings[1],
+                        voice_settings[3],
+                        voice_settings,
                         None,
                     )
                 self._character_pixels, self._character_regions = frame.copy(), regions
@@ -962,7 +969,7 @@ class ProcessWorker(QObject):
                 self._character_name = name
                 self._character_settling = False
         preset = profile.speaker_for(self._character_name, self._config.tts_model_path)
-        mapped = preset in self._character_preset_genders
+        mapped = not isinstance(voice_settings[0], LocalCloneVoice) and preset in self._character_preset_genders
         gender = profile.gender_for(self._character_name)
         state = self._character_name, mapped, generation
         if not self._character_settling and state != self._character_signal:
@@ -970,25 +977,16 @@ class ProcessWorker(QObject):
             self._emit(self.character_detected, *state)
         return _CharacterBinding(
             self._character_name,
-            preset if mapped else self._config.tts_speaker_id,
-            "" if mapped else self._config.tts_reference_audio,
-            self._voice_settings_key(),
+            preset if mapped else voice_settings[1],
+            "" if mapped else voice_settings[3],
+            voice_settings,
             gender or self._character_preset_genders.get(preset),
             configured=preset is not None or gender is not None,
         )
 
-    def _voice_settings_key(self):
-        return (
-            self._config.tts_model_path,
-            self._config.tts_speaker_id,
-            self._config.tts_rate,
-            self._config.tts_reference_audio,
-        )
-
-    @staticmethod
-    def _character_stream(source_key, binding):
+    def _character_stream(self, source_key, binding):
         if binding is None:
-            return SpeechStream(key=source_key)
+            return SpeechStream(key=source_key, voice_settings=self._config.speech_voice_settings)
         return SpeechStream(
             key=("character", binding.name.casefold(), source_key),
             speaker_name=binding.name,
@@ -1071,10 +1069,7 @@ class ProcessWorker(QObject):
             frame.shape[:2] if isinstance(frame, np.ndarray) else None,
             output_mode,
             speech_enabled,
-            self._config.tts_model_path,
-            self._config.tts_speaker_id,
-            self._config.tts_rate,
-            self._config.tts_reference_audio,
+            *self._config.speech_voice_settings,
         )
         if session != self._speech_session:
             logger.info("speech session reset", generation=generation, reason="capture or voice settings changed")
@@ -1222,9 +1217,9 @@ class ProcessWorker(QObject):
             # the previous character's voice. Fall back for this utterance only.
             voice_binding = _CharacterBinding(
                 "",
-                self._config.tts_speaker_id,
+                self._config.speech_voice_settings[1],
                 self._config.tts_reference_audio,
-                self._voice_settings_key(),
+                self._config.speech_voice_settings,
                 None,
             )
             speaker = repeat_speaker = ""
@@ -1308,7 +1303,7 @@ class ProcessWorker(QObject):
         capture_history = speech_stable and history_key != self._last_history_key
         if capture_history:
             model, preset, rate, reference = (
-                voice_binding.voice_settings if voice_binding else self._voice_settings_key()
+                voice_binding.voice_settings if voice_binding else self._config.speech_voice_settings
             )
             if voice_binding:
                 preset, reference = voice_binding.preset, voice_binding.reference

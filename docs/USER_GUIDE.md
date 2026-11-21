@@ -68,8 +68,8 @@ một lần trong phiên xử lý mới.
 - Từ v1.7.0, trong **Engines → Translate to**, chọn **Vietnamese** (mặc định), **English**,
   **Simplified Chinese**, **Traditional Chinese**, **Japanese** hoặc **Korean**,
   rồi nhấn **Apply**. Có thể gõ ngôn ngữ khác mà model dịch hỗ trợ.
-- Khi dịch sang ngôn ngữ khác tiếng Việt, app tự dùng **Overlay only**. Chế
-  độ đầu ra đã lưu được khôi phục khi quay lại tiếng Việt.
+- Tiếng Anh, Nhật, Hàn và Trung có thể dùng [clone giọng đa ngôn ngữ](USER_GUIDE.md#clone-giọng-đa-ngôn-ngữ).
+  Khi chưa cấu hình clone, app dùng **Overlay only** cho các ngôn ngữ đó.
 
 MeikiOCR, Sugoi V4 và owocr vẫn có trong ứng dụng. Sugoi dành cho Nhật → Anh.
 owocr là chương trình riêng; việc dùng engine online trong owocr là lựa chọn
@@ -115,6 +115,35 @@ Câu giống hệt ở cảnh mới được đọc lại sau khi vùng chữ c�
 trống liên tục ít nhất 1,5 giây. Chớp ảnh ngắn hoặc OCR mất kết quả trên ảnh
 còn chữ không xóa bộ nhớ chống lặp; câu đang phát không bị ngắt.
 
+### Clone giọng đa ngôn ngữ
+
+Từ v2.1.0, Ludivoxa có tùy chọn dùng **Qwen3-TTS-12Hz-0.6B-Base**
+để đọc tiếng Anh, Nhật, Hàn và Quan Thoại. Chữ giản thể và phồn thể đều dùng
+giọng Quan Thoại. Chuẩn bị model và runtime một lần, sau đó có thể dùng offline.
+
+1. Tải [llama.cpp build b12606](https://github.com/ggml-org/llama.cpp/releases/tag/b12606)
+   hoặc mới hơn có endpoint `/tts`. Tải [cặp GGUF đã thử](https://huggingface.co/mradermacher/Qwen3-TTS-12Hz-0.6B-Base-GGUF/tree/0762b31e9cd99274d49dca4e895bd81863134f08),
+   gồm model `Q4_K_M` và `mmproj-Q8_0` (tổng khoảng 762 MB).
+   Trên Windows có NVIDIA, giải nén bộ `win-cuda-12.4-x64` và gói `cudart`
+   đi cùng bản build vào chung một thư mục.
+2. Mở dịch vụ bằng các đường dẫn local và giữ terminal chạy khi dùng clone.
+
+   ```powershell
+   .\llama-server.exe --host 127.0.0.1 --port 17867 --no-webui -t 2 -np 1 -c 1024 -ngl 99 `
+     -m .\Qwen3-TTS-12Hz-0.6B-Base.Q4_K_M.gguf `
+     --mmproj .\Qwen3-TTS-12Hz-0.6B-Base.mmproj-Q8_0.gguf
+   ```
+
+3. Trong **Engines**, chọn đích **English**, **Japanese**, **Korean**,
+   **Simplified Chinese** hoặc **Traditional Chinese** và bấm **Apply**.
+4. Trong **Session**, nhập `http://127.0.0.1:17867` vào **Local clone server**,
+   chọn WAV hoặc MP3 sạch khoảng 3–10 giây ở **Clone from audio**, rồi bấm
+   **Test voice**. Chọn **TTS only** hoặc **Overlay + TTS** để đọc tự động.
+
+Clone dùng một mẫu giọng chung cho các câu. Tốc độ nói theo model. File mẫu
+và bản dịch chỉ gửi qua loopback tới dịch vụ trên cùng máy. Đóng dịch vụ bằng
+**Ctrl+C** ở terminal. Tiếng Việt tiếp tục dùng VieNeu Nano hoặc Piper.
+
 ### Lịch sử hội thoại
 
 Mở **History** ở thanh bên để xem câu gốc và bản dịch. App giữ tối đa 100 mục
@@ -127,7 +156,7 @@ hoặc bấm lại vào game để đóng cửa sổ nổi. Nút cũng dùng đ�
 tùy chọn **Show History button over the game** trong trang **Overlay** nếu muốn
 ẩn nút.
 
-- **Replay** đọc lại bản dịch tiếng Việt với giọng đã dùng cho câu đó. Phát
+- **Replay** đọc lại các bản dịch có giọng đã cấu hình cho câu đó. Phát
   thủ công cũng dùng được ở chế độ **Overlay only**. Chờ câu đang phát kết thúc
   trước khi bấm nghe lại.
 - **Copy translation** sao chép bản dịch của mục đang chọn.

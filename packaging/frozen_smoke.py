@@ -144,6 +144,7 @@ def run_smoke(report_path):
         for target in TARGET_LANGUAGE_PRESETS[1:]:
             language_config = copy.deepcopy(config)
             language_config.llm.target_language = target
+            language_config.tts_clone_url = ""  # Exercise the fallback when the optional server is unset.
             language_config.output_mode = OutputMode.TTS
             language_config.tts_enabled = True
             if target == "English":
@@ -233,6 +234,29 @@ def run_smoke(report_path):
                 raise AssertionError("Invalid local voice-cloning output")
         report["voice_cloning_ms"] = (time.perf_counter() - start) * 1000
         report["clone_reference_kind"] = "synthetic diagnostic audio, not a human similarity evaluation"
+
+        if config.tts_clone_url:
+            clone_config = copy.deepcopy(config)
+            clone_config.tts_reference_audio = str(reference)
+            cloned_targets = []
+            for translation in target_translations:
+                target = translation["target_language"]
+                clone_config.llm.target_language = target
+                if clone_config.clone_voice is None:
+                    raise AssertionError(f"Local cloning is unavailable for {target}")
+                start = time.perf_counter()
+                first_audio_ms = None
+                audio_seconds = 0.0
+                for chunk in synthesizer.iter_audio(translation["translation"], *clone_config.speech_voice_settings):
+                    with wave.open(BytesIO(chunk)) as output:
+                        audio_seconds += output.getnframes() / output.getframerate()
+                        pcm = np.frombuffer(output.readframes(output.getnframes()), dtype="<i2").astype(np.int32)
+                    if first_audio_ms is None and np.any(np.abs(pcm) > 300):
+                        first_audio_ms = (time.perf_counter() - start) * 1000
+                if first_audio_ms is None or audio_seconds < 0.5:
+                    raise AssertionError(f"Empty cloned speech for {target}")
+                cloned_targets.append({"target": target, "first_audio_ms": first_audio_ms, "seconds": audio_seconds})
+            report["multilingual_clones"] = cloned_targets
 
         # Real Nano synthesis and one native device stream must finish every
         # chunk even while Qt stalls. TTFA audits intentionally stop early;

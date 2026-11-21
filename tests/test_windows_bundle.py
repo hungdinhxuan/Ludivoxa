@@ -69,6 +69,11 @@ def test_frozen_ocr_local_translation_and_speech(tmp_path):
     assert report["audio_seconds"] > 1
     assert report["voice_count"] >= 67
     assert report["cloned_audio_seconds"] > 1
+    if settings.get("tts_clone_url"):
+        assert [item["target"] for item in report["multilingual_clones"]] == [
+            item["target_language"] for item in report["target_translations"]
+        ]
+        assert all(item["seconds"] >= 0.5 for item in report["multilingual_clones"])
     assert report["stable_pipeline_utterances"] == 1
     assert report["stable_ocr_jitter_utterances"] == 1
     assert report["stable_shaded_dialogue_utterances"] == 1

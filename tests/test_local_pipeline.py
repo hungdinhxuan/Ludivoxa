@@ -1,11 +1,14 @@
-"""Offline integration contracts: real HTTP, Paddle adapter, worker and overlay signals."""
+"""Offline integration contracts: real HTTP, Paddle adapter, worker and output signals."""
 
+import base64
 import json
 import socket
 import sys
 import threading
 import time
+import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -54,6 +57,17 @@ def endpoint(monkeypatch):
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             calls.append((self.path, body))
+            if self.path == "/tts":
+                if body["input"] == "redirect":
+                    self.send_response(302)
+                    self.send_header("Location", "http://cloud.invalid/tts")
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "audio/pcm;rate=24000;encoding=signed-int;bits=16")
+                self.end_headers()
+                self.wfile.write(b"\x00\x20" * 512)
+                return
             prompt = body["messages"][0]["content"]
             translation = next(
                 (text for target, text in TARGET_TRANSLATIONS.items() if f"into {target}." in prompt), "Xin chào"
@@ -195,6 +209,95 @@ def test_target_preserves_unicode_and_uses_overlay_with_saved_speech_mode(
     expected_path = "/api/chat" if provider == "ollama" else "/v1/chat/completions"
     assert all(path == expected_path for path, _ in calls)
     assert f"from {source} into {target}." in calls[-1][1]["messages"][0]["content"]
+
+
+@pytest.mark.parametrize("target,lang", zip(TARGET_TRANSLATIONS, ("en", "zh", "zh", "ja", "ko"), strict=True))
+def test_translation_reaches_local_cloned_speech_once(endpoint, qapp, tmp_path, monkeypatch, target, lang):
+    from PySide6.QtCore import QObject, Signal
+
+    from ludivoxa.gui import workers
+    from ludivoxa.speech import SpeechController, clean_speech_text
+
+    base, calls = endpoint
+    reference = tmp_path / "reference.wav"
+    reference.write_bytes(b"test local reference")
+    config = Config(
+        source_language="English",
+        translation_backend=TranslationBackend.LLM,
+        llm=LLMSettings(base_url=base, model="local-test", target_language=target),
+        output_mode=OutputMode.TTS,
+        tts_clone_url=base,
+        tts_reference_audio=str(reference),
+    )
+    assert config.effective_output_mode == OutputMode.TTS
+    worker = ProcessWorker(config)
+    worker.stream_speech = False  # The test LLM returns one buffered translation.
+    worker._translator = LLMTranslator(config.llm, source_language="English")
+    worker._translator._loaded = True
+    worker._ocr = SimpleNamespace(
+        extract_text_regions=lambda _: [OCRResult("Wait by the gate.", {"x": 1, "y": 2, "width": 80, "height": 20})]
+    )
+    monkeypatch.setattr(workers, "SPEECH_SETTLE_SECONDS", 0)
+
+    class Player(QObject):
+        finished = Signal()
+        error = Signal(str)
+
+        def __init__(self):
+            super().__init__()
+            self.play = MagicMock()
+            self.stop = MagicMock()
+
+    player = Player()
+    speaker = SpeechController(player=player)
+    worker.speech_ready.connect(lambda text, _: speaker.submit(text, *config.speech_voice_settings))
+    entries = []
+    worker.dialogue_translated.connect(lambda entry, _: entries.append(entry))
+    image = np.zeros((32, 100, 4), dtype=np.uint8)
+    try:
+        for _ in range(3):
+            worker._process_frame(image, 1)
+            qapp.processEvents()
+        deadline = time.monotonic() + 3
+        while not player.play.called and time.monotonic() < deadline:
+            qapp.processEvents()
+            time.sleep(0.002)
+        player.play.assert_called_once()
+        with wave.open(BytesIO(player.play.call_args.args[0])) as wav:
+            assert (wav.getframerate(), wav.getnframes()) == (24000, 512)
+        speech = [(path, body) for path, body in calls if path == "/tts"]
+        assert speech == [
+            (
+                "/tts",
+                {
+                    "input": clean_speech_text(TARGET_TRANSLATIONS[target]),
+                    "lang": lang,
+                    "speaker_ref_b64": base64.b64encode(reference.read_bytes()).decode("ascii"),
+                    "response_format": "pcm16",
+                    "stream": True,
+                },
+            )
+        ]
+        assert len(entries) == 1 and entries[0].can_replay
+    finally:
+        speaker.close()
+        worker._translator._session.close()
+
+
+def test_clone_refuses_remote_urls_and_redirects(endpoint, tmp_path):
+    from ludivoxa.local_tts import LocalCloneVoice
+    from ludivoxa.speech import OfflineSynthesizer
+
+    url, calls = endpoint
+    reference = tmp_path / "voice.wav"
+    reference.write_bytes(b"reference")
+    speaker = OfflineSynthesizer()
+    with pytest.raises(ValueError, match="local voice server"):
+        speaker.synthesize("Speech", LocalCloneVoice("http://cloud.invalid:8080", "en", ""), reference_audio=str(reference))
+    assert not calls
+    with pytest.raises(ValueError, match="HTTP 302"):
+        speaker.synthesize("redirect", LocalCloneVoice(url, "en", ""), reference_audio=str(reference))
+    assert len(calls) == 1
 
 
 @pytest.mark.parametrize("provider", ["ollama", "openai"])

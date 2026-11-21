@@ -32,9 +32,9 @@ const pages = [
   },
   {
     slug: "voice",
-    title: "Phụ đề và giọng đọc tiếng Việt",
+    title: "Phụ đề và giọng đọc offline",
     description: "Chọn chế độ overlay, chỉnh âm lượng, nghe thử TTS, clone từ mẫu local hoặc gán giọng theo nhân vật.",
-    sections: ["Overlay và giọng đọc", "Giọng theo nhân vật (thử nghiệm từ v1.2.0)"],
+    sections: ["Overlay và giọng đọc", "Clone giọng đa ngôn ngữ", "Giọng theo nhân vật (thử nghiệm từ v1.2.0)"],
   },
   {
     slug: "troubleshooting",

@@ -322,6 +322,42 @@ def test_voice_catalog_and_ui_speaker_selection(speech, tmp_path):
     page.close()
 
 
+def test_clone_controls_follow_an_applied_translation_target(speech, tmp_path):
+    from PySide6.QtWidgets import QGroupBox, QMainWindow, QWidget
+
+    _, _, _, _app = speech
+    win = MainWindow.__new__(MainWindow)
+    QMainWindow.__init__(win)
+    win._config = Config(
+        translation_backend=TranslationBackend.LLM,
+        llm=LLMSettings(model="local", target_language="Korean"),
+        config_path=str(tmp_path / "config.yml"),
+    )
+    win._speech = MagicMock()
+    win._mode_row_widget = QWidget()
+    win._capturing = win._paused = False
+    page = win._build_play_page(QGroupBox())
+    assert not win._clone_server_row.isHidden()
+    assert not win._output_combo.isEnabled()
+    assert not win._preview_voice_btn.isEnabled()
+    win._tts_clone_url_edit.setText("http://127.0.0.1:17867")
+    win._on_clone_url_changed()
+    win._tts_reference_edit.setText(str(tmp_path / "reference.wav"))
+    win._on_reference_audio_changed()
+    assert win._output_combo.isEnabled() and win._preview_voice_btn.isEnabled()
+    assert not win._tts_rate_spin.isEnabled()
+    win._preview_voice_btn.click()
+    assert win._speech.preview.call_args.args[0].language == "ko"
+    loaded = Config.load(win._config.config_path)
+    assert loaded.speech_voice_settings == win._config.speech_voice_settings
+    win._config.llm.target_language = "Vietnamese"
+    win._sync_translation_output()
+    assert win._clone_server_row.isHidden()
+    assert win._tts_rate_spin.isEnabled()
+    assert win._config.speech_voice_settings[0] == win._config.tts_model_path
+    page.close()
+
+
 def test_speech_prefetch_is_ready_before_current_playback_ends(speech):
     controller, synth, player, _ = speech
     controller.submit("Câu thứ nhất", "voice.onnx")

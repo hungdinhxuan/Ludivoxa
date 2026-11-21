@@ -18,6 +18,7 @@ from .languages import (
     is_vietnamese_target,
     normalize_source_language,
 )
+from .local_tts import LocalCloneVoice, clone_language, local_clone_url
 from .paths import get_config_dir, get_legacy_config_dir
 
 
@@ -390,6 +391,7 @@ class Config:
         game_profiles: dict | None = None,
         hide_stale_overlay: bool = False,
         tts_volume: int = 100,
+        tts_clone_url: str = "",
     ):
         self.window_title = window_title
         self.update_check_on_startup = update_check_on_startup is True
@@ -408,6 +410,7 @@ class Config:
         self.tts_enabled = tts_enabled
         self.tts_model_path = tts_model_path
         self.tts_reference_audio = tts_reference_audio
+        self.tts_clone_url = tts_clone_url
         try:
             self.output_mode = (
                 OutputMode(output_mode) if output_mode else (OutputMode.BOTH if tts_enabled else OutputMode.OVERLAY)
@@ -458,8 +461,27 @@ class Config:
         }
 
     @property
+    def clone_voice(self) -> LocalCloneVoice | None:
+        if self.translation_backend == TranslationBackend.LLM and self.tts_clone_url and self.tts_reference_audio:
+            language = clone_language(self.llm.target_language)
+            endpoint = local_clone_url(self.tts_clone_url)
+            if endpoint and language:
+                return LocalCloneVoice(endpoint, *language)
+        return None
+
+    @property
+    def speech_voice_settings(self) -> tuple[str | LocalCloneVoice, int, float, str]:
+        if voice := self.clone_voice:
+            return voice, 0, 1.0, self.tts_reference_audio
+        return self.tts_model_path, self.tts_speaker_id, self.tts_rate, self.tts_reference_audio
+
+    @property
     def target_supports_speech(self) -> bool:
-        return self.translation_backend != TranslationBackend.LLM or is_vietnamese_target(self.llm.target_language)
+        return (
+            self.translation_backend != TranslationBackend.LLM
+            or is_vietnamese_target(self.llm.target_language)
+            or self.clone_voice is not None
+        )
 
     @property
     def effective_output_mode(self) -> OutputMode:
@@ -570,6 +592,7 @@ class Config:
                 tts_enabled=data.get("tts_enabled", True) is True,
                 tts_model_path=str(data.get("tts_model_path") or ""),
                 tts_reference_audio=str(data.get("tts_reference_audio") or ""),
+                tts_clone_url=str(data.get("tts_clone_url") or ""),
                 output_mode=data.get("output_mode"),
                 tts_speaker_id=data.get("tts_speaker_id", 0),
                 tts_rate=data.get("tts_rate", 1.0),
@@ -786,6 +809,8 @@ hotkeys:
         data["tts_enabled"] = self.tts_enabled
         data["tts_model_path"] = self.tts_model_path
         data["tts_reference_audio"] = self.tts_reference_audio
+        if self.tts_clone_url:
+            data["tts_clone_url"] = self.tts_clone_url
         data["output_mode"] = self.output_mode.value
         data["tts_speaker_id"] = self.tts_speaker_id
         data["tts_rate"] = self.tts_rate

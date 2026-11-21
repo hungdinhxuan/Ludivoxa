@@ -3,6 +3,11 @@
 All notable Ludivoxa changes are recorded here using version tags such as
 `v1.0.0`.
 
+## [2.1.0] - 2026-11-22
+
+- Add optional offline voice cloning for English, Japanese, Korean and Chinese
+  translations using a loopback Qwen3-TTS server and the existing reference recording control.
+
 ## [2.0.1] - 2026-11-22
 
 - Add the new Ludivoxa speech-wave icon to the desktop app, Windows installer
@@ -265,6 +270,7 @@ Initial Ludivoxa release.
 [1.1.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.0
 [1.1.1]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1
 [1.6.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.6.0
+[2.1.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v2.1.0
 [2.0.1]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v2.0.1
 [2.0.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v2.0.0
 [1.7.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.7.0

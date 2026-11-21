@@ -72,6 +72,7 @@ from ..llm_translate import (
     normalize_base_url,
     provider_label,
 )
+from ..local_tts import clone_language, local_clone_url
 from ..ocr import PADDLE_LANGUAGE_MODELS
 from ..overlay import BannerOverlay, InplaceOverlay
 from ..owocr_ocr import DEFAULT_URL as OWOCR_DEFAULT_URL
@@ -396,18 +397,28 @@ class MainWindow(QMainWindow):
         stop_speech.clicked.connect(lambda: self._speech.stop())
         tts_row.addWidget(stop_speech)
         session_layout.addLayout(tts_row)
+        self._tts_preset_controls = (self._tts_voice_combo, self._tts_model_edit, browse_voice)
+
+        self._clone_server_row = QWidget()
+        server_layout = QHBoxLayout(self._clone_server_row)
+        server_layout.setContentsMargins(0, 0, 0, 0)
+        server_label = QLabel("Local clone server:")
+        self._tts_clone_url_edit = QLineEdit(self._config.tts_clone_url)
+        self._tts_clone_url_edit.setPlaceholderText("http://127.0.0.1:17867")
+        self._tts_clone_url_edit.setToolTip("Loopback URL of llama.cpp running Qwen3-TTS Base.")
+        self._tts_clone_url_edit.editingFinished.connect(self._on_clone_url_changed)
+        server_label.setBuddy(self._tts_clone_url_edit)
+        server_layout.addWidget(server_label)
+        server_layout.addWidget(self._tts_clone_url_edit, 1)
+        session_layout.addWidget(self._clone_server_row)
         self._clone_row = QWidget()
         clone_layout = QHBoxLayout(self._clone_row)
         clone_layout.setContentsMargins(0, 0, 0, 0)
-        reference_label = QLabel("Clone from audio (optional):")
+        self._tts_reference_label = QLabel()
         self._tts_reference_edit = QLineEdit(self._config.tts_reference_audio)
-        self._tts_reference_edit.setPlaceholderText("No recording: use the selected Speaker preset")
-        self._tts_reference_edit.setToolTip(
-            "Local clean recording. Clear this field to use a preset; no transcript is required."
-        )
-        reference_label.setBuddy(self._tts_reference_edit)
+        self._tts_reference_label.setBuddy(self._tts_reference_edit)
         self._tts_reference_edit.editingFinished.connect(self._on_reference_audio_changed)
-        clone_layout.addWidget(reference_label)
+        clone_layout.addWidget(self._tts_reference_label)
         clone_layout.addWidget(self._tts_reference_edit, 1)
         browse_reference = QPushButton("Browse audio...")
         browse_reference.clicked.connect(self._browse_reference_audio)
@@ -424,16 +435,9 @@ class MainWindow(QMainWindow):
         rate_label.setBuddy(self._tts_rate_spin)
         rate_row.addWidget(rate_label)
         rate_row.addWidget(self._tts_rate_spin)
-        preview_voice = QPushButton("Test voice")
-        preview_voice.clicked.connect(
-            lambda: self._speech.preview(
-                self._config.tts_model_path,
-                self._config.tts_speaker_id,
-                self._config.tts_rate,
-                reference_audio=self._config.tts_reference_audio,
-            )
-        )
-        rate_row.addWidget(preview_voice)
+        self._preview_voice_btn = QPushButton("Test voice")
+        self._preview_voice_btn.clicked.connect(lambda: self._speech.preview(*self._config.speech_voice_settings))
+        rate_row.addWidget(self._preview_voice_btn)
         rate_row.addStretch()
         session_layout.addLayout(rate_row)
         volume_row = QHBoxLayout()
@@ -607,7 +611,15 @@ class MainWindow(QMainWindow):
                 target = "English"
                 hint = " · Sugoi V4"
             elif not is_vietnamese_target(target):
-                hint = " · Overlay only. The bundled voices read Vietnamese."
+                if clone_language(target):
+                    ready = local_clone_url(self._config.tts_clone_url) and self._config.tts_reference_audio
+                    hint = (
+                        " · Local voice cloning"
+                        if ready
+                        else " · Overlay only until a clone server and recording are configured in Session."
+                    )
+                else:
+                    hint = " · Overlay only. The bundled voices read Vietnamese."
             self._pair_hint.setText(f"{source} \u2192 {target}{hint}")
 
     def _build_capture_group(self) -> QGroupBox:
@@ -1441,7 +1453,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Ready")
         logger.debug("models loaded")
         if self._config.live_speech_enabled and hasattr(self, "_speech"):
-            self._speech.prepare(self._config.tts_model_path)
+            self._speech.prepare(self._config.speech_voice_settings[0])
 
     def _on_models_failed(self, error: str):
         """Handle model loading failure from worker thread."""
@@ -2366,15 +2378,9 @@ class MainWindow(QMainWindow):
             and hasattr(self, "_speech")
         ):
             if self._config.translation_backend == TranslationBackend.LLM:
-                preset = self._config.tts_speaker_id
-                reference = self._config.tts_reference_audio
+                current_voice = self._config.speech_voice_settings
+                model, preset, rate, reference = current_voice
                 if isinstance(translated, SpeechStream):
-                    current_voice = (
-                        self._config.tts_model_path,
-                        self._config.tts_speaker_id,
-                        self._config.tts_rate,
-                        self._config.tts_reference_audio,
-                    )
                     if translated.voice_settings is not None and translated.voice_settings != current_voice:
                         translated.cancel()
                         return
@@ -2384,9 +2390,9 @@ class MainWindow(QMainWindow):
                         reference = translated.reference_audio
                 self._speech.submit(
                     translated,
-                    self._config.tts_model_path,
+                    model,
                     preset,
-                    self._config.tts_rate,
+                    rate,
                     reference_audio=reference,
                 )
                 return
@@ -2513,10 +2519,14 @@ class MainWindow(QMainWindow):
         with QSignalBlocker(self._output_combo):
             self._output_combo.setCurrentIndex(self._output_combo.findData(mode.value))
         self._output_combo.setEnabled(speech_supported)
-        self._output_combo.setToolTip("" if speech_supported else "The bundled voices read Vietnamese.")
+        hint = "The bundled voices read Vietnamese."
+        if clone_language(self._config.llm.target_language):
+            hint = "Set a local clone server and choose a recording to enable speech for this target."
+        self._output_combo.setToolTip("" if speech_supported else hint)
 
     def _sync_translation_output(self):
         self._sync_output_selection()
+        self._refresh_reference_controls()
         self._speech.stop(reset=True, reason="translation target changed")
         self._speech.set_enabled(self._config.live_speech_enabled)
         if self._capturing:
@@ -2534,7 +2544,7 @@ class MainWindow(QMainWindow):
         self._speech.stop(reset=True, reason="output mode changed")
         self._speech.set_enabled(self._config.live_speech_enabled)
         if self._config.live_speech_enabled:
-            self._speech.prepare(self._config.tts_model_path)
+            self._speech.prepare(self._config.speech_voice_settings[0])
         if self._capturing and not self._paused:
             self._show_overlay()
         self._config.save()
@@ -2596,13 +2606,31 @@ class MainWindow(QMainWindow):
 
         if not hasattr(self, "_clone_row"):
             return
+        multilingual = self._config.translation_backend == TranslationBackend.LLM and bool(
+            clone_language(self._config.llm.target_language)
+        )
         clone = Path(self._config.tts_model_path).expanduser().is_dir()
-        self._clone_row.setVisible(clone)
-        self._tts_speaker_combo.setEnabled(not (clone and self._config.tts_reference_audio))
+        self._clone_server_row.setVisible(multilingual)
+        self._clone_row.setVisible(multilingual or clone)
+        self._tts_reference_label.setText("Clone from audio:" if multilingual else "Clone from audio (optional):")
+        self._tts_reference_edit.setPlaceholderText(
+            "Select a WAV or MP3 recording" if multilingual else "No recording: use the selected Speaker preset"
+        )
+        self._tts_reference_edit.setToolTip(
+            "Use a clean WAV or MP3 recording of about 3–10 seconds."
+            if multilingual
+            else "Clear this field to use a preset. No transcript is required."
+        )
+        for control in self._tts_preset_controls:
+            control.setEnabled(not multilingual)
+        self._tts_speaker_combo.setEnabled(not multilingual and not (clone and self._config.tts_reference_audio))
+        self._tts_rate_spin.setEnabled(not multilingual)
+        self._preview_voice_btn.setEnabled(not multilingual or self._config.clone_voice is not None)
 
     def _browse_reference_audio(self):
+        formats = "Audio (*.wav *.mp3)" if not self._clone_server_row.isHidden() else "Audio (*.wav *.flac *.mp3 *.ogg)"
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select a local voice reference", "", "Audio (*.wav *.flac *.mp3 *.ogg)"
+            self, "Select a local voice reference", "", formats
         )
         if path:
             self._tts_reference_edit.setText(path)
@@ -2610,8 +2638,14 @@ class MainWindow(QMainWindow):
 
     def _on_reference_audio_changed(self):
         self._config.tts_reference_audio = self._tts_reference_edit.text().strip()
-        self._refresh_reference_controls()
         self._on_speech_settings_changed()
+
+    def _on_clone_url_changed(self):
+        value = self._tts_clone_url_edit.text().strip()
+        self._config.tts_clone_url = local_clone_url(value)
+        self._on_speech_settings_changed()
+        if value and not self._config.tts_clone_url:
+            self._tts_status.setText("Use a loopback address such as http://127.0.0.1:17867.")
 
     def _on_voice_model_changed(self):
         self._config.tts_model_path = self._tts_voice_combo.currentData() or ""
@@ -2624,7 +2658,14 @@ class MainWindow(QMainWindow):
         self._config.tts_speaker_id = self._tts_speaker_combo.currentData() or 0
         self._config.tts_rate = self._tts_rate_spin.value()
         self._speech.stop(reset=True, reason="voice settings changed")
-        self._speech.prepare(self._config.tts_model_path)
+        self._sync_output_selection()
+        self._refresh_reference_controls()
+        self._update_pair_hint()
+        self._speech.set_enabled(self._config.live_speech_enabled)
+        if self._config.live_speech_enabled:
+            self._speech.prepare(self._config.speech_voice_settings[0])
+        if self._capturing and not self._paused:
+            self._show_overlay()
         self._config.save()
 
     def _on_speech_volume_changed(self, percent):

@@ -6,6 +6,8 @@ New users: install the v1.1.1 Full Offline Setup first, then apply this update.
 
 The package contains the app, its native libraries and the Korean OCR model. It retains config.yml,
 OCR/TTS models, Ollama runtime, LLM models and voice reference recordings.
+Optional multilingual voice cloning uses a separately installed llama.cpp
+server and Qwen3-TTS model files. See the release notes for setup.
 If this release offers a Delta-from installer, it only applies to the exact
 base version in its file name and verifies its installed files before updating.
 Use the standard App-Update.exe to upgrade other or modified installations.

@@ -1,4 +1,4 @@
-"""Offline Vietnamese voices, background prefetch and buffered native PCM playback."""
+"""Offline voices, background prefetch and buffered native PCM playback."""
 
 import hashlib
 import json
@@ -19,6 +19,7 @@ from PySide6.QtCore import QCoreApplication, QObject, Signal, Slot
 from PySide6.QtMultimedia import QMediaDevices
 
 from . import log
+from .local_tts import LocalCloneSynthesizer, LocalCloneVoice
 from .paths import get_config_dir, get_legacy_config_dir
 
 _VOICE_FILE = Path("voices") / "vi_VN-vais1000-medium.onnx"
@@ -139,12 +140,16 @@ def _wav_bytes(samples, sample_rate):
     samples = np.asarray(samples, dtype=np.float32)
     if samples.ndim != 1 or not samples.size or not np.isfinite(samples).all():
         raise ValueError("Local voice synthesis returned invalid audio.")
+    return _pcm_wav((np.clip(samples, -1, 1) * 32767).astype("<i2").tobytes(), sample_rate)
+
+
+def _pcm_wav(pcm, sample_rate):
     output = BytesIO()
     with wave.open(output, "wb") as wav_file:
         wav_file.setnchannels(1)
         wav_file.setsampwidth(2)
         wav_file.setframerate(sample_rate)
-        wav_file.writeframes((np.clip(samples, -1, 1) * 32767).astype("<i2").tobytes())
+        wav_file.writeframes(pcm)
     return output.getvalue()
 
 
@@ -704,16 +709,26 @@ class VieneuSynthesizer:
 
 
 class OfflineSynthesizer:
-    """Dispatch local model files to Piper and local Nano folders to VieNeu."""
+    """Dispatch Vietnamese voices and optional loopback voice cloning."""
 
     def __init__(self):
         self._piper = PiperSynthesizer()
         self._vieneu = VieneuSynthesizer()
+        self._clone = LocalCloneSynthesizer()
 
     def prepare(self, model_path):
+        if isinstance(model_path, LocalCloneVoice):
+            return self._clone.prepare(model_path)
         return (self._vieneu if Path(model_path).expanduser().is_dir() else self._piper).prepare(model_path)
 
     def synthesize(self, text, model_path, speaker_id=0, rate=1.0, reference_audio="", cancelled=None):
+        if isinstance(model_path, LocalCloneVoice):
+            frames = self._clone.iter_pcm(model_path, text, reference_audio, cancelled or (lambda: False))
+            first, sample_rate = next(frames)
+            pcm = bytearray(first)
+            for chunk, _ in frames:
+                pcm.extend(chunk)
+            return _pcm_wav(pcm, sample_rate)
         if Path(model_path).expanduser().is_dir():
             return self._vieneu.synthesize(text, model_path, speaker_id, rate, reference_audio, cancelled)
         return self._piper.synthesize(text, model_path, speaker_id, rate)
@@ -721,7 +736,10 @@ class OfflineSynthesizer:
     def iter_audio(
         self, text, model_path, speaker_id=0, rate=1.0, reference_audio="", cancelled=lambda: False, chunk_chars=48
     ):
-        if Path(model_path).expanduser().is_dir():
+        if isinstance(model_path, LocalCloneVoice):
+            for chunk, sample_rate in self._clone.iter_pcm(model_path, text, reference_audio, cancelled):
+                yield _pcm_wav(chunk, sample_rate)
+        elif Path(model_path).expanduser().is_dir():
             yield from self._vieneu.iter_audio(
                 text, model_path, speaker_id, rate, reference_audio, cancelled, chunk_chars
             )
@@ -844,7 +862,12 @@ class SpeechController(QObject):
     def preview(self, model_path, speaker_id=0, rate=1.0, reference_audio=""):
         self.stop(reset=True)
         enabled, self._enabled = self._enabled, True
-        self.submit("Xin chào. Bạn đang nghe thử giọng đọc tiếng Việt.", model_path, speaker_id, rate, reference_audio)
+        sample = (
+            model_path.sample
+            if isinstance(model_path, LocalCloneVoice)
+            else "Xin chào. Bạn đang nghe thử giọng đọc tiếng Việt."
+        )
+        self.submit(sample, model_path, speaker_id, rate, reference_audio)
         self._enabled = enabled
 
     def replay(self, text, model_path, speaker_id=0, rate=1.0, reference_audio=""):
@@ -1020,7 +1043,7 @@ class SpeechController(QObject):
                 str(audio.source.key if isinstance(audio, SpeechStream) and audio.source else text_key).encode("utf-8")
             ).hexdigest()[:12],
         )
-        self.status_changed.emit("Reading Vietnamese translation")
+        self.status_changed.emit("Reading translation")
         self._player.play(audio)
 
     def _on_finished(self):
