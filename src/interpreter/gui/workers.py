@@ -14,10 +14,10 @@ import numpy as np
 from PySide6.QtCore import QObject, Signal
 
 from .. import log
-from ..config import Config, GameProfile, OutputMode, OverlayMode, character_name, ignore_phrase_key
+from ..config import Config, GameProfile, OCRBackend, OutputMode, OverlayMode, character_name, ignore_phrase_key
 from ..languages import contains_japanese, contains_script  # noqa: F401  (contains_japanese kept for callers)
 from ..llm_translate import LLMTranslator
-from ..ocr import OCREngine, OCRResult, create_ocr, group_ocr_rows
+from ..ocr import PADDLE_LANGUAGE_MODELS, OCREngine, OCRResult, create_ocr, group_ocr_rows
 from ..speech import SpeechStream, voice_details, voice_gender
 from ..translate import SUGOI_SOURCE_LANGUAGE, TranslationEngine, create_translator
 
@@ -139,6 +139,7 @@ class ProcessWorker(QObject):
         super().__init__()
         self._config = config
         self._ocr: OCREngine | None = None
+        self._paddle_recognizer = None
         self._translator: TranslationEngine | None = None
         self._mode = OverlayMode.BANNER
         self._confidence_threshold = 0.6
@@ -359,8 +360,14 @@ class ProcessWorker(QObject):
                 self._retranslate_dialogue(entry)
 
             pending = self._frame_buffer.get(timeout=0.5)
-            # Only process frames if both models loaded successfully
-            if pending is not None and not (self._ocr_failed or self._translation_failed):
+            if pending is None:
+                continue
+            if self._config.ocr_backend == OCRBackend.PADDLE:
+                language = self._source_language(pending[-1])
+                if PADDLE_LANGUAGE_MODELS.get(language) != self._paddle_recognizer:
+                    self._load_ocr(language)
+                    self._emit_models_status()
+            if not (self._ocr_failed or self._translation_failed):
                 self._process_frame(*pending)
 
         self._discard_ocr()
@@ -369,16 +376,25 @@ class ProcessWorker(QObject):
     def _discard_ocr(self):
         """Drop the current OCR engine, releasing any connection it holds."""
         ocr, self._ocr = self._ocr, None
+        self._character_context_key = None
         close = getattr(ocr, "close", None)
         if callable(close):
             close()
 
-    def _load_ocr(self):
+    def _source_language(self, profile):
+        return (profile.source_language if profile else "") or self._config.source_language
+
+    def _load_ocr(self, source_language=None):
         """Build and load the configured OCR engine, recording failure for the Fix Models flow."""
         self._emit(self.ocr_status, "loading")
         self._discard_ocr()
         try:
-            ocr = create_ocr(self._config)
+            if self._config.ocr_backend == OCRBackend.PADDLE:
+                language = source_language or self._source_language(self._config.game_profiles.get(self._capture_title))
+                self._paddle_recognizer = PADDLE_LANGUAGE_MODELS.get(language)
+                ocr = create_ocr(self._config, source_language=language)
+            else:
+                ocr = create_ocr(self._config)
             ocr.confidence_threshold = self._confidence_threshold
             ocr.load()
             self._ocr = ocr
@@ -1032,7 +1048,7 @@ class ProcessWorker(QObject):
         if profile and profile.ignore_keys and ignore_phrase_key(text) in profile.ignore_keys:
             regions, text = [], ""
         ignored = dialogue_count - len(regions)
-        language = (profile.source_language if profile else "") or self._config.source_language
+        language = self._source_language(profile)
         raw_count = len(display_regions)
         ocr_status = language
         if not text:

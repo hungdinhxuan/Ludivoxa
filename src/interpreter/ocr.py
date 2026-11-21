@@ -22,6 +22,7 @@ logger = log.get_logger()
 DEFAULT_CONFIDENCE_THRESHOLD = 0.6  # Minimum avg confidence per line (0.0-1.0)
 DUPLICATE_OVERLAP_THRESHOLD = 0.5  # Lines with >50% bbox overlap are duplicates
 SPATIAL_PROXIMITY_MULTIPLIER = 1.5  # Gap threshold = height * this value
+PADDLE_LANGUAGE_MODELS = {"Chinese": "PP-OCRv5_mobile_rec", "Korean": "korean_PP-OCRv5_mobile_rec"}
 
 # Punctuation characters to exclude from confidence calculation
 # These often have lower OCR confidence but shouldn't invalidate the line
@@ -370,14 +371,15 @@ class OCR:
         return self._model is not None
 
 
-def create_ocr(config: "Config") -> OCREngine:
+def create_ocr(config: "Config", *, source_language: str | None = None) -> OCREngine:
     """Build the OCR engine selected in the configuration."""
     from .config import OCRBackend
 
     if config.ocr_backend == OCRBackend.PADDLE:
-        from .paddle_ocr import IsolatedPaddleOCR
+        from .paddle_ocr import IsolatedPaddleOCR, select_paddle_recognizer
 
-        return IsolatedPaddleOCR(config.paddle)
+        settings = select_paddle_recognizer(config.paddle, source_language or config.source_language)
+        return IsolatedPaddleOCR(settings)
     if config.ocr_backend == OCRBackend.OWOCR:
         from .owocr_ocr import OwocrOCR
 

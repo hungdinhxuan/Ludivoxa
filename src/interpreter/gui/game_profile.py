@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QComboBox, QDialog, QDialogButtonBox, QLabel, QPlainTextEdit, QVBoxLayout
 
 from ..config import GameProfile
+from ..languages import OCR_SOURCE_LANGUAGES
 from .theme import set_role
 
 
@@ -21,7 +22,7 @@ class GameProfileDialog(QDialog):
         layout.addWidget(source)
         self.language = QComboBox()
         self.language.addItem(f"Use Engines setting ({default_language})", "")
-        for language in dict.fromkeys(("Auto", "English", "Japanese", profile.source_language)):
+        for language in dict.fromkeys((*OCR_SOURCE_LANGUAGES, profile.source_language)):
             if language:
                 self.language.addItem(language, language)
         self.language.setCurrentIndex(self.language.findData(profile.source_language))

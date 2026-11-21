@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 import yaml
 from interpreter.config import Config, LLMSettings, OCRBackend, OverlayMode, PaddleSettings, TranslationBackend
+from interpreter.paddle_ocr import select_paddle_recognizer
 
 source = Path(sys.argv[1])
 target = Path('dist/Interpreter')
@@ -29,10 +30,17 @@ for model in ('PP-OCRv5_mobile_det', 'PP-OCRv5_mobile_rec'):
 english = source / 'en_PP-OCRv5_mobile_rec'
 if english.is_dir():
     shutil.copytree(english, target / 'models' / english.name, dirs_exist_ok=True)
-for name in ('PP-OCRv5_mobile_det', 'en_PP-OCRv5_mobile_rec', 'PP-OCRv5_mobile_rec'):
+korean = source / 'korean_PP-OCRv5_mobile_rec'
+korean_target = target / '_internal' / 'ocr-models' / korean.name
+if korean.is_dir():
+    shutil.copytree(korean, korean_target, dirs_exist_ok=True)
+for name in ('PP-OCRv5_mobile_det', 'en_PP-OCRv5_mobile_rec', 'PP-OCRv5_mobile_rec', korean.name):
     exported = source / (name + '_onnx')
     if exported.is_dir():
-        original = target / 'models' / name
+        original = korean_target if name == korean.name else target / 'models' / name
+        if not original.is_dir():
+            shutil.copytree(exported, original)
+            continue
         current = yaml.safe_load((original / 'inference.yml').read_text(encoding='utf-8'))
         metadata = yaml.safe_load((exported / 'inference.yml').read_text(encoding='utf-8'))
         if any(current.get(key) != metadata.get(key) for key in ('Global', 'PreProcess', 'PostProcess')):
@@ -41,6 +49,7 @@ for name in ('PP-OCRv5_mobile_det', 'en_PP-OCRv5_mobile_rec', 'PP-OCRv5_mobile_r
         for src, dest in (('source.json', 'onnx-source.json'), ('README.md', 'ONNX_MODEL_CARD.md')):
             if (exported / src).is_file():
                 shutil.copy2(exported / src, original / dest)
+select_paddle_recognizer(PaddleSettings(str(target / 'models/PP-OCRv5_mobile_det'), str(korean_target)), 'Korean')
 nano = source / 'VieNeu-TTS-v3-Nano'
 if nano.is_dir():
     shutil.copytree(nano, target / 'models' / nano.name, dirs_exist_ok=True,

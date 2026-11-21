@@ -20,6 +20,7 @@ llm:
       num_ctx: 2048
 paddle:
   detection_model_dir: models/PP-OCRv5_mobile_det_onnx
+  # Default recognizer for English. Chinese and Korean use their provisioned model directories.
   recognition_model_dir: models/en_PP-OCRv5_mobile_rec_onnx
   device: cpu
   cpu_threads: 2

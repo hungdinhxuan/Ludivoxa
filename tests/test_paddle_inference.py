@@ -10,8 +10,9 @@ import numpy as np
 import pytest
 from PIL import Image, ImageDraw, ImageFont
 
-from interpreter.config import PaddleSettings
+from interpreter.config import Config, OCRBackend, PaddleSettings
 from interpreter.language_detection import detect_language
+from interpreter.ocr import create_ocr
 from interpreter.paddle_ocr import IsolatedPaddleOCR, PaddleOCR
 
 ROOT = os.environ.get("INTERPRETER_TEST_MODEL_ROOT")
@@ -54,6 +55,43 @@ def test_real_offline_inference(monkeypatch, language, text, font, recognizer):
     assert recognized
     assert detect_language(recognized) == language
     print(f"{language}: load={load_ms:.1f}ms OCR={timings}ms text={recognized!r}")
+
+
+@pytest.mark.parametrize(
+    "language,text,font",
+    [
+        ("Chinese", "欢迎来到村庄", "msyh.ttc"),
+        ("Chinese", "歡迎來到村莊", "msjh.ttc"),
+        ("Korean", "안녕하세요 용사님", "malgun.ttf"),
+    ],
+)
+def test_real_language_profile_uses_isolated_onnx(language, text, font):
+    root = Path(ROOT)
+    font_path = Path("C:/Windows/Fonts") / font
+    if not font_path.is_file():
+        pytest.skip(f"Missing Windows font {font}")
+    config = Config(
+        ocr_backend=OCRBackend.PADDLE,
+        source_language=language,
+        paddle=PaddleSettings(
+            str(root / "PP-OCRv5_mobile_det_onnx"), str(root / "en_PP-OCRv5_mobile_rec_onnx"), max_side=640
+        ),
+    )
+    ocr = create_ocr(config)
+    try:
+        ocr.load()
+        timings = []
+        for left in range(15, 22):
+            image = Image.new("RGBA", (640, 100), "white")
+            ImageDraw.Draw(image).text((left, 10), text, font=ImageFont.truetype(str(font_path), 36), fill="black")
+            frame = np.asarray(image)[:, :, [2, 1, 0, 3]].copy()
+            start = time.perf_counter()
+            regions = ocr.extract_text_regions(frame)
+            timings.append((time.perf_counter() - start) * 1000)
+            assert " ".join(region.text for region in regions) == text
+        print(f"{language} ({font}): warm OCR median={np.median(timings[2:]):.1f} ms")
+    finally:
+        ocr.close()
 
 
 @pytest.mark.parametrize("suffix", ["", "_onnx"])

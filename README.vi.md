@@ -1,25 +1,26 @@
 # Ludivoxa — Phần mềm dịch game offline và đọc tiếng Việt
 
 **Ludivoxa** là ứng dụng mã nguồn mở để dịch chữ trên màn hình game PC. App
-dùng OCR offline để đọc hội thoại tiếng Anh hoặc tiếng Nhật, dịch sang tiếng
+dùng OCR offline để đọc hội thoại tiếng Anh, Nhật, Trung và Hàn, dịch sang tiếng
 Việt bằng LLM local, rồi hiện phụ đề trên game hoặc đọc thành tiếng. Bạn có
 thể dùng Ludivoxa cho visual novel, game nhập vai và các game có hội thoại
 hiện trên màn hình.
 
-[Tải cho Windows](#cài-windows-offline) · [Hướng dẫn dịch game](docs/USER_GUIDE.md) ·
+[Tải cho Windows](#cài-windows-offline) · [Wiki Ludivoxa](https://ludivoxa.hungdx.com/) ·
 [Sơ đồ kiến trúc](README.md#architecture) · [English](README.md)
 
-**Bản ổn định v1.5.0** có lịch sử hội thoại, hồ sơ theo game, Diagnostics
-và âm lượng TTS riêng. [Ghi chú v1.5.0](docs/releases/v1.5.0.md)
+**Bản ổn định v1.6.0** hỗ trợ OCR offline tiếng Trung giản thể, phồn thể và
+tiếng Hàn. [Ghi chú v1.6.0](docs/releases/v1.6.0.md)
 
 ## Tính năng dịch game
 
-### OCR offline cho game tiếng Anh và tiếng Nhật
+### OCR offline cho game tiếng Anh, Nhật, Trung và Hàn
 
 Dùng PaddleOCR để quét toàn cửa sổ hoặc chỉ quét các ô hội thoại đã khoanh.
 Có thể chọn nhiều ô, lưu riêng theo game và lọc vùng không cần dịch. Chọn
 **English** để ưu tiên tốc độ cho game tiếng Anh, **Japanese** cho game tiếng
-Nhật hoặc **Auto** khi hội thoại trộn hai ngôn ngữ.
+Nhật hoặc **Auto** khi hội thoại trộn Anh/Nhật. Chọn **Chinese** cho tiếng Trung
+giản thể và phồn thể, hoặc **Korean** cho tiếng Hàn.
 
 ### Dịch bằng Ollama local hoặc máy chủ GPU trong LAN
 
@@ -68,7 +69,8 @@ mục **Assets** tải được mà không cần đăng nhập GitHub. Bộ cài
    thoại rồi bấm **OK**.
 3. Trong **Engines**, chọn **English** với `en_PP-OCRv5_mobile_rec` cho game
    tiếng Anh. Chọn **Japanese** hoặc **Auto** với `PP-OCRv5_mobile_rec` cho
-   game tiếng Nhật hoặc hội thoại Anh/Nhật.
+   game tiếng Nhật hoặc hội thoại Anh/Nhật. Chọn **Chinese** hoặc **Korean**
+   với **PaddleOCR** để nạp model tương ứng.
 4. Chọn **Overlay only**, **TTS only** hoặc **Overlay + TTS**. Dùng **F8** để
    ẩn/hiện phụ đề và **Stop reading** để dừng đọc.
 

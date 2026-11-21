@@ -37,6 +37,8 @@ numbers, sentence punctuation, currency and percentages are preserved.
 
 The English speed profile is selected. For Japanese or mixed English/Japanese,
 choose Auto/Japanese and models/PP-OCRv5_mobile_rec as the recognition directory.
+For Simplified or Traditional Chinese, select Chinese with PaddleOCR. For
+Korean, select Korean with PaddleOCR. You can save either in a Game profile.
 The included CPU OCR models also contain official ONNX exports, selected by
 PaddleOCR when present in both model folders. Existing saved paths remain valid.
 Capture polls every 150 ms; preview painting remains at 500 ms. Longer dialogue

@@ -22,7 +22,7 @@ from interpreter.llm_translate import LLMTranslationError, LLMTranslator
 from interpreter.models import ModelLoadError
 from interpreter.paddle_ocr import PaddleOCR
 
-LANGUAGES = ["English", "Japanese"]
+LANGUAGES = ["English", "Japanese", "Korean"]
 
 
 @pytest.fixture(scope="module")
@@ -82,18 +82,26 @@ def test_detection_and_validation(language):
 
 def test_mixed_scripts_and_noise():
     assert detect_language("Start こんにちは") == "Japanese"
+    assert detect_language("Start 안녕하세요 勇者") == "Korean"
     assert detect_language("勇者") == "Japanese"
+    assert contains_script("歡迎來到村莊", "Chinese")
+    assert not contains_script("HP 100", "Chinese")
+    assert not contains_script("HP 100", "Korean")
     assert not contains_script("12345 !!!", "Auto")
 
 
 @pytest.mark.parametrize("provider", ["ollama", "openai"])
 @pytest.mark.parametrize("mode", [OverlayMode.BANNER, OverlayMode.INPLACE])
-@pytest.mark.parametrize("language", ["English", "Japanese"])
+@pytest.mark.parametrize("language", ["English", "Japanese", "Chinese", "Korean"])
 def test_capture_ocr_http_translation_overlay(endpoint, qapp, provider, mode, language):
     base, calls = endpoint
     settings = LLMSettings(provider=provider, base_url=base, model="local-test")
+    source_language = "Chinese" if language == "Chinese" else "Auto"
     config = Config(
-        ocr_backend=OCRBackend.PADDLE, translation_backend=TranslationBackend.LLM, source_language="Auto", llm=settings
+        ocr_backend=OCRBackend.PADDLE,
+        translation_backend=TranslationBackend.LLM,
+        source_language=source_language,
+        llm=settings,
     )
     worker = ProcessWorker(config)
     worker.set_mode(mode)
@@ -110,7 +118,7 @@ def test_capture_ocr_http_translation_overlay(endpoint, qapp, provider, mode, la
             }
         ]
     )
-    worker._translator = LLMTranslator(settings, source_language="Auto")
+    worker._translator = LLMTranslator(settings, source_language=source_language)
     results = []
     worker.text_ready.connect(lambda text, generation: results.append(text))
     worker.regions_ready.connect(lambda regions, generation: results.append(regions))

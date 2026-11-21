@@ -1,22 +1,23 @@
 # Ludivoxa — Offline Game Translator with OCR and Vietnamese TTS
 
-**Ludivoxa** is an open-source screen translator for PC games. It reads English
-or Japanese dialogue with offline OCR, translates it into Vietnamese by default
-using a local LLM, and shows the result over the game or reads it aloud. Use it
-for visual novels, RPGs and other games with on-screen dialogue.
+**Ludivoxa** is an open-source screen translator for PC games. It reads English,
+Japanese, Chinese and Korean dialogue with offline OCR, translates it into
+Vietnamese by default using a local LLM, and shows the result over the game or
+reads it aloud. Use it for visual novels, RPGs and other games with on-screen
+dialogue.
 
 [Download for Windows](#install-on-windows) · [Set up game translation](#translate-your-first-game-dialogue) ·
-[Guide in Vietnamese](docs/USER_GUIDE.md) · [Tiếng Việt](README.vi.md)
+[Documentation](https://ludivoxa.hungdx.com/en/) · [Tiếng Việt](README.vi.md)
 
-**Stable release v1.5.0** adds dialogue history, per-game profiles, capture and
-audio diagnostics, and independent speech volume. [Release notes](docs/releases/v1.5.0.md)
+**Stable release v1.6.0** adds offline OCR for Simplified and Traditional Chinese
+and Korean. [Release notes](docs/releases/v1.6.0.md)
 
 ## Game translation features
 
-### Offline screen OCR for English and Japanese
+### Offline screen OCR for English, Japanese, Chinese and Korean
 
-Use the fast English PaddleOCR profile or select Japanese, with automatic
-language detection available for mixed dialogue. Save multiple dialogue boxes
+Use the fast English PaddleOCR profile or select Japanese, Chinese or Korean.
+**Auto** is intended for mixed English/Japanese dialogue. Save multiple dialogue boxes
 per game and scan them in one pass. Full-window capture and exclusion zones
 are also available. Choose a game window or a video capture device as input.
 
@@ -60,8 +61,8 @@ archives are for development.
 
 **Already installed?** Use **Updates** or run the standard **App-Update.exe**
 from the [latest stable release](https://github.com/hungdinhxuan/Ludivoxa/releases/latest)
-and select the existing installation directory. A matching v1.4.0 installation
-can download the smaller v1.5.0 patch. Updates keep your models, Ollama runtime
+and select the existing installation directory. A matching v1.5.0 installation
+can download the smaller v1.6.0 patch. Updates keep your models, Ollama runtime
 and `config.yml`. GitHub release downloads work without sign-in. The Windows
 installer is unsigned.
 
@@ -73,7 +74,8 @@ installer is unsigned.
    regions. Select **OK** to save them for that game.
 3. In **Engines**, choose **English** and `en_PP-OCRv5_mobile_rec` for English
    games. Use **Japanese** or **Auto** with `PP-OCRv5_mobile_rec` for Japanese
-   or mixed English/Japanese dialogue.
+   or mixed English/Japanese dialogue. Select **Chinese** or **Korean** with
+   **PaddleOCR** to load the corresponding local recognizer.
 4. Choose **Overlay only**, **TTS only** or **Overlay + TTS**. Use **F8** to
    toggle subtitles and **Stop reading** to stop speech.
 

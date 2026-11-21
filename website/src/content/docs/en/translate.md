@@ -1,5 +1,5 @@
 ---
-title: Translate English and Japanese game dialogue
+title: Translate game dialogue with offline OCR
 description: Capture a game window, select multiple dialogue regions for offline OCR, and configure per-game language settings.
 ---
 
@@ -9,6 +9,8 @@ description: Capture a game window, select multiple dialogue regions for offline
 4. Choose **Overlay only**, **TTS only**, or **Overlay + TTS**. For other target languages, use **Overlay only**. The bundled voices read Vietnamese.
 
 Boxes are saved per game window. Move or resize the boxes if the dialogue moves. Use **Full window (use exclusions)** to scan the window while omitting selected areas.
+
+Select **Chinese** with PaddleOCR for Simplified or Traditional Chinese. Select **Korean** with PaddleOCR for Korean games. Each option selects a local recognition model. Use an explicit source language for Han-only dialogue so the translator receives the correct language.
 
 ## History and game profiles
 

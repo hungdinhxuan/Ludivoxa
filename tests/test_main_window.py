@@ -949,7 +949,13 @@ def test_no_signal_state_is_reset_when_capture_stops(qapp, monkeypatch):
     win._ocr_config_dialog = None
     win._last_bounds = {}
     win._process_worker = type(
-        "W", (), {"submit_frame": lambda self, f, g: None, "discard_pending_frames": lambda self: None}
+        "W",
+        (),
+        {
+            "submit_frame": lambda self, f, g: None,
+            "discard_pending_frames": lambda self: None,
+            "set_capture_source": lambda self, title: None,
+        },
     )()
 
     win._capture = NoSignalVideo()

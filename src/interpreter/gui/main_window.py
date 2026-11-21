@@ -54,7 +54,7 @@ from ..config import (
     TranslationBackend,
     normalize_ocr_regions,
 )
-from ..languages import DEFAULT_SOURCE_LANGUAGE
+from ..languages import DEFAULT_SOURCE_LANGUAGE, OCR_SOURCE_LANGUAGES
 from ..llm_translate import (
     DEFAULT_BASE_URLS,
     DEFAULT_SYSTEM_PROMPT,
@@ -66,6 +66,7 @@ from ..llm_translate import (
     normalize_base_url,
     provider_label,
 )
+from ..ocr import PADDLE_LANGUAGE_MODELS
 from ..overlay import BannerOverlay, InplaceOverlay
 from ..owocr_ocr import DEFAULT_URL as OWOCR_DEFAULT_URL
 from ..owocr_ocr import SERVER_COMMAND as OWOCR_SERVER_COMMAND
@@ -542,13 +543,13 @@ class MainWindow(QMainWindow):
         grid = QGridLayout(card)
         grid.addWidget(QLabel("Game text:"), 0, 0)
         self._source_language_combo = QComboBox()
-        for language in dict.fromkeys(("Auto", "English", "Japanese", self._config.source_language)):
+        for language in dict.fromkeys((*OCR_SOURCE_LANGUAGES, self._config.source_language)):
             self._source_language_combo.addItem(language, language)
         self._source_language_combo.setCurrentIndex(
             max(0, self._source_language_combo.findData(self._config.source_language))
         )
         self._source_language_combo.setToolTip(
-            "Auto detects English/Japanese recognized text offline. Select a language manually for ambiguous text."
+            "Auto is intended for English/Japanese. Select Chinese or Korean to load its offline recognition model."
         )
         self._source_language_combo.currentIndexChanged.connect(lambda _i: self._update_pair_hint())
         grid.addWidget(self._source_language_combo, 0, 1)
@@ -885,7 +886,7 @@ class MainWindow(QMainWindow):
             paddle_grid.addWidget(widget, row, 0)
             paddle_grid.addWidget(edit, row, 1)
         hint = QLabel(
-            "Use local PaddleOCR 3 English/Japanese inference models (see README). "
+            "Chinese and Korean select a matching local recognition model next to the detector. "
             "Auto detects text language after OCR; it does not switch recognition models. "
             "Models are never downloaded. CPU, two threads by default."
         )
@@ -1040,7 +1041,15 @@ class MainWindow(QMainWindow):
                 max_side=config.paddle.max_side,
             )
 
-        ocr_changed = ocr_backend != config.ocr_backend or owocr != config.owocr or paddle != config.paddle
+        ocr_changed = (
+            ocr_backend != config.ocr_backend
+            or owocr != config.owocr
+            or paddle != config.paddle
+            or (
+                ocr_backend == OCRBackend.PADDLE
+                and PADDLE_LANGUAGE_MODELS.get(source_language) != PADDLE_LANGUAGE_MODELS.get(config.source_language)
+            )
+        )
         translation_changed = (
             translation_backend != config.translation_backend
             or llm != config.llm
@@ -1848,6 +1857,7 @@ class MainWindow(QMainWindow):
         self._last_ocr_capture = None
         self._capturing = False
         self._capture_generation += 1
+        self._process_worker.set_capture_source("")
         self._process_worker.discard_pending_frames()
 
         # Stop capture using unified interface

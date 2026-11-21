@@ -44,6 +44,13 @@ exist, retain them: the builder merges an ONNX export only after its metadata
 matches the existing model. CPU OCR uses ONNX when both selected models have
 exports; no download or automatic runtime failover is performed on an error.
 
+Chinese (Simplified and Traditional) reuses `PP-OCRv5_mobile_rec`. Korean uses
+the dedicated `korean_PP-OCRv5_mobile_rec` model. For source runs, keep their
+model folders beside the detection model, including the `_onnx` folders from
+the provisioning script. The Windows builder places the Korean recognizer
+under `_internal/ocr-models` so it ships with both full installs and app
+updates while the user's existing model paths stay valid.
+
 The full release also uses these Piper files under `models/voices`, each with
 its matching `.onnx.json` and model card:
 

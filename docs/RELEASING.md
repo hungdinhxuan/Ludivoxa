@@ -8,17 +8,18 @@ streaming speech and latency improvements. Use patch
 version **1.1.1** fixes OCR/TTS repeats and audio formats. The published v1.0.0 has no updater;
 its users must install the first updater-enabled version manually once.
 
-**v1.5.0 stable** uses Python/AppVersion `1.5.0` and Windows numeric version
-`1.5.0.0`. Build and test a fresh app stage. The app-only installers use the
-existing offline models and runtime.
+**v1.6.0 stable** uses Python/AppVersion `1.6.0` and Windows numeric version
+`1.6.0.0`. Build and test a fresh app stage. The app update includes the
+Korean recognizer under `_internal/ocr-models` and uses the existing offline
+models and runtime for the rest of the pipeline.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1 -AppDirectory build/v1.5.0-app/Interpreter -OutputDirectory dist/app-update/v1.5.0
+powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1 -AppDirectory build/v1.6.0-app/Interpreter -OutputDirectory dist/app-update/v1.6.0
 ```
 
-Build the delta from the archived v1.4.0 onedir bundle and package both
+Build the delta from the archived v1.5.0 onedir bundle and package both
 installers using the [smaller Windows updates](#smaller-windows-updates)
-instructions. Publish `v1.5.0` with `prerelease=false` and `make_latest=true`.
+instructions. Publish `v1.6.0` with `prerelease=false` and `make_latest=true`.
 Verify anonymous downloads of both packages. New users install the full
 offline v1.1.1 package before this update.
 
@@ -97,9 +98,10 @@ Build the optional app-only installer after validating the new EXE:
 powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1
 ```
 
-This reuses the existing Inno installer and AppId, with only the EXE/native
-libraries/license/runtime-stop helper. It excludes config, runtime and model
-files, and refuses a fresh empty installation. Publish it only when those
+This reuses the existing Inno installer and AppId. It includes the EXE, native
+libraries, bundled Korean recognizer, license and runtime-stop helper. It
+leaves user config, runtime and separately installed models in place, and
+refuses a fresh empty installation. Publish it only when those
 existing model/runtime formats remain compatible; otherwise publish only the
 full offline installer so the client uses that fallback.
 

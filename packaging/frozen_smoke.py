@@ -102,6 +102,43 @@ def run_smoke(report_path):
                 {"source": text, "translation": result, "ms": (time.perf_counter() - start) * 1000, "cached": cached}
             )
         report["translations"] = translations
+        cjk_translations = []
+        for language, samples in (
+            ("Chinese", (("欢迎来到村庄", "msyh.ttc"), ("歡迎來到村莊", "msjh.ttc"))),
+            ("Korean", (("안녕하세요 용사님", "malgun.ttf"),)),
+        ):
+            language_config = copy.deepcopy(config)
+            language_config.source_language = language
+            language_config.output_mode = OutputMode.OVERLAY
+            worker = ProcessWorker(language_config)
+            worker._load_ocr()
+            worker._load_translator()
+            try:
+                if worker.has_failed_models():
+                    raise AssertionError(worker.get_failure_message())
+                recognized_cjk, overlay = [], []
+                worker.ocr_results_ready.connect(
+                    lambda regions, _, results=recognized_cjk: results.extend(r.text for r in regions)
+                )
+                worker.text_ready.connect(lambda text, _, results=overlay: results.append(text))
+                for text, font_name in samples:
+                    recognized_cjk.clear()
+                    overlay.clear()
+                    image = Image.new("RGBA", (640, 100), "white")
+                    font = ImageFont.truetype(str(Path("C:/Windows/Fonts") / font_name), 36)
+                    ImageDraw.Draw(image).text((15, 10), text, fill="black", font=font)
+                    frame = np.asarray(image)[:, :, [2, 1, 0, 3]].copy()
+                    start = time.perf_counter()
+                    worker._process_frame(frame)
+                    elapsed = (time.perf_counter() - start) * 1000
+                    if recognized_cjk != [text] or not overlay or not overlay[-1] or overlay[-1] == text:
+                        raise AssertionError(f"Failed {language} OCR to overlay: {recognized_cjk!r}, {overlay!r}")
+                    cjk_translations.append(
+                        {"language": language, "source": text, "translation": overlay[-1], "ms": elapsed}
+                    )
+            finally:
+                worker._discard_ocr()
+        report["cjk_translations"] = cjk_translations
         start = time.perf_counter()
         synthesizer = OfflineSynthesizer()
         audio = synthesizer.synthesize(

@@ -7,6 +7,7 @@ character belongs to the language's script.
 """
 
 DEFAULT_SOURCE_LANGUAGE = "Japanese"
+OCR_SOURCE_LANGUAGES = ("Auto", "English", "Japanese", "Chinese", "Korean")
 
 # Display names double as config values and as the words used in the LLM prompt.
 SOURCE_LANGUAGES = (
@@ -31,7 +32,7 @@ _LATIN = ((0x41, 0x5A), (0x61, 0x7A), (0xC0, 0x24F), (0x1E00, 0x1EFF), (0xFF21, 
 _CYRILLIC = ((0x0400, 0x04FF),)
 
 _SCRIPTS = {
-    "Auto": _KANA + _HAN + _LATIN,
+    "Auto": _KANA + _HAN + _HANGUL + _LATIN,
     "Japanese": _KANA + _HAN,
     "Chinese": _HAN,
     "Korean": _HANGUL + _HAN,  # hanja still appear in some games
@@ -73,11 +74,12 @@ def normalize_source_language(value: object) -> str:
 
 def contains_script(text: str, language: str) -> bool:
     """True if ``text`` has at least one character from ``language``'s script."""
+    return _contains_letter(text, _SCRIPTS.get(language, _SCRIPTS[DEFAULT_SOURCE_LANGUAGE]))
+
+
+def _contains_letter(text, ranges):
     import unicodedata
 
-    if language == "Auto":
-        return contains_script(text, "Japanese") or contains_script(text, "English")
-    ranges = _SCRIPTS.get(language, _SCRIPTS[DEFAULT_SOURCE_LANGUAGE])
     for char in text:
         code = ord(char)
         for low, high in ranges:
@@ -89,3 +91,13 @@ def contains_script(text: str, language: str) -> bool:
 def contains_japanese(text: str) -> bool:
     """Check if text contains Japanese characters (kana or kanji)."""
     return contains_script(text, "Japanese")
+
+
+def contains_hangul(text: str) -> bool:
+    """Check for Korean letters without treating shared Han as Korean."""
+    return _contains_letter(text, _HANGUL)
+
+
+def contains_kana(text: str) -> bool:
+    """Check for Japanese kana in mixed-script text."""
+    return _contains_letter(text, _KANA)

@@ -23,6 +23,10 @@ EXPORTS = {
         "ed152b8b495f84de93cda5709d768548a9127622",
         "da72dc72ca4dc220df0dfde68c1dedc31c58d3e76a25871122e5056227d50092",
     ),
+    "korean_PP-OCRv5_mobile_rec": (
+        "5c6f574b8e2230adf4287b33e736d71b9fabd28e",
+        "92f0b7785e64fc9090106a241cf4c1eb97472824558272751b88a2a4476d3a08",
+    ),
 }
 
 

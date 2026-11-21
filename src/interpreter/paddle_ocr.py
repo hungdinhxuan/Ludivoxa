@@ -2,13 +2,55 @@
 
 import multiprocessing
 import os
+import sys
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import yaml
 
 from .models import ModelLoadError
-from .ocr import DEFAULT_CONFIDENCE_THRESHOLD, OCRResult
+from .ocr import DEFAULT_CONFIDENCE_THRESHOLD, PADDLE_LANGUAGE_MODELS, OCRResult
+
+_ONNX_WEIGHTS = ("inference.onnx",)
+_PADDLE_WEIGHTS = ("inference.json", "inference.pdiparams")
+
+
+def _has_model(path, weights):
+    return all((path / name).is_file() for name in ("inference.yml", *weights))
+
+
+def select_paddle_recognizer(settings, language):
+    """Select the local recognizer for an explicit Chinese or Korean source."""
+    name = PADDLE_LANGUAGE_MODELS.get(language)
+    if name is None:
+        return settings
+    detector = Path(settings.detection_model_dir).expanduser()
+    configured = Path(settings.recognition_model_dir).expanduser()
+    candidates = []
+    if settings.recognition_model_dir:
+        try:
+            metadata = yaml.safe_load((configured / "inference.yml").read_text(encoding="utf-8"))
+            if metadata["Global"]["model_name"] == name:
+                candidates.append(configured)
+        except (OSError, TypeError, KeyError, ValueError, yaml.YAMLError):
+            pass
+    for root in dict.fromkeys((detector.parent, configured.parent)):
+        candidates.extend((root / name, root / f"{name}_onnx"))
+    if bundle_dir := getattr(sys, "_MEIPASS", None):
+        candidates.append(Path(bundle_dir) / "ocr-models" / name)
+
+    runtimes = (_ONNX_WEIGHTS, _PADDLE_WEIGHTS) if settings.device == "cpu" else (_PADDLE_WEIGHTS,)
+    for weights in runtimes:
+        if settings.detection_model_dir and _has_model(detector, weights):
+            for directory in candidates:
+                if _has_model(directory, weights):
+                    return replace(settings, recognition_model_dir=str(directory))
+    raise ModelLoadError(
+        f"{language} OCR requires a local {name} recognizer and a detector with matching weights. "
+        "Place the recognizer next to the detector. For CPU ONNX models, run "
+        "packaging/provision_ocr_onnx.py during setup. The app never downloads models."
+    )
 
 
 def _ocr_process(connection, settings):
@@ -211,10 +253,10 @@ class PaddleOCR:
         settings = self._settings
         paths = [Path(value).expanduser() for value in (settings.detection_model_dir, settings.recognition_model_dir)]
         onnx = settings.device == "cpu" and all((path / "inference.onnx").is_file() for path in paths)
-        weights = ("inference.onnx",) if onnx else ("inference.json", "inference.pdiparams")
+        weights = _ONNX_WEIGHTS if onnx else _PADDLE_WEIGHTS
         names = []
         for value, path in zip((settings.detection_model_dir, settings.recognition_model_dir), paths, strict=True):
-            if not value or not all((path / name).is_file() for name in ("inference.yml", *weights)):
+            if not value or not _has_model(path, weights):
                 raise ModelLoadError(
                     "PaddleOCR requires local PaddleOCR 3 inference model directories "
                     "containing inference.yml and either both ONNX models (inference.onnx), "

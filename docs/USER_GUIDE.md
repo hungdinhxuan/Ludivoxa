@@ -1,6 +1,6 @@
 # Hướng dẫn dùng Ludivoxa để dịch game offline trên Windows
 
-Dùng Ludivoxa để đọc hội thoại tiếng Anh hoặc tiếng Nhật trên màn hình,
+Dùng Ludivoxa để đọc hội thoại tiếng Anh, Nhật, Trung và Hàn trên màn hình,
 dịch qua Ollama và hiển thị phụ đề hoặc phát giọng đọc tiếng Việt. Hướng dẫn
 này dành cho bộ cài Windows x64 và có cách kết nối máy chủ dịch trong LAN.
 
@@ -58,6 +58,13 @@ một lần trong phiên xử lý mới.
 - Game tiếng Nhật: chọn **Japanese** và `models/PP-OCRv5_mobile_rec`.
 - Game có cả Anh/Nhật: dùng **Auto** cùng `models/PP-OCRv5_mobile_rec`.
   Nếu phát hiện sai ngôn ngữ, chọn ngôn ngữ thủ công.
+- Từ v1.6.0, game tiếng Trung giản thể hoặc phồn thể dùng **Chinese** và **PaddleOCR**.
+  App dùng model `PP-OCRv5_mobile_rec`. Chọn **Chinese** để Ollama nhận đúng
+  ngôn ngữ khi chữ Hán có thể được hiểu là tiếng Nhật.
+- Game tiếng Hàn: chọn **Korean** và **PaddleOCR**. App dùng model
+  `korean_PP-OCRv5_mobile_rec`. Với bản chạy từ mã nguồn, chuẩn bị model
+  theo [hướng dẫn phát triển](DEVELOPMENT.md#provision-models-explicitly).
+  Có thể lưu **Chinese** hoặc **Korean** theo từng game trong **Game profile…**.
 - Target mặc định: **Vietnamese**. Có thể chọn ngôn ngữ dịch khác; hãy dùng
   **Overlay only** khi target không phải tiếng Việt vì các giọng đi kèm chỉ đọc
   tiếng Việt.

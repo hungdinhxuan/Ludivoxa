@@ -18,4 +18,4 @@ $numericVersion = ($releaseVersion -split 'rc', 2)[0] + '.0'
 New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
 & $compilerPath '/DAppUpdateOnly=1' ("/DAppVersion=" + $releaseVersion) ("/DAppNumericVersion=" + $numericVersion) ("/DPayloadDir=" + $appPath) ("/DOutputDir=" + $outputPath) packaging/windows_installer.iss *> build/app-update-compile.log
 if ($LASTEXITCODE -ne 0) { throw 'App-update installer failed; see build/app-update-compile.log.' }
-Write-Host "App-only update written to $outputPath. OCR/TTS/Ollama model files and user config are excluded."
+Write-Host "App update written to $outputPath. It includes the bundled Korean OCR model and retains existing user data."

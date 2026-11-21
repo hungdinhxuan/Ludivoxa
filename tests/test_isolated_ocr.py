@@ -5,7 +5,8 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from interpreter.config import Config, OCRBackend, PaddleSettings
+from interpreter.config import Config, GameProfile, OCRBackend, PaddleSettings
+from interpreter.gui.workers import ProcessWorker
 from interpreter.models import ModelLoadError
 from interpreter.ocr import OCRResult, create_ocr
 from interpreter.paddle_ocr import IsolatedPaddleOCR
@@ -23,6 +24,69 @@ def loaded_engine():
 
 def test_factory_isolates_only_paddle():
     assert isinstance(create_ocr(Config(ocr_backend=OCRBackend.PADDLE)), IsolatedPaddleOCR)
+
+
+def local_onnx_model(root, name):
+    folder = root / name
+    folder.mkdir()
+    (folder / "inference.yml").write_text(f"Global:\n  model_name: {name.removesuffix('_onnx')}\n", encoding="utf-8")
+    (folder / "inference.onnx").touch()
+    return str(folder)
+
+
+def test_cjk_model_switches_once_per_profile_and_recovers_after_missing_model(tmp_path, monkeypatch):
+    detector = local_onnx_model(tmp_path, "PP-OCRv5_mobile_det_onnx")
+    english = local_onnx_model(tmp_path, "en_PP-OCRv5_mobile_rec_onnx")
+    korean = local_onnx_model(tmp_path, "korean_PP-OCRv5_mobile_rec")
+    config = Config(ocr_backend=OCRBackend.PADDLE, source_language="English", paddle=PaddleSettings(detector, english))
+    worker = ProcessWorker(config)
+    loaded, closed, frames = [], [], []
+    monkeypatch.setattr(IsolatedPaddleOCR, "load", lambda engine: loaded.append(engine._settings.recognition_model_dir))
+    monkeypatch.setattr(
+        IsolatedPaddleOCR, "close", lambda engine: closed.append(engine._settings.recognition_model_dir)
+    )
+    monkeypatch.setattr(worker, "_load_translator", lambda: None)
+    monkeypatch.setattr(worker, "_process_frame", lambda frame, *_: frames.append(frame))
+    profiles = iter(["English", "Chinese", "Chinese", "Korean", "Korean", "English"])
+
+    def next_frame(timeout):
+        language = next(profiles, None)
+        if language is None:
+            worker._running = False
+            return None
+        return (language, 1, (0, 0), False, None, None, "Game", GameProfile(source_language=language))
+
+    monkeypatch.setattr(worker._frame_buffer, "get", next_frame)
+    worker._running = True
+    worker._run()
+
+    assert loaded == closed == [english, korean, english]
+    assert frames == ["English", "Korean", "Korean", "English"]
+    assert config.paddle.recognition_model_dir == english
+
+
+def test_custom_named_local_recognizer_is_kept_if_it_matches_language(tmp_path):
+    detector = local_onnx_model(tmp_path, "PP-OCRv5_mobile_det_onnx")
+    local_onnx_model(tmp_path, "PP-OCRv5_mobile_rec_onnx")
+    renamed = (tmp_path / "PP-OCRv5_mobile_rec_onnx").rename(tmp_path / "custom-rec")
+    settings = PaddleSettings(detector, str(renamed))
+    engine = create_ocr(Config(ocr_backend=OCRBackend.PADDLE, source_language="Chinese", paddle=settings))
+    assert engine._settings == settings
+
+
+def test_windows_bundle_supplies_korean_model_without_changing_saved_paths(tmp_path, monkeypatch):
+    import sys
+
+    detector = local_onnx_model(tmp_path, "PP-OCRv5_mobile_det")
+    bundle = tmp_path / "_internal"
+    bundled_models = bundle / "ocr-models"
+    bundled_models.mkdir(parents=True)
+    recognizer = local_onnx_model(bundled_models, "korean_PP-OCRv5_mobile_rec")
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle), raising=False)
+    settings = PaddleSettings(detector, str(tmp_path / "en_PP-OCRv5_mobile_rec"))
+    engine = create_ocr(Config(ocr_backend=OCRBackend.PADDLE, source_language="Korean", paddle=settings))
+    assert engine._settings.recognition_model_dir == recognizer
+    assert settings.recognition_model_dir.endswith("en_PP-OCRv5_mobile_rec")
 
 
 def test_unchanged_frame_reuses_regions_but_pixel_and_confidence_changes_invalidate():

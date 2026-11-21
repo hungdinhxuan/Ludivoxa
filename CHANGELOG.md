@@ -5,6 +5,13 @@ such as `v1.0.0`; numbering is independent of the upstream Interpreter project.
 
 ## Unreleased
 
+## [1.6.0] - 2026-11-21
+
+- Add offline PaddleOCR profiles for Simplified and Traditional Chinese and
+  Korean, selectable globally or per game. Only the selected recognizer runs.
+- Bundle the Korean recognizer in Windows app updates. The Chinese profile
+  reuses the existing PP-OCRv5 multilingual model.
+
 ## [1.5.0] - 2026-11-21
 
 - Review, replay, copy and retranslate recent dialogue from History, including
@@ -240,3 +247,4 @@ Initial Ludivoxa release, based on Interpreter 2.23.3.
 [1.0.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.0.0
 [1.1.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.0
 [1.1.1]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1
+[1.6.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.6.0

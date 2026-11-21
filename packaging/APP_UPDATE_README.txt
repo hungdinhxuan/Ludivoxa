@@ -4,9 +4,8 @@ Run Ludivoxa-{version}-App-Update.exe and select your existing Ludivoxa folder.
 This is an upgrade package, not a fresh full offline installation.
 New users: install the v1.1.1 Full Offline Setup first, then apply this update.
 
-The package contains the app and its native libraries. It retains config.yml,
+The package contains the app, its native libraries and the Korean OCR model. It retains config.yml,
 OCR/TTS models, Ollama runtime, LLM models and voice reference recordings.
-No model or voice reference recordings are included in this package.
 If this release offers a Delta-from installer, it only applies to the exact
 base version in its file name and verifies its installed files before updating.
 Use the standard App-Update.exe to upgrade other or modified installations.
