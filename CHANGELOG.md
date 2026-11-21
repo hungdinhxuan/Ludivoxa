@@ -3,6 +3,11 @@
 All notable Ludivoxa changes are recorded here using version tags such as
 `v1.0.0`.
 
+## [2.0.1] - 2026-11-22
+
+- Add the new Ludivoxa speech-wave icon to the desktop app, Windows installer
+  and documentation site.
+
 ## [2.0.0] - 2026-11-22
 
 - Use Ludivoxa for the Python package, CLI, desktop entry, Windows executable,
@@ -260,5 +265,6 @@ Initial Ludivoxa release.
 [1.1.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.0
 [1.1.1]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1
 [1.6.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.6.0
+[2.0.1]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v2.0.1
 [2.0.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v2.0.0
 [1.7.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.7.0

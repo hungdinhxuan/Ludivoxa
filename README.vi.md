@@ -9,9 +9,8 @@ hiện trên màn hình.
 [Tải cho Windows](#cài-windows-offline) · [Wiki Ludivoxa](https://ludivoxa.hungdx.com/) ·
 [Sơ đồ kiến trúc](README.md#architecture) · [English](README.md)
 
-**Bản ổn định v2.0.0** dùng tên Ludivoxa cho gói Python, lệnh dòng lệnh và tệp
-chạy Windows. Gói nâng cấp giữ cấu hình và model đã cài.
-[Ghi chú v2.0.0](docs/releases/v2.0.0.md)
+**Bản ổn định v2.0.1** cập nhật icon bong bóng thoại và sóng âm cho app,
+bộ cài Windows và wiki. [Ghi chú v2.0.1](docs/releases/v2.0.1.md)
 
 ## Tính năng dịch game
 
@@ -59,9 +58,10 @@ Q4_K_M, model OCR Anh/Nhật và giọng đọc tiếng Việt. Bộ đầy đ�
 
 **Máy đã có Ludivoxa?** Dùng **Updates** hoặc tải gói **App-Update.exe** từ
 [bản phát hành ổn định mới nhất](https://github.com/hungdinhxuan/Ludivoxa/releases/latest)
-và chọn thư mục đang cài. Khi lên v2.0.0, gói cập nhật chuẩn cài `Ludivoxa.exe`
-và giữ model, Ollama cùng `config.yml`. Các tệp trong mục **Assets** tải được
-mà không cần đăng nhập GitHub. Bộ cài chưa ký số.
+và chọn thư mục đang cài. Updater có thể dùng gói vá v2.0.1 nhỏ hơn nếu tệp app
+v2.0.0 khớp bản phát hành. Bản cài cũ hơn hoặc đã sửa tệp dùng gói cập nhật
+chuẩn. Cả hai gói giữ model, Ollama và `config.yml`. Các tệp trong mục **Assets**
+tải được mà không cần đăng nhập GitHub. Bộ cài chưa ký số.
 
 ## Cách dịch hội thoại trong game
 

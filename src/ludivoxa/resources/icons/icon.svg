@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>Ludivoxa</title>
+  <defs>
+    <linearGradient id="tile" x1="20" y1="8" x2="225" y2="248" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#263E75"/>
+      <stop offset="1" stop-color="#111A2D"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="128" y1="8" x2="128" y2="248" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7296D2"/>
+      <stop offset="1" stop-color="#2D4064"/>
+    </linearGradient>
+    <linearGradient id="voice" x1="56" y1="53" x2="187" y2="198" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C4FFF0"/>
+      <stop offset="1" stop-color="#47DBD9"/>
+    </linearGradient>
+    <path id="bubble" d="M81 53h94c22 0 39 17 39 39v44c0 22-17 39-39 39h-57l-34 26c-6 5-15 1-15-7v-21c-16-5-27-20-27-37V92c0-22 17-39 39-39Z"/>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#tile)" stroke="url(#rim)" stroke-width="3"/>
+  <use href="#bubble" fill="#080E1B" opacity="0.32" transform="translate(0 7)"/>
+  <use href="#bubble" fill="url(#voice)"/>
+  <path d="M88 107v14m32-24v34m32-47v60m32-41v22" fill="none" stroke="#182740" stroke-width="16" stroke-linecap="round"/>
+</svg>

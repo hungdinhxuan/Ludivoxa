@@ -9,9 +9,8 @@ dialogue.
 [Download for Windows](#install-on-windows) · [Set up game translation](#translate-your-first-game-dialogue) ·
 [Documentation](https://ludivoxa.hungdx.com/en/) · [Tiếng Việt](README.vi.md)
 
-**Stable release v2.0.0** gives the Python package, CLI and Windows executable
-the Ludivoxa name. Windows upgrades retain settings and models.
-[Release notes](docs/releases/v2.0.0.md)
+**Stable release v2.0.1** adds the Ludivoxa speech-wave icon to the app,
+Windows installer and wiki. [Release notes](docs/releases/v2.0.1.md)
 
 ## Game translation features
 
@@ -63,10 +62,10 @@ archives are for development.
 
 **Already installed?** Use **Updates** or run the standard **App-Update.exe**
 from the [latest stable release](https://github.com/hungdinhxuan/Ludivoxa/releases/latest)
-and select the existing installation directory. Upgrading to v2.0.0 uses the
-standard app update to install `Ludivoxa.exe` and keeps your models, Ollama
-runtime and `config.yml`. GitHub release downloads work without sign-in. The
-Windows installer is unsigned.
+and select the existing installation directory. The updater can use the smaller
+v2.0.1 patch when the v2.0.0 app files match. Older or modified installs use
+the standard update. Both packages retain your models, Ollama runtime and
+`config.yml`. GitHub downloads work without sign-in. The installer is unsigned.
 
 ## Translate your first game dialogue
 
