@@ -1,0 +1,19 @@
+---
+title: Benchmark độ trễ dịch và giọng đọc
+description: Xem thời gian đến tiếng đọc đầu tiên của Ludivoxa trên Windows, kèm số lượt đo và cấu hình thử nghiệm.
+---
+
+**TTFA (time to first audio)** tính từ lúc nhận được khung hình có đủ chữ đến
+khi ghi nhận tiếng đọc đầu tiên qua WASAPI loopback.
+
+| Đầu vào của v1.5.0 | Số lượt | TTFA trung vị |
+| --- | ---: | ---: |
+| Hội thoại tổng hợp ngắn | 3 | 910,24 ms |
+| Mẫu tổng hợp hai câu | 3 | 914,23 ms |
+
+Bài thử phát lại bốn khung hình mỗi giây, dùng PaddleOCR trên CPU, Gemma 4 E4B
+Q4_K_M local và VieNeu Nano đã nạp sẵn. Kết quả đo độ trễ phát lại. Phép đo
+không bao gồm FPS khi chơi, Remote Desktop hoặc thời gian game hiện từng chữ.
+
+[Cấu hình và từng lượt đo](https://github.com/hungdinhxuan/Ludivoxa/blob/v1.5.0/docs/PERFORMANCE.md#v150-windows-frame-replay) ·
+[Benchmark theo phiên bản](https://github.com/hungdinhxuan/Ludivoxa/blob/main/docs/PERFORMANCE.md)

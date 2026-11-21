@@ -1,0 +1,44 @@
+---
+title: Ludivoxa — Dịch game offline trên Windows
+description: Dịch hội thoại game tiếng Anh và tiếng Nhật bằng OCR, Ollama local và giọng đọc tiếng Việt. Tải Ludivoxa và xem hướng dẫn cài đặt.
+template: splash
+hero:
+  title: Dịch game ngay trên màn hình
+  tagline: Ludivoxa đọc hội thoại tiếng Anh hoặc tiếng Nhật, dịch sang tiếng Việt bằng Ollama và hiện phụ đề hoặc đọc thành tiếng.
+  image:
+    file: ../../assets/ludivoxa.png
+    alt: Biểu tượng Ludivoxa
+  actions:
+    - text: Cài đặt trên Windows
+      link: ./install/
+    - text: Tải bản phát hành
+      link: https://github.com/hungdinhxuan/Ludivoxa/releases/latest
+      variant: secondary
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+<div class="dialogue-example">
+  <div>
+    <span>Hội thoại gốc</span>
+    <p lang="en">Meet me at the gate before dark.</p>
+  </div>
+  <div>
+    <span>Phụ đề tiếng Việt</span>
+    <p>Gặp tôi ở cổng trước khi trời tối.</p>
+  </div>
+</div>
+
+## Hướng dẫn sử dụng
+
+<CardGrid>
+  <LinkCard title="Dịch hội thoại trong game" href="./translate/" description="Khoanh ô chữ, chọn OCR Anh/Nhật và dùng History để xem lại bản dịch." />
+  <LinkCard title="Cấu hình Ollama" href="./ollama/" description="Dịch trên máy hoặc dùng máy chủ trong mạng LAN." />
+  <LinkCard title="Chọn phụ đề và giọng đọc" href="./voice/" description="Chọn giọng tiếng Việt, chỉnh âm lượng và gán preset theo nhân vật." />
+  <LinkCard title="Xử lý lỗi" href="./troubleshooting/" description="Kiểm tra ảnh OCR và đầu ra âm thanh, kể cả khi dùng Remote Desktop." />
+</CardGrid>
+
+## Độ trễ đến tiếng đầu tiên
+
+Trong sáu lượt phát lại hội thoại tổng hợp của v1.5.0, TTFA trung vị khoảng
+**0,91 giây** cho mỗi nhóm mẫu. [Xem điều kiện đo và từng lượt](./benchmarks/).

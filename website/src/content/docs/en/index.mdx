@@ -1,0 +1,44 @@
+---
+title: Ludivoxa — Offline game translation for Windows
+description: Read English or Japanese game dialogue with offline OCR. Translate using local Ollama and get on-screen subtitles or Vietnamese speech.
+template: splash
+hero:
+  title: Translate games as you play
+  tagline: Ludivoxa reads English or Japanese dialogue, translates it with local Ollama, and shows subtitles or reads the Vietnamese translation aloud.
+  image:
+    file: ../../../assets/ludivoxa.png
+    alt: Ludivoxa app icon
+  actions:
+    - text: Install on Windows
+      link: ./install/
+    - text: Download release
+      link: https://github.com/hungdinhxuan/Ludivoxa/releases/latest
+      variant: secondary
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+<div class="dialogue-example">
+  <div>
+    <span>Original dialogue</span>
+    <p>Meet me at the gate before dark.</p>
+  </div>
+  <div>
+    <span>Vietnamese subtitles</span>
+    <p lang="vi">Gặp tôi ở cổng trước khi trời tối.</p>
+  </div>
+</div>
+
+## Guides
+
+<CardGrid>
+  <LinkCard title="Translate game dialogue" href="./translate/" description="Select dialogue regions, set the OCR language, and use History to revisit a line." />
+  <LinkCard title="Set up Ollama" href="./ollama/" description="Translate with the bundled runtime or connect to a server on your LAN." />
+  <LinkCard title="Choose subtitles and speech" href="./voice/" description="Set the Vietnamese voice, playback volume, and character presets." />
+  <LinkCard title="Troubleshoot" href="./troubleshooting/" description="Diagnose capture, OCR, or audio output, including over Remote Desktop." />
+</CardGrid>
+
+## Time to first audio
+
+In six synthetic frame-replay trials for v1.5.0, median TTFA was about
+**0.91 seconds** for each sample group. [See the measurements and conditions](./benchmarks/).

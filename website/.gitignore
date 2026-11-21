@@ -1,0 +1,8 @@
+node_modules/
+.astro/
+dist/
+/src/content/docs/install.md
+/src/content/docs/translate.md
+/src/content/docs/ollama.md
+/src/content/docs/voice.md
+/src/content/docs/troubleshooting.md
