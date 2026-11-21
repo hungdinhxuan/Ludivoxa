@@ -6,10 +6,10 @@ from PySide6.QtCore import QRect, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
 
-from interpreter.config import Config
-from interpreter.gui.history_overlay import HistoryOverlay, _visible_game_area
-from interpreter.gui.history_page import HistoryPage
-from interpreter.gui.workers import DialogueEntry
+from ludivoxa.config import Config
+from ludivoxa.gui.history_overlay import HistoryOverlay, _visible_game_area
+from ludivoxa.gui.history_page import HistoryPage
+from ludivoxa.gui.workers import DialogueEntry
 
 
 def test_game_anchor_uses_the_visible_monitor_across_dpi_and_screen_origins():

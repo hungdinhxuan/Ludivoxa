@@ -88,7 +88,7 @@ The public corpora may overlap model training data, most references come from on
 - Corpus fingerprint: `8b03090234f41ce82ee737030dd0590674bb005acc1dc74b650ef9aa810b8d31` (same as the August run)
 - Workload: 268 `screen` pairs plus 136 `normalized` diagnostics; two warm-ups and three timed calls per model/sample
 - Hardware: NVIDIA GeForce RTX 4070 Ti (12 GB), Windows 11, Ollama 0.33.3; both candidates fully resident on the GPU (49/49 layers offloaded), production on CUDA
-- Candidates run through the exact application path (`src/interpreter/llm_translate.py`): application system prompt, Ollama native `/api/chat`, thinking disabled, temperature 0, fixed seed, no context replay
+- Candidates run through the exact application path (`src/ludivoxa/llm_translate.py`): application system prompt, Ollama native `/api/chat`, thinking disabled, temperature 0, fixed seed, no context replay
 - Pins: Sugoi 14B Ultra GGUF Q4_K_M (Hugging Face `d8dd836bf519a604530779cbf5ce13ffb35c3eeb`, Ollama manifest `e4afea968d86…`), gemma3:12b Q4_K_M (Ollama manifest `f4031aab637d…`)
 - Metrics and statistics as in the August run: chrF++/BLEU via SacreBLEU 2.5.1, pinned `Unbabel/wmt22-comet-da`, paired 10,000-resample bootstrap, seed 1729
 

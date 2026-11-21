@@ -1,13 +1,13 @@
-# uninstall.ps1 - Uninstaller for interpreter-v2
-# Usage: powershell -c "irm https://raw.githubusercontent.com/bquenin/interpreter/main/uninstall.ps1 | iex"
+# uninstall.ps1 - Uninstaller for ludivoxa
+# Usage: powershell -ExecutionPolicy Bypass -File uninstall.ps1
 
 $ErrorActionPreference = 'Stop'
 
 Write-Host ""
-Write-Host "=== interpreter-v2 Uninstaller ===" -ForegroundColor Cyan
+Write-Host "=== ludivoxa Uninstaller ===" -ForegroundColor Cyan
 Write-Host ""
 
-function Remove-InterpreterPath {
+function Remove-LudivoxaPath {
     param(
         [Parameter(Mandatory = $true)]
         [string]$Path,
@@ -28,13 +28,13 @@ function Remove-InterpreterPath {
 }
 
 # A custom install location (see install.ps1) holds the tool environment, the
-# uv-managed Python, and the model cache. INTERPRETER_HOME wins over the pointer
+# uv-managed Python, and the model cache. LUDIVOXA_HOME wins over the pointer
 # file the installer wrote, matching the app and the installer.
-$configDir = Join-Path $env:USERPROFILE ".interpreter"
+$configDir = Join-Path $env:USERPROFILE ".ludivoxa"
 $installRootFile = Join-Path $configDir "install-dir"
 $installRoot = $null
-if ($env:INTERPRETER_HOME -and $env:INTERPRETER_HOME.Trim()) {
-    $installRoot = $env:INTERPRETER_HOME.Trim()
+if ($env:LUDIVOXA_HOME -and $env:LUDIVOXA_HOME.Trim()) {
+    $installRoot = $env:LUDIVOXA_HOME.Trim()
 } elseif (Test-Path -LiteralPath $installRootFile -PathType Leaf) {
     $installRoot = (Get-Content -LiteralPath $installRootFile -Raw).Trim()
     if (-not $installRoot) { $installRoot = $null }
@@ -72,25 +72,25 @@ if ($uvExecutable) {
     }
 }
 
-$toolEnvironment = Join-Path $toolRoot "interpreter-v2"
-$toolExecutable = Join-Path $toolBin "interpreter-v2.exe"
+$toolEnvironment = Join-Path $toolRoot "ludivoxa"
+$toolExecutable = Join-Path $toolBin "ludivoxa.exe"
 
-Write-Host "[1/5] Uninstalling interpreter-v2..." -ForegroundColor Yellow
+Write-Host "[1/5] Uninstalling ludivoxa..." -ForegroundColor Yellow
 if ($uvExecutable) {
     $toolList = & $uvExecutable tool list 2>$null
-    if ($toolList -match "interpreter-v2" -or (Test-Path -LiteralPath $toolEnvironment)) {
+    if ($toolList -match "ludivoxa" -or (Test-Path -LiteralPath $toolEnvironment)) {
         $ErrorActionPreference = 'Continue'
-        & $uvExecutable tool uninstall interpreter-v2
+        & $uvExecutable tool uninstall ludivoxa
         $uninstallExitCode = $LASTEXITCODE
         $ErrorActionPreference = 'Stop'
 
         if ($uninstallExitCode -eq 0) {
-            Write-Host "     interpreter-v2 uninstalled" -ForegroundColor Green
+            Write-Host "     ludivoxa uninstalled" -ForegroundColor Green
         } else {
             Write-Host "     uv could not uninstall the tool; cleaning up its files directly" -ForegroundColor Yellow
         }
     } else {
-        Write-Host "     interpreter-v2 is not registered with uv" -ForegroundColor Gray
+        Write-Host "     ludivoxa is not registered with uv" -ForegroundColor Gray
     }
 } else {
     Write-Host "     uv was not found; cleaning up its files directly" -ForegroundColor Yellow
@@ -99,29 +99,29 @@ if ($uvExecutable) {
 # Remove orphan files left by an interrupted install or a stale uv registry.
 Write-Host "[2/5] Cleaning up orphan files..." -ForegroundColor Yellow
 if (Test-Path -LiteralPath $toolExecutable) {
-    Remove-InterpreterPath -Path $toolExecutable -Description "orphan executable"
+    Remove-LudivoxaPath -Path $toolExecutable -Description "orphan executable"
 } else {
     Write-Host "     No orphan executable found" -ForegroundColor Gray
 }
 if (Test-Path -LiteralPath $toolEnvironment) {
-    Remove-InterpreterPath -Path $toolEnvironment -Description "stale tool environment"
+    Remove-LudivoxaPath -Path $toolEnvironment -Description "stale tool environment"
 } else {
     Write-Host "     No stale tool environment found" -ForegroundColor Gray
 }
 # An install that was later moved to a custom location may have left the
 # default environment behind.
-$defaultToolEnvironment = Join-Path $env:APPDATA "uv\tools\interpreter-v2"
+$defaultToolEnvironment = Join-Path $env:APPDATA "uv\tools\ludivoxa"
 if ($installRoot -and (Test-Path -LiteralPath $defaultToolEnvironment)) {
-    Remove-InterpreterPath -Path $defaultToolEnvironment -Description "tool environment left in the user profile"
+    Remove-LudivoxaPath -Path $defaultToolEnvironment -Description "tool environment left in the user profile"
 }
 
 # New installers use this dedicated cache so it can always be removed without
 # disturbing other uv users. Older installers used uv's shared cache; prune only
 # entries uv knows are unreachable and leave reusable downloads alone.
 Write-Host "[3/5] Removing package downloads..." -ForegroundColor Yellow
-$installCacheDir = Join-Path $env:LOCALAPPDATA "interpreter-v2\uv-cache"
+$installCacheDir = Join-Path $env:LOCALAPPDATA "ludivoxa\uv-cache"
 if (Test-Path -LiteralPath $installCacheDir) {
-    Remove-InterpreterPath -Path $installCacheDir -Description "interpreter package cache"
+    Remove-LudivoxaPath -Path $installCacheDir -Description "ludivoxa package cache"
 }
 
 if ($uvExecutable) {
@@ -164,13 +164,12 @@ if ($env:HF_HUB_CACHE) {
 
 # Remove config
 if (Test-Path -LiteralPath $configDir) {
-    Remove-InterpreterPath -Path $configDir -Description "config directory"
+    Remove-LudivoxaPath -Path $configDir -Description "config directory"
 } else {
     Write-Host "     Config directory not found" -ForegroundColor Gray
 }
 
-# Remove the repositories actually downloaded by interpreter-v2. Retain the
-# legacy bquenin pattern for caches created by older releases. With a custom
+# Remove the model repositories used by this application. With a custom
 # install location the models live under it and are removed below, but an
 # install that was moved there later may have left models in this cache.
 $modelCacheNames = @(
@@ -183,29 +182,16 @@ if (Test-Path -LiteralPath $modelsDir -PathType Container) {
     foreach ($modelCacheName in $modelCacheNames) {
         $modelPath = Join-Path $modelsDir $modelCacheName
         if (Test-Path -LiteralPath $modelPath) {
-            Remove-InterpreterPath -Path $modelPath -Description $modelCacheName
+            Remove-LudivoxaPath -Path $modelPath -Description $modelCacheName
             $removedModel = $true
         }
 
         $modelLockPath = Join-Path (Join-Path $modelsDir ".locks") $modelCacheName
         if (Test-Path -LiteralPath $modelLockPath) {
-            Remove-InterpreterPath -Path $modelLockPath -Description "$modelCacheName lock files"
+            Remove-LudivoxaPath -Path $modelLockPath -Description "$modelCacheName lock files"
         }
     }
 
-    $legacyModels = Get-ChildItem -LiteralPath $modelsDir -Directory -Filter "models--bquenin--*" -ErrorAction SilentlyContinue
-    foreach ($legacyModel in $legacyModels) {
-        Remove-InterpreterPath -Path $legacyModel.FullName -Description $legacyModel.Name
-        $removedModel = $true
-    }
-
-    $legacyLocksDir = Join-Path $modelsDir ".locks"
-    if (Test-Path -LiteralPath $legacyLocksDir -PathType Container) {
-        $legacyModelLocks = Get-ChildItem -LiteralPath $legacyLocksDir -Directory -Filter "models--bquenin--*" -ErrorAction SilentlyContinue
-        foreach ($legacyModelLock in $legacyModelLocks) {
-            Remove-InterpreterPath -Path $legacyModelLock.FullName -Description "$($legacyModelLock.Name) lock files"
-        }
-    }
 }
 if (-not $removedModel) {
     Write-Host "     Cached models not found" -ForegroundColor Gray
@@ -213,25 +199,25 @@ if (-not $removedModel) {
 
 # Remove the custom install location. Only the folders the installer creates
 # are deleted, only when the installer's marker file proves it created this
-# root, and the root itself only once it is empty. A mistyped INTERPRETER_HOME
+# root, and the root itself only once it is empty. A mistyped LUDIVOXA_HOME
 # or a root shared with other files is never wiped wholesale.
 Write-Host "[5/5] Removing install location..." -ForegroundColor Yellow
-$installMarker = if ($installRoot) { Join-Path $installRoot ".interpreter-v2" } else { $null }
+$installMarker = if ($installRoot) { Join-Path $installRoot ".ludivoxa" } else { $null }
 if (-not $installRoot) {
     Write-Host "     No custom install location" -ForegroundColor Gray
 } elseif (-not (Test-Path -LiteralPath $installMarker -PathType Leaf)) {
-    Write-Host "     $installRoot was not created by the interpreter-v2 installer; leaving it alone" -ForegroundColor Yellow
+    Write-Host "     $installRoot was not created by the ludivoxa installer; leaving it alone" -ForegroundColor Yellow
 } else {
-    Remove-InterpreterPath -Path (Join-Path $installRoot "uv") -Description "tool environment and Python"
-    Remove-InterpreterPath -Path (Join-Path $installRoot "uv-cache") -Description "interpreter package cache"
-    Remove-InterpreterPath -Path (Join-Path $installRoot "models") -Description "downloaded models"
+    Remove-LudivoxaPath -Path (Join-Path $installRoot "uv") -Description "tool environment and Python"
+    Remove-LudivoxaPath -Path (Join-Path $installRoot "uv-cache") -Description "ludivoxa package cache"
+    Remove-LudivoxaPath -Path (Join-Path $installRoot "models") -Description "downloaded models"
     Remove-Item -LiteralPath $installMarker -Force -ErrorAction SilentlyContinue
     if (Test-Path -LiteralPath $installRoot -PathType Container) {
         $leftovers = Get-ChildItem -LiteralPath $installRoot -Force -ErrorAction SilentlyContinue
         if ($leftovers) {
             Write-Host "     Kept $installRoot because it still contains other files" -ForegroundColor Gray
         } else {
-            Remove-InterpreterPath -Path $installRoot -Description "install location $installRoot"
+            Remove-LudivoxaPath -Path $installRoot -Description "install location $installRoot"
         }
     }
 }

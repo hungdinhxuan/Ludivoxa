@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from interpreter.config import Config, LLMSettings, TranslationBackend
-from interpreter.llm_translate import (
+from ludivoxa.config import Config, LLMSettings, TranslationBackend
+from ludivoxa.llm_translate import (
     DEFAULT_SYSTEM_PROMPT,
     LLMTranslationError,
     LLMTranslator,
@@ -17,8 +17,8 @@ from interpreter.llm_translate import (
     list_models,
     normalize_base_url,
 )
-from interpreter.models import ModelLoadError
-from interpreter.translate import create_translator
+from ludivoxa.models import ModelLoadError
+from ludivoxa.translate import create_translator
 
 
 def _response(payload: dict, status: int = 200) -> MagicMock:
@@ -139,7 +139,7 @@ class TestListModels:
     def test_ollama_uses_tags_endpoint(self):
         settings = LLMSettings(provider="ollama", base_url="http://127.0.0.1:11434")
         payload = {"models": [{"name": "qwen3:0.6b"}, {"name": "gemma3:4b"}]}
-        with patch("interpreter.llm_translate.requests.get", return_value=_response(payload)) as get:
+        with patch("ludivoxa.llm_translate.requests.get", return_value=_response(payload)) as get:
             assert list_models(settings) == ["gemma3:4b", "qwen3:0.6b"]
         assert get.call_args.args[0] == "http://127.0.0.1:11434/api/tags"
         assert "Authorization" not in get.call_args.kwargs["headers"]
@@ -147,7 +147,7 @@ class TestListModels:
     def test_openai_uses_models_endpoint_with_bearer(self):
         settings = LLMSettings(provider="openai", base_url="https://api.example.com", api_key="sk-test")
         payload = {"data": [{"id": "gpt-x"}, {"id": "gpt-a"}]}
-        with patch("interpreter.llm_translate.requests.get", return_value=_response(payload)) as get:
+        with patch("ludivoxa.llm_translate.requests.get", return_value=_response(payload)) as get:
             assert list_models(settings) == ["gpt-a", "gpt-x"]
         assert get.call_args.args[0] == "https://api.example.com/v1/models"
         assert get.call_args.kwargs["headers"] == {"Authorization": "Bearer sk-test"}

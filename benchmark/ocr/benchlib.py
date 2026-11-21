@@ -1,4 +1,4 @@
-"""Shared utilities for the Interpreter OCR benchmark.
+"""Shared utilities for the Ludivoxa OCR benchmark.
 
 This module intentionally uses only the Python standard library so comparison
 reports can be generated outside either model environment.

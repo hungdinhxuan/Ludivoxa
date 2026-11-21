@@ -11,7 +11,7 @@ Version 1.0.0 users must upgrade manually once. From 1.1.0, open Updates to
 check/download/install future stable releases. Public GitHub access needs no
 key or sign-in. Startup checks are optional; installation requires a click.
 
-Open Ludivoxa from the Start menu or installed Interpreter.exe. Its private
+Open Ludivoxa from the Start menu or installed Ludivoxa.exe. Its private
 Ollama service listens only on 127.0.0.1:11435 and uses the included HauhauCS
 Qwen3 4B Aggressive Q4_K_M model. It does not alter an existing Ollama server on
 11434. No model download or cloud inference fallback is used. The first model
@@ -59,11 +59,11 @@ Callback-only audio drivers and Piper retain buffered playback. Waiting for
 the current spoken line to finish still adds delay. The default prompt keeps
 the source's tone and intensity; an existing custom prompt remains in control.
 
-Settings are in config.yml beside Interpreter.exe. Upgrades and uninstall keep
+Settings are in config.yml beside Ludivoxa.exe. Upgrades and uninstall keep
 this settings file. Uninstall stops only the Ollama service owned by this
 installation. External recordings and unrelated Ollama services are untouched.
-Logs are in %USERPROFILE%\.interpreter\logs.
+Logs are in %USERPROFILE%\.ludivoxa\logs.
 
-This is an unsigned Ludivoxa build derived from Interpreter, not an upstream
-Interpreter release. See LICENSE,
+This is an unsigned Ludivoxa build derived from Ludivoxa, not an upstream
+Ludivoxa release. See LICENSE,
 THIRD_PARTY_NOTICES.txt and model cards for bundled component terms.

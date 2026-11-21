@@ -9,10 +9,10 @@ import pytest
 from PIL import Image
 from websockets.exceptions import ConnectionClosedError, InvalidHandshake, InvalidURI
 
-from interpreter.config import Config, OCRBackend, OwocrSettings
-from interpreter.models import ModelLoadError
-from interpreter.ocr import OCR, OCRResult, create_ocr
-from interpreter.owocr_ocr import (
+from ludivoxa.config import Config, OCRBackend, OwocrSettings
+from ludivoxa.models import ModelLoadError
+from ludivoxa.ocr import OCR, OCRResult, create_ocr
+from ludivoxa.owocr_ocr import (
     DEFAULT_URL,
     PROBE_SIZE,
     SERVER_COMMAND,
@@ -115,7 +115,7 @@ def connections(monkeypatch):
             raise conn
         return conn
 
-    monkeypatch.setattr("interpreter.owocr_ocr.connect", connect)
+    monkeypatch.setattr("ludivoxa.owocr_ocr.connect", connect)
     return queue
 
 

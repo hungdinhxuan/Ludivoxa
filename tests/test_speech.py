@@ -15,11 +15,11 @@ from PySide6.QtMultimedia import QMediaDevices
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
-from interpreter.config import Config, LLMSettings, OutputMode, OverlayMode, TranslationBackend
-from interpreter.gui.main_window import MainWindow
-from interpreter.gui.workers import ProcessWorker
-from interpreter.ocr import OCRResult
-from interpreter.speech import (
+from ludivoxa.config import Config, LLMSettings, OutputMode, OverlayMode, TranslationBackend
+from ludivoxa.gui.main_window import MainWindow
+from ludivoxa.gui.workers import ProcessWorker
+from ludivoxa.ocr import OCRResult
+from ludivoxa.speech import (
     OfflineSynthesizer,
     PCMPlayer,
     PiperSynthesizer,
@@ -201,7 +201,7 @@ def test_synthesizer_requires_local_files(tmp_path):
 @pytest.mark.parametrize("mode", [OverlayMode.BANNER, OverlayMode.INPLACE])
 def test_worker_speech_is_only_emitted_for_successful_translation(mode, monkeypatch):
     clock = [0.0]
-    monkeypatch.setattr("interpreter.gui.workers.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("ludivoxa.gui.workers.time.monotonic", lambda: clock[0])
     worker = ProcessWorker(Config())
     worker.set_mode(mode)
     worker._ocr = MagicMock()
@@ -472,7 +472,7 @@ def test_hide_overlay_does_not_cancel_speech(speech):
     assert Config.DEFAULT_HOTKEYS["toggle_overlay"] == "f8"
 
 
-@pytest.mark.skipif(not os.environ.get("INTERPRETER_TEST_VOICE"), reason="Real audio device required")
+@pytest.mark.skipif(not os.environ.get("LUDIVOXA_TEST_VOICE"), reason="Real audio device required")
 def test_pcm_playback_continues_through_long_ui_stalls(speech):
     import numpy as np
     import sounddevice as sd
@@ -513,7 +513,7 @@ def test_pcm_playback_continues_through_long_ui_stalls(speech):
         player.close()
 
 
-@pytest.mark.skipif(not os.environ.get("INTERPRETER_TEST_VOICE"), reason="Real audio device required")
+@pytest.mark.skipif(not os.environ.get("LUDIVOXA_TEST_VOICE"), reason="Real audio device required")
 def test_explicit_stop_ignores_stale_native_completion(speech):
     import numpy as np
 
@@ -541,7 +541,7 @@ def test_explicit_stop_ignores_stale_native_completion(speech):
 
 def test_tts_only_batches_inplace_regions_into_one_request(monkeypatch):
     clock = [0.0]
-    monkeypatch.setattr("interpreter.gui.workers.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("ludivoxa.gui.workers.time.monotonic", lambda: clock[0])
     worker = ProcessWorker(Config(output_mode="tts", source_language="English"))
     worker.set_mode(OverlayMode.INPLACE)
     worker._ocr = MagicMock()
@@ -556,7 +556,7 @@ def test_tts_only_batches_inplace_regions_into_one_request(monkeypatch):
 
 
 @pytest.mark.skipif(
-    not os.environ.get("INTERPRETER_TEST_VOICE"), reason="Set INTERPRETER_TEST_VOICE for real Piper test"
+    not os.environ.get("LUDIVOXA_TEST_VOICE"), reason="Set LUDIVOXA_TEST_VOICE for real Piper test"
 )
 def test_real_vietnamese_synthesis_is_offline(monkeypatch, speech):
     def forbid(*args, **kwargs):
@@ -565,7 +565,7 @@ def test_real_vietnamese_synthesis_is_offline(monkeypatch, speech):
     monkeypatch.setattr(socket.socket, "connect", forbid)
     synthesizer = PiperSynthesizer()
     start = time.perf_counter()
-    data = synthesizer.synthesize("Xin chào. Chào mừng bạn đến với ngôi làng.", os.environ["INTERPRETER_TEST_VOICE"])
+    data = synthesizer.synthesize("Xin chào. Chào mừng bạn đến với ngôi làng.", os.environ["LUDIVOXA_TEST_VOICE"])
     elapsed = (time.perf_counter() - start) * 1000
     with wave.open(BytesIO(data)) as wav_file:
         assert wav_file.getnchannels() == 1
@@ -599,11 +599,11 @@ def test_real_vietnamese_synthesis_is_offline(monkeypatch, speech):
             controller.close()
 
 
-@pytest.mark.skipif(not os.environ.get("INTERPRETER_TEST_VOICE"), reason="Local voice fixtures required")
+@pytest.mark.skipif(not os.environ.get("LUDIVOXA_TEST_VOICE"), reason="Local voice fixtures required")
 def test_real_speaker_and_speed_changes():
     from pathlib import Path
 
-    root = Path(os.environ["INTERPRETER_TEST_VOICE"]).parent
+    root = Path(os.environ["LUDIVOXA_TEST_VOICE"]).parent
     model = root / "vi_VN-vivos-x_low.onnx"
     if not model.is_file():
         pytest.skip("VIVOS fixture is not provisioned")

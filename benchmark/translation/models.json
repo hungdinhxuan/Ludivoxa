@@ -2,7 +2,7 @@
   "schema_version": 1,
   "models": {
     "production": {
-      "label": "Interpreter production Sugoi V4",
+      "label": "Ludivoxa production Sugoi V4",
       "adapter": "production",
       "repo_id": "entai2965/sugoi-v4-ja-en-ctranslate2",
       "revision": "71d67eb8e73ec2f5aaefc0689e03a4eb843d3a2b",

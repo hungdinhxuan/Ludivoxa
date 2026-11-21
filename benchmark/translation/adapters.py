@@ -35,36 +35,36 @@ def _load_module(name: str, path: Path):
 def load_application_translator(repo_root: Path):
     """Load production translate.py without importing the GUI or capture stack."""
 
-    source_root = repo_root / "src" / "interpreter"
+    source_root = repo_root / "src" / "ludivoxa"
     translate_path = source_root / "translate.py"
     if not translate_path.is_file():
-        raise BenchmarkError(f"Interpreter translation source not found under {repo_root}")
+        raise BenchmarkError(f"Ludivoxa translation source not found under {repo_root}")
 
-    package = types.ModuleType("interpreter")
+    package = types.ModuleType("ludivoxa")
     package.__path__ = [str(source_root)]
-    sys.modules["interpreter"] = package
+    sys.modules["ludivoxa"] = package
 
-    log_module = types.ModuleType("interpreter.log")
+    log_module = types.ModuleType("ludivoxa.log")
     log_module.get_logger = lambda *_args, **_kwargs: _SilentLogger()
-    sys.modules["interpreter.log"] = log_module
+    sys.modules["ludivoxa.log"] = log_module
 
-    models_module = types.ModuleType("interpreter.models")
+    models_module = types.ModuleType("ludivoxa.models")
 
     class ModelLoadError(Exception):
         pass
 
     models_module.ModelLoadError = ModelLoadError
-    sys.modules["interpreter.models"] = models_module
-    return _load_module("interpreter.translate", translate_path).Translator
+    sys.modules["ludivoxa.models"] = models_module
+    return _load_module("ludivoxa.translate", translate_path).Translator
 
 
 def load_application_llm_translator(repo_root: Path):
     """Load production llm_translate.py (and the config it needs) next to translate.py."""
 
-    load_application_translator(repo_root)  # registers the interpreter package and log/model stubs
-    source_root = repo_root / "src" / "interpreter"
-    config_module = _load_module("interpreter.config", source_root / "config.py")
-    llm_module = _load_module("interpreter.llm_translate", source_root / "llm_translate.py")
+    load_application_translator(repo_root)  # registers the ludivoxa package and log/model stubs
+    source_root = repo_root / "src" / "ludivoxa"
+    config_module = _load_module("ludivoxa.config", source_root / "config.py")
+    llm_module = _load_module("ludivoxa.llm_translate", source_root / "llm_translate.py")
     return config_module, llm_module
 
 
@@ -74,8 +74,8 @@ def setup_application_gpu(repo_root: Path) -> bool:
     platform_module = {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}.get(platform.system())
     if platform_module is None:
         return False
-    path = repo_root / "src" / "interpreter" / "gpu" / f"{platform_module}.py"
-    module = _load_module(f"interpreter.gpu.{platform_module}", path)
+    path = repo_root / "src" / "ludivoxa" / "gpu" / f"{platform_module}.py"
+    module = _load_module(f"ludivoxa.gpu.{platform_module}", path)
     return bool(module.setup())
 
 
@@ -275,7 +275,7 @@ class BaseAdapter:
 
 
 class ProductionAdapter(BaseAdapter):
-    prompt_contract = "exact src/interpreter/translate.py::Translator.translate path; cache cleared per call"
+    prompt_contract = "exact src/ludivoxa/translate.py::Translator.translate path; cache cleared per call"
 
     def load(self) -> None:
         if self.device_preference != "auto":
@@ -561,7 +561,7 @@ class OllamaAdapter(BaseAdapter):
     """
 
     prompt_contract = (
-        "exact src/interpreter/llm_translate.py::LLMTranslator path: application system prompt, "
+        "exact src/ludivoxa/llm_translate.py::LLMTranslator path: application system prompt, "
         "Ollama native /api/chat with think=false, temperature 0, fixed seed, no context history; "
         "cache cleared per call"
     )
@@ -573,7 +573,7 @@ class OllamaAdapter(BaseAdapter):
             return response.json()
         except self.requests.ConnectionError as exc:
             raise BenchmarkError(
-                f"Cannot reach Ollama at {self.base_url}. Start it (or set INTERPRETER_OLLAMA_URL)."
+                f"Cannot reach Ollama at {self.base_url}. Start it (or set LUDIVOXA_OLLAMA_URL)."
             ) from exc
         except self.requests.RequestException as exc:
             raise BenchmarkError(f"Ollama request {route} failed: {exc}") from exc
@@ -589,7 +589,7 @@ class OllamaAdapter(BaseAdapter):
 
         config_module, llm_module = load_application_llm_translator(self.repo_root)
         self.base_url = llm_module.normalize_base_url(
-            "ollama", os.environ.get("INTERPRETER_OLLAMA_URL", config_module.LLMSettings().base_url)
+            "ollama", os.environ.get("LUDIVOXA_OLLAMA_URL", config_module.LLMSettings().base_url)
         )
         name = self.model["ollama_model"]
 

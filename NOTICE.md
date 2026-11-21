@@ -1,13 +1,7 @@
 # Attribution and third-party components
 
-Ludivoxa is derived from [Interpreter](https://github.com/bquenin/interpreter)
-by qube / bquenin. The starting source snapshot identified itself as Interpreter
-2.23.3. This fork starts its own release sequence at **Ludivoxa 1.0.0**.
-
-The original capture, OCR, translation, overlay and Qt interfaces are retained.
-Ludivoxa adds the offline English/Japanese PaddleOCR profile, selected-area OCR,
-local LLM/Vietnamese speech integration, performance work, runtime lifecycle
-management and Windows offline distribution described in the changelog.
+Ludivoxa incorporates MIT-licensed code from
+[Interpreter by qube / bquenin](https://github.com/bquenin/interpreter).
 
 Original copyright notices remain in [LICENSE](LICENSE). Ludivoxa application
 source is distributed under the MIT license. Bundled dependencies, runtimes and
@@ -16,7 +10,6 @@ replace those terms.
 
 | Component | License / source |
 | --- | --- |
-| Interpreter application foundation | MIT; [upstream](https://github.com/bquenin/interpreter) |
 | Ollama 0.40.16 | MIT; [sources](https://github.com/ollama/ollama/tree/v0.40.16) |
 | HauhauCS Qwen3 4B Aggressive Q4_K_M | Apache-2.0; [model](https://huggingface.co/HauhauCS/Qwen3-4B-2507-Instruct-Uncensored-HauhauCS-Aggressive) |
 | PaddleOCR / PaddlePaddle | Apache-2.0; [sources](https://github.com/PaddlePaddle/PaddleOCR) |

@@ -6,15 +6,15 @@ import cv2
 import numpy as np
 import pytest
 
-from interpreter.config import Config, OutputMode, OverlayMode
-from interpreter.gui.workers import ProcessWorker
-from interpreter.ocr import OCRResult
+from ludivoxa.config import Config, OutputMode, OverlayMode
+from ludivoxa.gui.workers import ProcessWorker
+from ludivoxa.ocr import OCRResult
 
 
 @pytest.fixture
 def dialogue(monkeypatch):
     clock = [0.0]
-    monkeypatch.setattr("interpreter.gui.workers.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("ludivoxa.gui.workers.time.monotonic", lambda: clock[0])
     worker = ProcessWorker(Config(source_language="Auto", output_mode="tts"))
     worker._ocr = MagicMock()
     worker._translator = MagicMock()
@@ -154,7 +154,7 @@ def test_enabling_speech_and_changing_voice_resets_dialogue_guard(dialogue):
 @pytest.fixture
 def visual_dialogue(monkeypatch):
     clock = [0.0]
-    monkeypatch.setattr("interpreter.gui.workers.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("ludivoxa.gui.workers.time.monotonic", lambda: clock[0])
     worker = ProcessWorker(Config(source_language="English", output_mode="tts"))
     worker._ocr = MagicMock()
     worker._translator = MagicMock()
@@ -618,7 +618,7 @@ def test_word_box_split_merge_does_not_repeat_unchanged_line(visual_dialogue):
         OCRResult("leave home", dict(x=145, y=25, width=145, height=25)),
     ]
     clock = [0.0]
-    from interpreter.gui import workers
+    from ludivoxa.gui import workers
 
     original_time = workers.time
     workers.time = type("Clock", (), {"monotonic": lambda: clock[0], "perf_counter": original_time.perf_counter})
@@ -676,7 +676,7 @@ def _outlined_dialogue(text, background_seed):
 @pytest.mark.parametrize("mode", [OutputMode.TTS, OutputMode.BOTH])
 def test_animated_game_background_and_stable_ocr_variants_do_not_reread_outlined_text(monkeypatch, mode):
     clock = [0.0]
-    monkeypatch.setattr("interpreter.gui.workers.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("ludivoxa.gui.workers.time.monotonic", lambda: clock[0])
     worker = ProcessWorker(Config(source_language="English", output_mode=mode))
     worker._ocr, worker._translator = MagicMock(), MagicMock()
     worker._translator.translate.side_effect = lambda text: ("VI: " + text, False)
@@ -696,7 +696,7 @@ def test_animated_game_background_and_stable_ocr_variants_do_not_reread_outlined
 @pytest.mark.parametrize("next_text", ["You need 20 gold.", "You need 100 gold.", "You need no gold."])
 def test_real_outlined_text_changes_are_read_over_an_animated_background(monkeypatch, next_text):
     clock = [0.0]
-    monkeypatch.setattr("interpreter.gui.workers.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("ludivoxa.gui.workers.time.monotonic", lambda: clock[0])
     worker = ProcessWorker(Config(source_language="English", output_mode="tts"))
     worker._ocr, worker._translator = MagicMock(), MagicMock()
     worker._translator.translate.side_effect = lambda text: ("VI: " + text, False)

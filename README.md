@@ -9,8 +9,9 @@ dialogue.
 [Download for Windows](#install-on-windows) · [Set up game translation](#translate-your-first-game-dialogue) ·
 [Documentation](https://ludivoxa.hungdx.com/en/) · [Tiếng Việt](README.vi.md)
 
-**Stable release v1.7.0** adds target presets for English, Simplified and
-Traditional Chinese, Japanese and Korean. [Release notes](docs/releases/v1.7.0.md)
+**Stable release v2.0.0** gives the Python package, CLI and Windows executable
+the Ludivoxa name. Windows upgrades retain settings and models.
+[Release notes](docs/releases/v2.0.0.md)
 
 ## Game translation features
 
@@ -62,10 +63,10 @@ archives are for development.
 
 **Already installed?** Use **Updates** or run the standard **App-Update.exe**
 from the [latest stable release](https://github.com/hungdinhxuan/Ludivoxa/releases/latest)
-and select the existing installation directory. A matching v1.6.0 installation
-can download the smaller v1.7.0 patch. Updates keep your models, Ollama runtime
-and `config.yml`. GitHub release downloads work without sign-in. The Windows
-installer is unsigned.
+and select the existing installation directory. Upgrading to v2.0.0 uses the
+standard app update to install `Ludivoxa.exe` and keeps your models, Ollama
+runtime and `config.yml`. GitHub release downloads work without sign-in. The
+Windows installer is unsigned.
 
 ## Translate your first game dialogue
 
@@ -250,10 +251,8 @@ uv sync --locked --extra paddle --extra tts --extra clone --group build
 uv run ludivoxa
 ```
 
-The compatibility command `interpreter-v2` still works. The internal Python
-distribution/namespace and configuration locations remain unchanged. Legacy
-root install scripts install upstream Interpreter from PyPI; use the Ludivoxa
-release or [source instructions](docs/DEVELOPMENT.md) for this fork.
+The package and CLI are both named `ludivoxa`. To install the CLI from the
+checkout or build `Ludivoxa.exe`, see the [development guide](docs/DEVELOPMENT.md).
 
 - [Changelog](CHANGELOG.md) and [published releases](https://github.com/hungdinhxuan/Ludivoxa/releases)
 - [Development, provisioning and Windows builds](docs/DEVELOPMENT.md)
@@ -266,6 +265,4 @@ Version 1.1.0 starts Nano speech from completed audio chunks; the
 in-place overlay and callback-only driver paths retain buffered playback. Recorded-frame
 benchmarks do not establish live game FPS or guarantee latency for every scene.
 
-Ludivoxa builds on Interpreter's capture, OCR, translation and overlay pipeline.
-[Upstream Interpreter](https://github.com/bquenin/interpreter) ·
-[MIT license](LICENSE) · [Third-party notices](NOTICE.md)
+[MIT license](LICENSE) · [Attribution and third-party notices](NOTICE.md)

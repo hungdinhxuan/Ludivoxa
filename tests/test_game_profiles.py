@@ -2,11 +2,11 @@ from unittest.mock import MagicMock
 
 from PySide6.QtWidgets import QApplication, QDialog
 
-from interpreter.config import Config, GameProfile, LLMSettings
-from interpreter.gui.game_profile import GameProfileDialog
-from interpreter.gui.workers import DialogueEntry, ProcessWorker
-from interpreter.llm_translate import LLMTranslator
-from interpreter.ocr import OCRResult
+from ludivoxa.config import Config, GameProfile, LLMSettings
+from ludivoxa.gui.game_profile import GameProfileDialog
+from ludivoxa.gui.workers import DialogueEntry, ProcessWorker
+from ludivoxa.llm_translate import LLMTranslator
+from ludivoxa.ocr import OCRResult
 
 
 def test_game_profile_round_trip_preserves_legacy_window_configuration(tmp_path):
@@ -50,7 +50,7 @@ def test_game_profile_dialog_validates_selected_language_before_saving():
 
 def test_game_profile_filters_ocr_before_translation_and_live_speech(monkeypatch):
     now = [5.0]
-    monkeypatch.setattr("interpreter.gui.workers.time.monotonic", lambda: now[0])
+    monkeypatch.setattr("ludivoxa.gui.workers.time.monotonic", lambda: now[0])
     llm = LLMSettings(model="local", system_prompt="Global {source_language}")
     config = Config(source_language="Japanese", llm=llm, output_mode="tts")
     config.set_game_profile(

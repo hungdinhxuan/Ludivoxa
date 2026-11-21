@@ -3,8 +3,8 @@
 By default everything lives under the user's home directory: the uv tool
 environment, the uv-managed Python, and the HuggingFace model cache. Users with
 a small system drive can instead point the installer at another location via the
-INTERPRETER_HOME environment variable. The installer records that location in
-~/.interpreter/install-dir so later runs (and the app itself) find it without
+LUDIVOXA_HOME environment variable. The installer records that location in
+~/.ludivoxa/install-dir so later runs (and the app itself) find it without
 the variable being set again.
 
 Layout under the install location::
@@ -20,20 +20,25 @@ The installers and uninstallers mirror this layout; keep them in sync.
 import os
 from pathlib import Path
 
-INSTALL_ROOT_ENV = "INTERPRETER_HOME"
+INSTALL_ROOT_ENV = "LUDIVOXA_HOME"
 INSTALL_ROOT_FILE_NAME = "install-dir"
 MODELS_DIR_NAME = "models"
 
 
 def get_config_dir() -> Path:
     """Directory holding config.yml and the install location pointer."""
+    return Path.home() / ".ludivoxa"
+
+
+def get_legacy_config_dir() -> Path:
+    """Previous Ludivoxa releases stored user files here."""
     return Path.home() / ".interpreter"
 
 
 def get_install_root() -> Path | None:
     """Return the custom install location, or None for the default layout.
 
-    INTERPRETER_HOME takes precedence over the pointer file written by the
+    LUDIVOXA_HOME takes precedence over the pointer file written by the
     installer. Blank values are treated as unset.
     """
     value = os.environ.get(INSTALL_ROOT_ENV, "").strip()
@@ -41,6 +46,11 @@ def get_install_root() -> Path | None:
         pointer = get_config_dir() / INSTALL_ROOT_FILE_NAME
         try:
             value = pointer.read_text(encoding="utf-8-sig").strip()
+        except FileNotFoundError:
+            try:
+                value = (get_legacy_config_dir() / pointer.name).read_text(encoding="utf-8-sig").strip()
+            except OSError:
+                return None
         except OSError:
             return None
     if not value:

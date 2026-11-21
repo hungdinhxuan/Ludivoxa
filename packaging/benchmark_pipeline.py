@@ -10,12 +10,12 @@ from pathlib import Path
 import numpy as np
 from PySide6.QtCore import QCoreApplication, QEventLoop, QObject, QTimer, Slot
 
-from interpreter.config import Config, OutputMode
-from interpreter.gui.main_window import PROCESS_INTERVAL_MS
-from interpreter.gui.workers import ProcessWorker
-from interpreter.llm_translate import LLMTranslator
-from interpreter.ocr import create_ocr
-from interpreter.speech import OfflineSynthesizer, PCMPlayer, SpeechController
+from ludivoxa.config import Config, OutputMode
+from ludivoxa.gui.main_window import PROCESS_INTERVAL_MS
+from ludivoxa.gui.workers import ProcessWorker
+from ludivoxa.llm_translate import LLMTranslator
+from ludivoxa.ocr import create_ocr
+from ludivoxa.speech import OfflineSynthesizer, PCMPlayer, SpeechController
 
 
 def summary(values):
@@ -202,7 +202,7 @@ def run(config_path, frame_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", default="dist/Interpreter/config.yml")
+    parser.add_argument("--config", default="dist/Ludivoxa/config.yml")
     parser.add_argument("--frame", required=True)
     parser.add_argument("--report", default=".test-results/setup-speed.json")
     args = parser.parse_args()

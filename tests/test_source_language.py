@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QLineEdit, QPlainTextEdit, QPushButton
 
-from interpreter.config import (
+from ludivoxa.config import (
     Config,
     GameProfile,
     LLMSettings,
@@ -16,9 +16,9 @@ from interpreter.config import (
     OwocrSettings,
     TranslationBackend,
 )
-from interpreter.gui.main_window import MainWindow
-from interpreter.gui.workers import ProcessWorker
-from interpreter.languages import (
+from ludivoxa.gui.main_window import MainWindow
+from ludivoxa.gui.workers import ProcessWorker
+from ludivoxa.languages import (
     DEFAULT_SOURCE_LANGUAGE,
     SAMPLE_TEXT,
     SOURCE_LANGUAGES,
@@ -26,10 +26,10 @@ from interpreter.languages import (
     contains_script,
     normalize_source_language,
 )
-from interpreter.llm_translate import DEFAULT_SYSTEM_PROMPT, PROVIDER_LABELS, PROVIDERS, LLMTranslator, check_endpoint
-from interpreter.models import ModelLoadError
-from interpreter.ocr import OCRResult
-from interpreter.translate import SUGOI_ONLY_JAPANESE, Translator, create_translator
+from ludivoxa.llm_translate import DEFAULT_SYSTEM_PROMPT, PROVIDER_LABELS, PROVIDERS, LLMTranslator, check_endpoint
+from ludivoxa.models import ModelLoadError
+from ludivoxa.ocr import OCRResult
+from ludivoxa.translate import SUGOI_ONLY_JAPANESE, Translator, create_translator
 
 
 class TestScriptChecks:
@@ -448,7 +448,7 @@ class TestMainWindow:
         win._fixing_ocr = win._fixing_translation = False
         win._process_worker.get_failed_models.return_value = ["translation"]
         deleted = []
-        monkeypatch.setattr("interpreter.models.delete_model_cache", deleted.append)
+        monkeypatch.setattr("ludivoxa.models.delete_model_cache", deleted.append)
 
         win._on_fix_models()
 

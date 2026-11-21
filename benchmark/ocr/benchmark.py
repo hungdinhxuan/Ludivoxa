@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI for preparing, running, and comparing the Interpreter OCR benchmark."""
+"""CLI for preparing, running, and comparing the Ludivoxa OCR benchmark."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def _add_run_arguments(parser: argparse.ArgumentParser, include_label: bool = Tr
     parser.add_argument("--repeats", type=int, default=5, help="Timed repetitions per image (default: 5)")
     parser.add_argument("--warmups", type=int, default=1, help="Untimed warm-up passes (default: 1)")
     parser.add_argument("--seed", type=int, default=1729, help="Deterministic sample-order seed")
-    parser.add_argument("--confidence", type=float, default=0.6, help="Interpreter line confidence threshold")
+    parser.add_argument("--confidence", type=float, default=0.6, help="Ludivoxa line confidence threshold")
     parser.add_argument(
         "--include-unscored",
         action="store_true",
@@ -212,7 +212,7 @@ def _matrix(args: argparse.Namespace) -> None:
         baseline_version = importlib.metadata.version("meikiocr")
     except importlib.metadata.PackageNotFoundError as exc:
         raise BenchmarkError(
-            "Run matrix from the installed Interpreter environment containing the current meikiocr"
+            "Run matrix from the installed Ludivoxa environment containing the current meikiocr"
         ) from exc
 
     timestamp = time.strftime("%Y%m%d-%H%M%S", time.localtime())

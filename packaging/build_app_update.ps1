@@ -1,7 +1,7 @@
 param(
     [string]$Compiler = 'build/tools/InnoSetup/ISCC.exe',
     [string]$Python = '.venv/Scripts/python.exe',
-    [string]$AppDirectory = 'dist/Interpreter',
+    [string]$AppDirectory = 'dist/Ludivoxa',
     [string]$OutputDirectory = 'dist/app-update'
 )
 $ErrorActionPreference = 'Stop'
@@ -9,7 +9,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repoRoot
 $compilerPath = (Resolve-Path -LiteralPath $Compiler).Path
 $appPath = (Resolve-Path -LiteralPath $AppDirectory).Path
-if (-not (Test-Path -LiteralPath (Join-Path $appPath 'Interpreter.exe'))) { throw 'Build the app EXE first.' }
+if (-not (Test-Path -LiteralPath (Join-Path $appPath 'Ludivoxa.exe'))) { throw 'Build the app EXE first.' }
 if (-not (Test-Path -LiteralPath (Join-Path $appPath '_internal'))) { throw 'The complete PyInstaller onedir bundle is required.' }
 $outputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
 $releaseVersion = & $Python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"

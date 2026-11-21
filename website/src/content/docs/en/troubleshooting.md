@@ -18,5 +18,5 @@ Ludivoxa can switch capture methods when the Windows session changes and resume 
 
 Speech follows the Windows default output. When Windows exposes **Remote Audio** as the default, the next line can use it. Check the default and last playback devices in **Diagnostics**.
 
-Settings are saved in `config.yml` beside the EXE. Logs are in `%USERPROFILE%/.interpreter/logs`.
+Settings are saved in `config.yml` beside the EXE. Logs are in `%USERPROFILE%/.ludivoxa/logs`.
 [Open a GitHub issue](https://github.com/hungdinhxuan/Ludivoxa/issues)

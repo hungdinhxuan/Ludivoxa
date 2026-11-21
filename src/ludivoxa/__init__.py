@@ -2,20 +2,20 @@
 
 This application captures text from a target window, performs OCR using
 the existing OCR backends, translates locally, and displays subtitles or
-reads Vietnamese speech. Derived from bquenin/interpreter.
+reads Vietnamese speech.
 """
 
 import faulthandler
 import signal
 
 # Enable faulthandler to dump thread stacks on SIGUSR1 (Unix only)
-# Usage: kill -USR1 <pid>  (find pid with: pgrep -f interpreter)
+# Usage: kill -USR1 <pid>  (find pid with: pgrep -f ludivoxa)
 if hasattr(signal, "SIGUSR1"):
     faulthandler.register(signal.SIGUSR1, all_threads=True)
 
 from importlib.metadata import version
 
-__version__ = version("interpreter-v2")
+__version__ = version("ludivoxa")
 
 
 def main():

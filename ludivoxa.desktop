@@ -2,7 +2,7 @@
 Name=Ludivoxa
 Comment=Offline game OCR, translation and speech
 Exec=ludivoxa
-Icon=interpreter-v2
+Icon=ludivoxa
 Type=Application
 Categories=Utility;Translation;
-StartupWMClass=interpreter-v2
+StartupWMClass=ludivoxa

@@ -2,7 +2,7 @@
 
 ## Environment
 
-Use Python 3.11 or 3.12. Python 3.12 is the tested Windows build interpreter.
+Use Python 3.11 or 3.12. The Windows build is tested with Python 3.12.
 
 ```powershell
 git clone https://github.com/hungdinhxuan/Ludivoxa.git
@@ -11,11 +11,17 @@ uv sync --locked --extra paddle --extra tts --extra clone --group build
 Copy-Item config.example.yml config.yml
 ```
 
-The distribution remains `interpreter-v2` for compatibility; `uv run ludivoxa`
-and `uv run interpreter-v2` both start it. `config.yml`, virtual environments,
-downloaded models, binary output and local audit reports are ignored by Git.
-The root legacy install/uninstall scripts retain upstream Interpreter/PyPI
-behavior and are not the installation route for this fork.
+The distribution, module and CLI are all named `ludivoxa`. Start the app
+with `uv run ludivoxa` or `uv run python -m ludivoxa`. The root scripts
+`install.ps1` and `install.sh` install the checkout as a uv tool. Set
+`LUDIVOXA_HOME` to choose a custom tool and model cache location.
+`config.yml`, virtual environments, downloaded models, build output and
+local audit reports are ignored by Git.
+
+User-wide settings and logs use `~/.ludivoxa`. Portable installations use
+`config.yml` beside the executable. On first run after upgrading from an
+earlier source installation, Ludivoxa can read the previous user-wide config
+and saves subsequent changes to the new location.
 
 ## Provision models explicitly
 
@@ -73,9 +79,8 @@ servers. The full Windows bundle instead uses private port 11435.
 powershell -ExecutionPolicy Bypass -File packaging/build_windows.ps1 -ModelDirectory models
 ```
 
-Output is `dist/Interpreter/Interpreter.exe`. Keep the complete directory.
-Its product/version information and GUI identify Ludivoxa; compatibility
-filenames remain unchanged. This stage includes Python and local OCR/TTS
+Output is `dist/Ludivoxa/Ludivoxa.exe`. Keep the complete directory.
+Its product and version information identify Ludivoxa. This stage includes Python and local OCR/TTS
 models, but does not automatically provision Ollama or model weights.
 
 ## Full offline bundle and installer
@@ -123,10 +128,10 @@ Real models, native Windows fonts and an EXE are opt-in fixtures. To reproduce
 the full Windows validation, set these to your provisioned paths:
 
 ```powershell
-$env:INTERPRETER_TEST_MODEL_ROOT = 'models'
-$env:INTERPRETER_TEST_VOICE = 'models/voices/vi_VN-vais1000-medium.onnx'
-$env:INTERPRETER_TEST_CLONE_MODEL = 'models/VieNeu-TTS-v3-Nano'
-$env:INTERPRETER_TEST_EXE = 'dist/Interpreter/Interpreter.exe'
+$env:LUDIVOXA_TEST_MODEL_ROOT = 'models'
+$env:LUDIVOXA_TEST_VOICE = 'models/voices/vi_VN-vais1000-medium.onnx'
+$env:LUDIVOXA_TEST_CLONE_MODEL = 'models/VieNeu-TTS-v3-Nano'
+$env:LUDIVOXA_TEST_EXE = 'dist/Ludivoxa/Ludivoxa.exe'
 uv run --locked pytest -q
 ```
 

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
-from interpreter import updates as u
+from ludivoxa import updates as u
 
 
 class Response:
@@ -182,7 +182,7 @@ def test_verified_download_cached_reuse_and_install_rechecks_hash(tmp_path, pack
     popen = MagicMock()
     monkeypatch.setattr(u.subprocess, "Popen", popen)
     with pytest.raises(u.UpdateError, match="verification"):
-        u.launch_update(downloaded, tmp_path / "app/Interpreter.exe")
+        u.launch_update(downloaded, tmp_path / "app/Ludivoxa.exe")
     popen.assert_not_called()
 
 
@@ -217,7 +217,7 @@ def test_launcher_quotes_paths_as_arguments_and_preserves_current_install_direct
     monkeypatch.setattr(u, "os", SimpleNamespace(name="nt", environ={"EXISTING": "keep"}))
     popen = MagicMock()
     monkeypatch.setattr(u.subprocess, "Popen", popen)
-    exe = tmp_path / "app with spaces & symbols/Interpreter.exe"
+    exe = tmp_path / "app with spaces & symbols/Ludivoxa.exe"
     u.launch_update(update, exe)
     args = popen.call_args.args[0]
     assert isinstance(args, list) and f"/DIR={exe.parent}" in args
@@ -227,7 +227,7 @@ def test_launcher_quotes_paths_as_arguments_and_preserves_current_install_direct
 
 
 def test_old_config_stays_offline_and_opt_in_roundtrips(tmp_path):
-    from interpreter.config import Config
+    from ludivoxa.config import Config
 
     path = tmp_path / "config.yml"
     path.write_text("window_title: Game\n")
@@ -250,13 +250,13 @@ def test_public_check_never_invokes_git_credential_helpers(monkeypatch):
 def delta_package(tmp_path):
     install = tmp_path / "installed app"
     (install / "_internal").mkdir(parents=True)
-    exe = install / "Interpreter.exe"
+    exe = install / "Ludivoxa.exe"
     exe.write_bytes(b"base app")
     library = install / "_internal/Bình (sample).dll"
     library.write_bytes(b"reused dependency")
     (install / "config.yml").write_text("window_title: Game\n")
     manifest = (
-        f"{u.file_hash(exe)}  Interpreter.exe\n"
+        f"{u.file_hash(exe)}  Ludivoxa.exe\n"
         f"{u.file_hash(library)}  _internal/{library.name}\n"
         "-  _internal/new directory/new file.dat\n"
     ).encode()

@@ -74,7 +74,7 @@ class _WindowsRuntimeJob:
             ]
 
         identity = hashlib.sha256(str(Path(directory).resolve()).casefold().encode("utf-8")).hexdigest()[:24]
-        name = "Local\\InterpreterOllama-" + identity
+        name = "Local\\LudivoxaOllama-" + identity
         try:
             self._job = self._kernel.CreateJobObjectW(None, name)
             if not self._job:
@@ -176,7 +176,7 @@ def ensure_bundled_ollama(directory):
         ALL_PROXY="http://127.0.0.1:9",
         NO_PROXY="127.0.0.1,localhost,::1",
     )
-    logs = Path.home() / ".interpreter" / "logs"
+    logs = Path.home() / ".ludivoxa" / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     job, retain = None, False
     try:

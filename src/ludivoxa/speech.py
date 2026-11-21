@@ -19,8 +19,12 @@ from PySide6.QtCore import QCoreApplication, QObject, Signal, Slot
 from PySide6.QtMultimedia import QMediaDevices
 
 from . import log
+from .paths import get_config_dir, get_legacy_config_dir
 
-DEFAULT_VOICE_PATH = str(Path.home() / ".interpreter" / "voices" / "vi_VN-vais1000-medium.onnx")
+_VOICE_FILE = Path("voices") / "vi_VN-vais1000-medium.onnx"
+_DEFAULT_VOICE = get_config_dir() / _VOICE_FILE
+_LEGACY_VOICE = get_legacy_config_dir() / _VOICE_FILE
+DEFAULT_VOICE_PATH = str(_LEGACY_VOICE if not _DEFAULT_VOICE.is_file() and _LEGACY_VOICE.is_file() else _DEFAULT_VOICE)
 logger = log.get_logger()
 # PortAudio's device snapshot is process-wide. Never rebuild it while another
 # PCMPlayer owns a native stream, including a cancelled writer still closing.
@@ -243,7 +247,7 @@ class PCMPlayer(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="interpreter-audio")
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ludivoxa-audio")
         self._lock = threading.Lock()
         self._stream = None
         self._volume = 1.0
@@ -736,7 +740,7 @@ class SpeechController(QObject):
     def __init__(self, parent=None, synthesizer=None, player=None):
         super().__init__(parent)
         self._synthesizer = synthesizer or OfflineSynthesizer()
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="interpreter-speech")
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ludivoxa-speech")
         self._player = player or PCMPlayer(self)
         self._player.finished.connect(self._on_finished)
         self._player.error.connect(self._playback_error)

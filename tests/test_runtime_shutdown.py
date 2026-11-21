@@ -86,16 +86,16 @@ def test_failed_service_start_releases_job_instead_of_leaving_background_work(ru
 
 @pytest.mark.parametrize("mode", ["gui", "failure", "self-test"])
 def test_entry_releases_runtime_even_when_gui_raises(tmp_path, monkeypatch, mode):
-    import interpreter
+    import ludivoxa
 
     entry = load_helper("windows_entry")
     monkeypatch.setattr(entry, "freeze_support", lambda: None)
     monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(sys, "executable", str(tmp_path / "Interpreter.exe"))
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "Ludivoxa.exe"))
     monkeypatch.setattr(
         sys,
         "argv",
-        ["Interpreter.exe"] + (["--self-test", str(tmp_path / "result.json")] if mode == "self-test" else []),
+        ["Ludivoxa.exe"] + (["--self-test", str(tmp_path / "result.json")] if mode == "self-test" else []),
     )
     monkeypatch.chdir(tmp_path)
     job = MagicMock()
@@ -104,7 +104,7 @@ def test_entry_releases_runtime_even_when_gui_raises(tmp_path, monkeypatch, mode
     main = MagicMock(return_value=12)
     if mode == "failure":
         main.side_effect = RuntimeError("GUI failure")
-    monkeypatch.setattr(interpreter, "main", main)
+    monkeypatch.setattr(ludivoxa, "main", main)
     if mode == "failure":
         with pytest.raises(RuntimeError, match="GUI failure"):
             entry.run()

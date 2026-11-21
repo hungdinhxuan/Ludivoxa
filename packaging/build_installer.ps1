@@ -1,7 +1,7 @@
 param(
     [string]$Compiler = 'build/tools/InnoSetup/ISCC.exe',
     [string]$Python = '.venv/Scripts/python.exe',
-    [string]$AppDirectory = 'dist/Interpreter',
+    [string]$AppDirectory = 'dist/Ludivoxa',
     [string]$OllamaDirectory = '.test-models/ollama-runtime',
     [string]$ModelStore = '.test-models/ollama-models',
     [string]$OutputDirectory = 'dist/installer'

@@ -67,7 +67,7 @@ def _download(url: str, destination: Path, expected_sha256: str) -> dict[str, An
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".part")
-    request = urllib.request.Request(url, headers={"User-Agent": "interpreter-translation-benchmark/1"})
+    request = urllib.request.Request(url, headers={"User-Agent": "ludivoxa-translation-benchmark/1"})
     try:
         with urllib.request.urlopen(request, timeout=90) as response, temporary.open("wb") as output:
             while chunk := response.read(1024 * 1024):
@@ -279,7 +279,7 @@ def _load_yaml(path: Path) -> Any:
         import yaml
     except ImportError as exc:
         raise BenchmarkError(
-            "Preparing the Phantasy Star corpus requires PyYAML (already an Interpreter dependency)"
+            "Preparing the Phantasy Star corpus requires PyYAML (already an Ludivoxa dependency)"
         ) from exc
     try:
         return yaml.safe_load(path.read_text(encoding="utf-8-sig"))
@@ -444,7 +444,7 @@ def _parse_ds6(source: dict[str, Any], path: Path, registry: dict[str, Any]) -> 
 def _deduplicate_context_free(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Remove duplicate and ambiguous labels within one game/source.
 
-    Interpreter currently translates one capture without dialogue history. If
+    Ludivoxa currently translates one capture without dialogue history. If
     identical visible Japanese has conflicting references inside a game, there
     is no context-free gold answer and all occurrences are excluded.
     """

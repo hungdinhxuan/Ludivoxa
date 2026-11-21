@@ -1,6 +1,6 @@
 # OCR benchmark
 
-This benchmark compares OCR models before the application dependency is changed. It exercises the exact production path in src/interpreter/ocr.py, including BGRA-to-RGB conversion, MeikiOCR inference, confidence filtering, deduplication, spatial clustering, and the worker's space-joined region output.
+This benchmark compares OCR models before the application dependency is changed. It exercises the exact production path in src/ludivoxa/ocr.py, including BGRA-to-RGB conversion, MeikiOCR inference, confidence filtering, deduplication, spatial clustering, and the worker's space-joined region output.
 
 The current corpus manifest has 105 entries, all captured from real games or game projects:
 
@@ -56,7 +56,7 @@ Ground-truth transcription must be blind to benchmark output. A reference is fro
 
 Text is normalized with Unicode NFKC and whitespace is ignored. Content and punctuation remain significant. This handles full-width ASCII and the fact that the application joins detected regions with spaces without forgiving real OCR mistakes.
 
-Every report records the Interpreter OCR source hash, Git commit/dirty state, package versions, ONNX provider, platform, manifest fingerprint, every local image hash, and the resolved model snapshot and ONNX SHA-256 where available.
+Every report records the Ludivoxa OCR source hash, Git commit/dirty state, package versions, ONNX provider, platform, manifest fingerprint, every local image hash, and the resolved model snapshot and ONNX SHA-256 where available.
 
 Comparison fails closed unless both reports have the same manifest, local-file, and OCR-source hashes, workload-defining configuration, and ordered sample IDs. This keeps paired CER, exact match, latency, errors, and promotion-gate counts on one identical workload.
 
@@ -92,7 +92,7 @@ For an image to become verified:
 2. Freeze an image-only transcription before inspecting output from any model under test. Never seed or correct a reference with a baseline or candidate prediction.
 3. Transcribe every Japanese character plus associated Latin letters/digits that the application should pass through. Do not transcribe decorative icons such as selection arrows.
 4. Preserve visible punctuation and elongated/repetition marks. Do not silently correct spelling in the game or reconstruct text from external scripts or context.
-5. Mark partly hidden text, translation overlays, OCR boxes, Interpreter UI, and ambiguous mixed-layout ordering as unscored robustness data rather than guessing.
+5. Mark partly hidden text, translation overlays, OCR boxes, Ludivoxa UI, and ambiguous mixed-layout ordering as unscored robustness data rather than guessing.
 6. Have a second reviewer compare the transcription against the exact image without seeing model output. Record any intentional exclusions in annotation.notes.
 7. Balance the verified set across dialogue, menus, battle/HUD, mixed layouts, tiny/blurred text, stylized fonts, vertical text, and no-text negatives.
 8. Reserve a private holdout captured after candidate selection; public demos and model-project examples must never decide promotion.

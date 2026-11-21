@@ -1,9 +1,14 @@
 # Changelog
 
-All notable Ludivoxa changes are recorded here. This project uses version tags
-such as `v1.0.0`; numbering is independent of the upstream Interpreter project.
+All notable Ludivoxa changes are recorded here using version tags such as
+`v1.0.0`.
 
-## Unreleased
+## [2.0.0] - 2026-11-22
+
+- Use Ludivoxa for the Python package, CLI, desktop entry, Windows executable,
+  user-data directory and build tools.
+- Upgrade earlier Windows installations through the standard installer.
+  Existing settings, models and Ollama are carried over.
 
 ## [1.7.0] - 2026-11-21
 
@@ -193,7 +198,7 @@ Install it manually; the stable updater does not offer release candidates.
 
 ## [1.0.0] - 2026-11-14
 
-Initial Ludivoxa release, based on Interpreter 2.23.3.
+Initial Ludivoxa release.
 
 ### Added
 
@@ -240,9 +245,7 @@ Initial Ludivoxa release, based on Interpreter 2.23.3.
 
 ### Compatibility and limitations
 
-- MeikiOCR, Sugoi V4, owocr, capture sources and existing configuration locations
-  remain available. `interpreter-v2` and `Interpreter.exe` remain compatibility
-  names; the product and release name is Ludivoxa.
+- MeikiOCR, Sugoi V4, owocr and the existing capture sources remained available.
 - This Windows release focuses on English/Japanese OCR and Vietnamese speech.
   Other LLM target languages can be displayed; bundled TTS is Vietnamese-only.
 - Recognition quality and latency depend on font, image size, hardware and text
@@ -257,4 +260,5 @@ Initial Ludivoxa release, based on Interpreter 2.23.3.
 [1.1.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.0
 [1.1.1]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1
 [1.6.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.6.0
+[2.0.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v2.0.0
 [1.7.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.7.0

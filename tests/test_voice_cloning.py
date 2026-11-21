@@ -15,8 +15,8 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from interpreter.config import Config
-from interpreter.speech import VieneuSynthesizer, clean_speech_text, voice_details
+from ludivoxa.config import Config
+from ludivoxa.speech import VieneuSynthesizer, clean_speech_text, voice_details
 
 
 @pytest.fixture
@@ -136,13 +136,13 @@ def test_nano_normalizer_does_not_expand_filtered_game_markers(monkeypatch):
     assert after == "xin chào."
 
 
-@pytest.mark.skipif(not os.environ.get("INTERPRETER_TEST_CLONE_MODEL"), reason="Local Nano graphs required")
+@pytest.mark.skipif(not os.environ.get("LUDIVOXA_TEST_CLONE_MODEL"), reason="Local Nano graphs required")
 def test_real_offline_preset_and_reference_cloning(monkeypatch, tmp_path):
     def forbid(*args, **kwargs):
         raise AssertionError("Network request during local voice cloning")
 
     monkeypatch.setattr(socket.socket, "connect", forbid)
-    model = Path(os.environ["INTERPRETER_TEST_CLONE_MODEL"])
+    model = Path(os.environ["LUDIVOXA_TEST_CLONE_MODEL"])
     synth = VieneuSynthesizer()
     start = time.perf_counter()
     audio = synth.synthesize("Xin chào. Chào mừng bạn đến với ngôi làng.", model)

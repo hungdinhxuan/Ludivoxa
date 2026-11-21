@@ -9,9 +9,9 @@ import pytest
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QGroupBox, QLineEdit
 
-from interpreter.config import Config
-from interpreter.gui import updates_page as ui
-from interpreter.updates import Asset, Delta, DeltaUnavailable, Release, UpdateError
+from ludivoxa.config import Config
+from ludivoxa.gui import updates_page as ui
+from ludivoxa.updates import Asset, Delta, DeltaUnavailable, Release, UpdateError
 
 
 @pytest.fixture

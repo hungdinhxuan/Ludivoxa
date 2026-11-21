@@ -9,8 +9,9 @@ hiện trên màn hình.
 [Tải cho Windows](#cài-windows-offline) · [Wiki Ludivoxa](https://ludivoxa.hungdx.com/) ·
 [Sơ đồ kiến trúc](README.md#architecture) · [English](README.md)
 
-**Bản ổn định v1.7.0** thêm lựa chọn dịch sang tiếng Anh, Trung giản thể,
-Trung phồn thể, Nhật và Hàn. [Ghi chú v1.7.0](docs/releases/v1.7.0.md)
+**Bản ổn định v2.0.0** dùng tên Ludivoxa cho gói Python, lệnh dòng lệnh và tệp
+chạy Windows. Gói nâng cấp giữ cấu hình và model đã cài.
+[Ghi chú v2.0.0](docs/releases/v2.0.0.md)
 
 ## Tính năng dịch game
 
@@ -58,9 +59,9 @@ Q4_K_M, model OCR Anh/Nhật và giọng đọc tiếng Việt. Bộ đầy đ�
 
 **Máy đã có Ludivoxa?** Dùng **Updates** hoặc tải gói **App-Update.exe** từ
 [bản phát hành ổn định mới nhất](https://github.com/hungdinhxuan/Ludivoxa/releases/latest)
-và chọn thư mục đang cài. Từ v1.4.0, updater có thể tải gói vá nhỏ khi tệp
-cài đặt khớp. Gói cập nhật giữ model, Ollama và `config.yml`. Các tệp trong
-mục **Assets** tải được mà không cần đăng nhập GitHub. Bộ cài chưa ký số.
+và chọn thư mục đang cài. Khi lên v2.0.0, gói cập nhật chuẩn cài `Ludivoxa.exe`
+và giữ model, Ollama cùng `config.yml`. Các tệp trong mục **Assets** tải được
+mà không cần đăng nhập GitHub. Bộ cài chưa ký số.
 
 ## Cách dịch hội thoại trong game
 
@@ -190,6 +191,5 @@ ngắn và **914,23 ms** với mẫu hai câu. [Từng lượt và điều kiệ
 - [Cách build Ludivoxa từ mã nguồn](docs/DEVELOPMENT.md)
 - [Nhật ký thay đổi](CHANGELOG.md) và [các bản phát hành](https://github.com/hungdinhxuan/Ludivoxa/releases)
 
-Ludivoxa phát triển từ [Interpreter](https://github.com/bquenin/interpreter).
 Mã ứng dụng dùng giấy phép MIT. Thư viện và model có giấy phép riêng.
 [Ghi công và giấy phép](NOTICE.md)

@@ -36,7 +36,7 @@ logger = log.get_logger()
 # owocr's default websocket port. Prefer 127.0.0.1 over localhost (see llm_translate).
 DEFAULT_URL = "ws://127.0.0.1:7331"
 
-# How owocr must be started to act as a pure OCR server for Interpreter:
+# How owocr must be started to act as a pure OCR server for Ludivoxa:
 # websocket in and out, JSON with coordinates, one engine, no tray icon, no text
 # reordering (-rt), no furigana filter (-f, it silently drops lines), never auto-pause (-a).
 SERVER_COMMAND = "owocr -r websocket -w websocket -of json -e <engine> -el <engine> -t False -rt False -f False -a 0"

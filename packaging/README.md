@@ -20,7 +20,7 @@ instructions, and [tagged releases](../docs/RELEASING.md) for publishing.
 - `HauhauCS.Modelfile`: non-thinking instruction template for the selected model.
 - `THIRD_PARTY_NOTICES.txt`: bundled component attribution/licenses.
 
-Runtime and model binaries belong in release assets, never in Git. A release
-contains one setup EXE and three numbered BIN slices; keep them together when
-installing. The existing `Interpreter.exe` filename and application identifier
-are retained for configuration/upgrade compatibility.
+Runtime and model binaries belong in release assets. Keep the setup EXE and
+all numbered BIN slices together when using a full offline installer.
+The onedir executable is `Ludivoxa.exe`. The standard Windows update recognizes
+previous Ludivoxa installations using the same AppId and preserves user data.

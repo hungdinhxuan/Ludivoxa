@@ -19,8 +19,8 @@ version_info = VSVersionInfo(
             StringStruct("CompanyName", "Ludivoxa contributors"),
             StringStruct("FileDescription", "Ludivoxa - offline game translation and speech"),
             StringStruct("FileVersion", release_version),
-            StringStruct("InternalName", "Interpreter"),
-            StringStruct("OriginalFilename", "Interpreter.exe"),
+            StringStruct("InternalName", "Ludivoxa"),
+            StringStruct("OriginalFilename", "Ludivoxa.exe"),
             StringStruct("ProductName", "Ludivoxa"),
             StringStruct("ProductVersion", release_version),
             StringStruct("LegalCopyright", "See LICENSE and THIRD_PARTY_NOTICES.txt"),
@@ -29,7 +29,7 @@ version_info = VSVersionInfo(
     ],
 )
 os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
-datas = [(str(root / "src/interpreter/resources"), "interpreter/resources")]
+datas = [(str(root / "src/ludivoxa/resources"), "ludivoxa/resources")]
 binaries = []
 hiddenimports = ["pynput.keyboard._win32", "pynput.mouse._win32"]
 
@@ -67,6 +67,6 @@ a = Analysis(
     module_collection_mode={"paddle": "py", "paddlex": "py", "paddleocr": "py"},
 )
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="Interpreter", console=False,
-          icon=str(root / "src/interpreter/resources/icons/icon.ico"), version=version_info, upx=False)
-coll = COLLECT(exe, a.binaries, a.datas, name="Interpreter", upx=False)
+exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="Ludivoxa", console=False,
+          icon=str(root / "src/ludivoxa/resources/icons/icon.ico"), version=version_info, upx=False)
+coll = COLLECT(exe, a.binaries, a.datas, name="Ludivoxa", upx=False)

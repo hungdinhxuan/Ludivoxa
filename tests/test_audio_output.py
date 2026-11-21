@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from PySide6.QtWidgets import QApplication
 
-from interpreter.speech import PCMPlayer, SpeechStream, _output_format, _wav_bytes
+from ludivoxa.speech import PCMPlayer, SpeechStream, _output_format, _wav_bytes
 
 
 class AudioError(Exception):
@@ -117,7 +117,7 @@ class AudioBackend:
 @pytest.fixture
 def backend(monkeypatch):
     # Exercise automatic MME -> WASAPI selection on every test platform.
-    monkeypatch.setattr("interpreter.speech.os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr("ludivoxa.speech.os", SimpleNamespace(name="nt"))
     device = AudioBackend()
     monkeypatch.setitem(sys.modules, "sounddevice", device)
     return device
@@ -431,7 +431,7 @@ def test_stalled_wasapi_reports_failure_and_invalidates_cached_endpoint(backend,
         clock[0] += 1
         return clock[0]
 
-    monkeypatch.setattr("interpreter.speech.time", SimpleNamespace(monotonic=tick))
+    monkeypatch.setattr("ludivoxa.speech.time", SimpleNamespace(monotonic=tick))
     backend.OutputStream = lambda **settings: SimpleNamespace(start=lambda: None, close=lambda: None, latency=0.07)
     source = SpeechStream()
     for _ in range(6):

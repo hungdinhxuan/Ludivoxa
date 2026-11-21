@@ -1,4 +1,4 @@
-"""Standard-library utilities for the Interpreter translation benchmark."""
+"""Standard-library utilities for the Ludivoxa translation benchmark."""
 
 from __future__ import annotations
 

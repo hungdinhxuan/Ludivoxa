@@ -20,7 +20,7 @@ import pytest
     ],
 )
 def test_fuzzy_cache_does_not_hide_changed_numbers_or_negation(first, second):
-    from interpreter.translate import TranslationCache, text_similarity
+    from ludivoxa.translate import TranslationCache, text_similarity
 
     assert text_similarity(first, second) >= 0.9
     cache = TranslationCache()
@@ -30,7 +30,7 @@ def test_fuzzy_cache_does_not_hide_changed_numbers_or_negation(first, second):
 
 
 def test_fuzzy_cache_still_reuses_translation_for_pokemon_ocr_typo():
-    from interpreter.translate import TranslationCache
+    from ludivoxa.translate import TranslationCache
 
     cache = TranslationCache()
     cache.put("This world is inhabited by creatures called Pokemon.", "Vietnamese translation")
@@ -39,7 +39,7 @@ def test_fuzzy_cache_still_reuses_translation_for_pokemon_ocr_typo():
 
 @pytest.mark.parametrize("reverse", [False, True])
 def test_fuzzy_cache_does_not_replace_growing_text_with_earlier_prefix(reverse):
-    from interpreter.translate import TranslationCache, text_similarity
+    from ludivoxa.translate import TranslationCache, text_similarity
 
     short = "This world is inhabited by creatures called Pokemon."
     longer = short + " Here."
@@ -55,22 +55,22 @@ class TestGetShortPath:
 
     def test_non_windows_returns_original_path(self):
         """On non-Windows platforms, should return the original path string."""
-        from interpreter.translate import _get_short_path
+        from ludivoxa.translate import _get_short_path
 
         test_path = Path("/home/user/models/test.bin")
 
-        with patch("interpreter.translate.sys.platform", "linux"):
+        with patch("ludivoxa.translate.sys.platform", "linux"):
             result = _get_short_path(test_path)
 
         assert result == str(test_path)
 
     def test_non_windows_darwin_returns_original_path(self):
         """On macOS, should return the original path string."""
-        from interpreter.translate import _get_short_path
+        from ludivoxa.translate import _get_short_path
 
         test_path = Path("/Users/Álvaro/models/test.bin")
 
-        with patch("interpreter.translate.sys.platform", "darwin"):
+        with patch("ludivoxa.translate.sys.platform", "darwin"):
             result = _get_short_path(test_path)
 
         assert result == str(test_path)
@@ -78,7 +78,7 @@ class TestGetShortPath:
     @pytest.mark.skipif(sys.platform != "win32", reason="Windows-specific test")
     def test_windows_successful_conversion(self):
         """On Windows, should return short path when conversion succeeds."""
-        from interpreter.translate import _get_short_path
+        from ludivoxa.translate import _get_short_path
 
         test_path = Path(r"C:\Users\Álvaro\models\test.bin")
         short_path = r"C:\Users\LVARO~1\models\test.bin"
@@ -92,7 +92,7 @@ class TestGetShortPath:
 
         with (
             patch.dict("sys.modules", {"ctypes": mock_ctypes}),
-            patch("interpreter.translate.sys.platform", "win32"),
+            patch("ludivoxa.translate.sys.platform", "win32"),
         ):
             result = _get_short_path(test_path)
 
@@ -101,7 +101,7 @@ class TestGetShortPath:
     @pytest.mark.skipif(sys.platform != "win32", reason="Windows-specific test")
     def test_windows_fallback_on_failure(self):
         """On Windows, should return original path when conversion fails."""
-        from interpreter.translate import _get_short_path
+        from ludivoxa.translate import _get_short_path
 
         test_path = Path(r"C:\Users\Álvaro\models\test.bin")
 
@@ -113,7 +113,7 @@ class TestGetShortPath:
 
         with (
             patch.dict("sys.modules", {"ctypes": mock_ctypes}),
-            patch("interpreter.translate.sys.platform", "win32"),
+            patch("ludivoxa.translate.sys.platform", "win32"),
         ):
             result = _get_short_path(test_path)
 
@@ -122,7 +122,7 @@ class TestGetShortPath:
     @pytest.mark.skipif(sys.platform != "win32", reason="Windows-specific test")
     def test_windows_with_real_ascii_path(self):
         """On Windows with a real ASCII-only path, conversion should work."""
-        from interpreter.translate import _get_short_path
+        from ludivoxa.translate import _get_short_path
 
         # Use a path that actually exists on Windows
         test_path = Path(r"C:\Windows\System32")
@@ -136,7 +136,7 @@ class TestGetShortPath:
     @pytest.mark.skipif(sys.platform != "win32", reason="Windows-specific test")
     def test_windows_returns_valid_short_path_format(self):
         """On Windows, short path should be returned for paths with special chars."""
-        from interpreter.translate import _get_short_path
+        from ludivoxa.translate import _get_short_path
 
         # Use temp directory which always exists
         test_path = Path(tempfile.gettempdir())
@@ -163,7 +163,7 @@ class TestModelLoading:
 
     def _load(self, model_dir: Path, ctranslate2_side_effects: list):
         """Run Translator.load with mocked ctranslate2/sentencepiece/snapshot_download."""
-        from interpreter import translate
+        from ludivoxa import translate
 
         ct2 = MagicMock()
         ct2.get_supported_compute_types.return_value = []  # force CPU path
@@ -188,7 +188,7 @@ class TestModelLoading:
         assert snapshot_download.call_args.kwargs["local_files_only"] is True
 
     def test_pinned_revision_is_used(self, tmp_path):
-        from interpreter.translate import SUGOI_REVISION
+        from ludivoxa.translate import SUGOI_REVISION
 
         model_dir = _fake_model_dir(tmp_path)
         _, snapshot_download, _ = self._load(model_dir, [MagicMock()])
@@ -209,7 +209,7 @@ class TestModelLoading:
         assert "local_files_only" not in snapshot_download.call_args_list[1].kwargs
 
     def test_unrepairable_cache_raises_model_load_error(self, tmp_path):
-        from interpreter.models import ModelLoadError
+        from ludivoxa.models import ModelLoadError
 
         model_dir = _fake_model_dir(tmp_path)
         with pytest.raises(ModelLoadError, match="Fix Models"):
@@ -217,7 +217,7 @@ class TestModelLoading:
 
     def test_missing_tokenizer_triggers_repair(self, tmp_path):
         """A missing spm file raises OSError, which must also trigger the re-sync."""
-        from interpreter import translate
+        from ludivoxa import translate
 
         ct2 = MagicMock()
         ct2.get_supported_compute_types.return_value = []
@@ -239,8 +239,8 @@ class TestModelLoading:
     def test_failed_retry_leaves_no_partial_state(self, tmp_path):
         """Greptile P1: tokenizer failing after a repaired model load must not leave
         _translator set, otherwise a later load() returns early without a tokenizer."""
-        from interpreter import translate
-        from interpreter.models import ModelLoadError
+        from ludivoxa import translate
+        from ludivoxa.models import ModelLoadError
 
         model_dir = _fake_model_dir(tmp_path)
         ct2 = MagicMock()
@@ -266,7 +266,7 @@ class TestModelLoading:
 
     def test_permission_error_is_not_treated_as_corruption(self, tmp_path):
         """Greptile P2: an unreadable file is a local problem; do not start a download."""
-        from interpreter import translate
+        from ludivoxa import translate
 
         model_dir = _fake_model_dir(tmp_path)
         ct2 = MagicMock()
@@ -290,7 +290,7 @@ class TestDownloadRetry:
     """Tests for _download_sugoi_model retry behaviour."""
 
     def test_transient_failure_is_retried(self, tmp_path):
-        from interpreter import translate
+        from ludivoxa import translate
 
         with patch.object(
             translate,
@@ -301,8 +301,8 @@ class TestDownloadRetry:
         assert snapshot_download.call_count == 2
 
     def test_persistent_failure_raises_model_load_error(self):
-        from interpreter import translate
-        from interpreter.models import ModelLoadError
+        from ludivoxa import translate
+        from ludivoxa.models import ModelLoadError
 
         with (
             patch.object(
@@ -316,7 +316,7 @@ class TestDownloadRetry:
     def test_uncached_model_is_downloaded(self, tmp_path):
         from huggingface_hub.utils import LocalEntryNotFoundError
 
-        from interpreter import translate
+        from ludivoxa import translate
 
         with patch.object(
             translate, "snapshot_download", side_effect=[LocalEntryNotFoundError("nope"), str(tmp_path)]

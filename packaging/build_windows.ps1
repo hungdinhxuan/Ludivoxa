@@ -7,9 +7,9 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repoRoot
 New-Item -ItemType Directory -Force build | Out-Null
 $previousConfig = '-'
-if (Test-Path -LiteralPath 'dist/Interpreter/config.yml') {
+if (Test-Path -LiteralPath 'dist/Ludivoxa/config.yml') {
     $previousConfig = Join-Path $repoRoot 'build/user-config-before.yml'
-    Copy-Item -LiteralPath 'dist/Interpreter/config.yml' -Destination $previousConfig -Force
+    Copy-Item -LiteralPath 'dist/Ludivoxa/config.yml' -Destination $previousConfig -Force
 }
 $pythonPath = (Resolve-Path -LiteralPath $Python).Path
 $buildProcess = Start-Process -FilePath $pythonPath -ArgumentList '-m', 'PyInstaller', '--noconfirm', 'packaging/windows.spec' -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput (Join-Path $repoRoot 'build/pyinstaller.stdout.log') -RedirectStandardError (Join-Path $repoRoot 'build/pyinstaller.log')
@@ -20,11 +20,11 @@ import shutil
 import sys
 from pathlib import Path
 import yaml
-from interpreter.config import Config, LLMSettings, OCRBackend, OverlayMode, PaddleSettings, TranslationBackend
-from interpreter.paddle_ocr import select_paddle_recognizer
+from ludivoxa.config import Config, LLMSettings, OCRBackend, OverlayMode, PaddleSettings, TranslationBackend
+from ludivoxa.paddle_ocr import select_paddle_recognizer
 
 source = Path(sys.argv[1])
-target = Path('dist/Interpreter')
+target = Path('dist/Ludivoxa')
 for model in ('PP-OCRv5_mobile_det', 'PP-OCRv5_mobile_rec'):
     shutil.copytree(source / model, target / 'models' / model, dirs_exist_ok=True)
 english = source / 'en_PP-OCRv5_mobile_rec'
@@ -73,4 +73,4 @@ config.save(str(target / 'config.yml'))
 shutil.copy2('LICENSE', target / 'LICENSE')
 '@ | & $Python - $modelRoot $previousConfig
 if ($LASTEXITCODE -ne 0) { throw 'Copying local models/config failed.' }
-Write-Host 'Built dist/Interpreter/Interpreter.exe. Keep the complete Interpreter folder together.'
+Write-Host 'Built dist/Ludivoxa/Ludivoxa.exe. Keep the complete Ludivoxa folder together.'

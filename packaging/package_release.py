@@ -127,7 +127,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--installer", help="Full offline setup directory; omit for an app-update-only release")
     parser.add_argument("--output", required=True)
-    parser.add_argument("--app", default="dist/Interpreter/Interpreter.exe")
+    parser.add_argument("--app", default="dist/Ludivoxa/Ludivoxa.exe")
     parser.add_argument("--source-commit")
     parser.add_argument("--app-update", help="Optional app-only installer, preferred by the in-app updater")
     parser.add_argument("--delta", action="append", default=[], help="Optional delta installer; can be repeated")

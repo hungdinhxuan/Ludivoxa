@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 from PySide6.QtWidgets import QApplication, QWidget
 
-from interpreter.config import Config
-from interpreter.gui import diagnostics
+from ludivoxa.config import Config
+from ludivoxa.gui import diagnostics
 
 
 def test_diagnostics_copies_live_stages_without_device_names_or_error_details(monkeypatch):

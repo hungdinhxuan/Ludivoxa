@@ -13,11 +13,11 @@ from PySide6.QtCore import QRect, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMainWindow
 
-from interpreter.config import Config, OverlayMode, PaddleSettings, normalize_ocr_region
-from interpreter.gui.main_window import MainWindow
-from interpreter.gui.ocr_config import OCRConfigDialog
-from interpreter.gui.workers import ProcessWorker
-from interpreter.ocr import OCRResult
+from ludivoxa.config import Config, OverlayMode, PaddleSettings, normalize_ocr_region
+from ludivoxa.gui.main_window import MainWindow
+from ludivoxa.gui.ocr_config import OCRConfigDialog
+from ludivoxa.gui.workers import ProcessWorker
+from ludivoxa.ocr import OCRResult
 
 REGION = {"x": 0.2, "y": 0.6, "width": 0.65, "height": 0.3}
 
@@ -144,7 +144,7 @@ def test_editor_preview_performs_ocr_without_llm_or_speech():
 @pytest.mark.parametrize("busy", [False, True])
 @pytest.mark.parametrize(("accepted", "changed"), [(False, False), (True, False), (True, True)])
 def test_unchanged_editor_does_not_forget_completed_speech(window, monkeypatch, busy, accepted, changed):
-    from interpreter.gui import main_window
+    from ludivoxa.gui import main_window
 
     window._capturing = True
     window._capture_generation = 3
@@ -296,7 +296,7 @@ def test_drag_multiple_boxes_save_and_keep_gaps_out_of_ocr(dialog, window, tmp_p
 
 
 @pytest.mark.skipif(
-    not os.environ.get("INTERPRETER_TEST_MODEL_ROOT") or os.name != "nt", reason="Local OCR and Windows fonts required"
+    not os.environ.get("LUDIVOXA_TEST_MODEL_ROOT") or os.name != "nt", reason="Local OCR and Windows fonts required"
 )
 @pytest.mark.parametrize(
     "language,text,font_name,recognizer,multiple_boxes",
@@ -309,9 +309,9 @@ def test_drag_multiple_boxes_save_and_keep_gaps_out_of_ocr(dialog, window, tmp_p
 def test_real_selected_box_pipeline_ignores_outside_text_and_speaks_once(
     window, monkeypatch, language, text, font_name, recognizer, multiple_boxes
 ):
-    from interpreter.paddle_ocr import IsolatedPaddleOCR
+    from ludivoxa.paddle_ocr import IsolatedPaddleOCR
 
-    root = Path(os.environ["INTERPRETER_TEST_MODEL_ROOT"])
+    root = Path(os.environ["LUDIVOXA_TEST_MODEL_ROOT"])
     engine = IsolatedPaddleOCR(
         PaddleSettings(str(root / "PP-OCRv5_mobile_det_onnx"), str(root / recognizer), max_side=640)
     )
@@ -337,7 +337,7 @@ def test_real_selected_box_pipeline_ignores_outside_text_and_speaks_once(
     worker.ocr_results_ready.connect(lambda regions, generation: boxes.extend(r.bbox for r in regions))
     clock = [0.0]
     monkeypatch.setattr(
-        "interpreter.gui.workers.time", SimpleNamespace(monotonic=lambda: clock[0], perf_counter=time.perf_counter)
+        "ludivoxa.gui.workers.time", SimpleNamespace(monotonic=lambda: clock[0], perf_counter=time.perf_counter)
     )
     try:
         engine.load()

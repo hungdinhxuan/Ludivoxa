@@ -71,7 +71,7 @@ def get_window_list() -> list[dict]:
         # Only include normal application windows (layer 0) with a title
         # Exclude our own windows (by PID or by title)
         layer = window.get(CG.kCGWindowLayer, -1)
-        if layer != 0 or not title or owner_pid == own_pid or title == "Interpreter":
+        if layer != 0 or not title or owner_pid == own_pid or title == "Ludivoxa":
             continue
 
         windows.append(

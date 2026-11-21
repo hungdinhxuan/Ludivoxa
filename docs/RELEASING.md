@@ -1,43 +1,16 @@
 # Tagged releases
 
-Ludivoxa's first version is **1.0.0**, tagged **v1.0.0**. Upstream Interpreter
-version numbers do not define this fork's release sequence.
+Ludivoxa uses tags such as `v2.0.0`. Rebuild an archived release from its tag
+with the packaging instructions in that revision.
 
-Version **1.1.0** adds compatible features: the updater,
-streaming speech and latency improvements. Use patch
-version **1.1.1** fixes OCR/TTS repeats and audio formats. The published v1.0.0 has no updater;
-its users must install the first updater-enabled version manually once.
+The first release with `Ludivoxa.exe` (v2.0.0) needs the standard app update for v1.7.0
+and earlier. The installer keeps the existing AppId, configuration, OCR/TTS
+models and Ollama runtime. Publish deltas only between builds that both use
+the new executable layout.
 
-**v1.7.0 stable** uses Python/AppVersion `1.7.0` and Windows numeric version
-`1.7.0.0`. Build and test a fresh app stage. The app update includes the
-Korean recognizer under `_internal/ocr-models` and uses the existing offline
-models and runtime for the rest of the pipeline.
-
-```powershell
-powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1 -AppDirectory build/v1.7.0-app/Interpreter -OutputDirectory dist/app-update/v1.7.0
-```
-
-Build the delta from the archived v1.6.0 onedir bundle and package both
-installers using the [smaller Windows updates](#smaller-windows-updates)
-instructions. Publish `v1.7.0` with `prerelease=false` and `make_latest=true`.
-Verify anonymous downloads of both packages. New users install the full
-offline v1.1.1 package before this update.
-
-For the earlier **v1.1.2-rc.1** prerelease, Python metadata uses `1.1.2rc1` and Windows
-numeric resources use `1.1.2.0`. Keep `AppVersion` and `AppNumericVersion` in
-the Inno defaults aligned. Publish with `prerelease=true` and `make_latest=false`.
-Stable users do not receive RCs automatically; RC installations can upgrade
-to the same base stable version later. Existing runtime/model formats are unchanged,
-so this RC ships only the app-update installer, README, manifest and checksums:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1 -AppDirectory build/v1.1.2-rc.1-app/Interpreter -OutputDirectory dist/app-update/v1.1.2-rc.1
-uv run python packaging/package_release.py --output dist/releases/v1.1.2-rc.1 --source-commit $releaseCommit --app build/v1.1.2-rc.1-app/Interpreter/Interpreter.exe --app-update dist/app-update/v1.1.2-rc.1/Ludivoxa-1.1.2rc1-App-Update.exe
-```
-
-The packager maps PEP 440 RC metadata to the SemVer-style Git tag. It also
-retains full-offline packaging when `--installer` is supplied. New RC testers
-install the stable full offline setup first, then the manual app update.
+Publish stable releases as latest. The packager maps PEP 440 RC versions, such
+as `1.8.0rc1`, to tags such as `v1.8.0-rc.1`. Keep Windows numeric versions in
+the form `1.8.0.0` and mark RC releases as prereleases.
 
 1. Update the project version in `pyproject.toml`, its editable entry in
    `uv.lock`, and `AppVersion` in `packaging/windows_installer.iss`.
@@ -120,15 +93,15 @@ version. Use the **exact archived PyInstaller onedir build** shipped with that
 version. A rebuild of the same tag can have different file hashes.
 
 ```powershell
-$previous = '1.4.0'
+$previous = '<stable version using Ludivoxa.exe>'
 $version = '<new stable version>'
-$baseApp = "build/v$previous-app/Interpreter"
-$targetApp = "build/v$version-app/Interpreter"
+$baseApp = "build/v$previous-app/Ludivoxa"
+$targetApp = "build/v$version-app/Ludivoxa"
 $appUpdate = "dist/app-update/v$version/Ludivoxa-$version-App-Update.exe"
 $deltaDir = "dist/deltas/v$version"
 uv run python packaging/build_delta_update.py --base $baseApp --base-version $previous --app $targetApp --output $deltaDir
 uv run python packaging/package_release.py --output "dist/releases/v$version" --source-commit $releaseCommit `
-  --app "$targetApp/Interpreter.exe" --app-update $appUpdate `
+  --app "$targetApp/Ludivoxa.exe" --app-update $appUpdate `
   --delta "$deltaDir/Ludivoxa-$version-Delta-from-$previous.exe"
 ```
 

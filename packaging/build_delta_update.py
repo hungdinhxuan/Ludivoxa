@@ -14,8 +14,8 @@ from package_release import ROOT, VERSION, sha256
 
 def app_files(root, version):
     internal = root / "_internal"
-    exe = root / "Interpreter.exe"
-    metadata = internal / f"interpreter_v2-{version}.dist-info/METADATA"
+    exe = root / "Ludivoxa.exe"
+    metadata = internal / f"ludivoxa-{version}.dist-info/METADATA"
     if not exe.is_file() or not metadata.is_file():
         raise ValueError(f"Expected a PyInstaller onedir build for {version} in {root}.")
 
@@ -29,7 +29,7 @@ def app_files(root, version):
 
     for path in (root, internal, exe):
         reject_link(path)
-    files = {"Interpreter.exe": sha256(exe)}
+    files = {"Ludivoxa.exe": sha256(exe)}
     for parent, dirs, names in os.walk(internal, onerror=fail_walk):
         for name in [*dirs, *names]:
             reject_link(Path(parent) / name)
@@ -52,8 +52,8 @@ def build(base, app, output, compiler, base_version, version=VERSION, *, definit
     changed = sorted(name for name, digest in new.items() if old.get(name) != digest)
     added = sorted(new.keys() - old.keys())
     removed = sorted(old.keys() - new.keys())
-    if "Interpreter.exe" not in changed:
-        raise ValueError("The target build must have a new Interpreter.exe.")
+    if "Ludivoxa.exe" not in changed:
+        raise ValueError("The target build must have a new Ludivoxa.exe.")
     spellings = {name.casefold() for name in old | new}
     if len(spellings) != len(old | new) or any(
         parent.as_posix().casefold() in spellings for name in old | new for parent in Path(name).parents

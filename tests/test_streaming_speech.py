@@ -16,11 +16,11 @@ from PySide6.QtCore import QEventLoop, QObject, QTimer, Signal
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
-from interpreter.config import Config, LLMSettings, OutputMode
-from interpreter.gui.workers import ProcessWorker
-from interpreter.llm_translate import LLMTranslationError, LLMTranslator
-from interpreter.ocr import OCRResult
-from interpreter.speech import PCMPlayer, SpeechController, SpeechStream, _output_device, _wav_bytes
+from ludivoxa.config import Config, LLMSettings, OutputMode
+from ludivoxa.gui.workers import ProcessWorker
+from ludivoxa.llm_translate import LLMTranslationError, LLMTranslator
+from ludivoxa.ocr import OCRResult
+from ludivoxa.speech import PCMPlayer, SpeechController, SpeechStream, _output_device, _wav_bytes
 
 
 @pytest.fixture(scope="module")
@@ -315,7 +315,7 @@ def test_intentional_repeated_words_inside_new_utterance_are_preserved(qapp):
 
 
 def test_real_translation_cache_and_ocr_variants_produce_one_playback(qapp, monkeypatch):
-    from interpreter.gui import workers
+    from ludivoxa.gui import workers
 
     config = Config(source_language="English", output_mode=OutputMode.TTS)
     worker = ProcessWorker(config)
@@ -354,7 +354,7 @@ def test_real_translation_cache_and_ocr_variants_produce_one_playback(qapp, monk
 
 @pytest.mark.parametrize("after_playback", [False, True])
 def test_outlined_dialogue_over_moving_scene_starts_one_translation_and_playback(qapp, monkeypatch, after_playback):
-    from interpreter.gui import workers
+    from ludivoxa.gui import workers
 
     clock = [0.0]
     monkeypatch.setattr(workers, "time", SimpleNamespace(monotonic=lambda: clock[0], perf_counter=time.perf_counter))
@@ -401,7 +401,7 @@ def test_outlined_dialogue_over_moving_scene_starts_one_translation_and_playback
 
 
 def test_footer_arrow_X_never_overwrites_last_translation_and_replays_the_dialogue(qapp, monkeypatch):
-    from interpreter.gui import workers
+    from ludivoxa.gui import workers
 
     clock = [0.0]
     monkeypatch.setattr(workers, "time", SimpleNamespace(monotonic=lambda: clock[0], perf_counter=time.perf_counter))
@@ -526,7 +526,7 @@ def test_real_translator_worker_streams_stable_source_once(qapp, monkeypatch):
     worker.speech_stream_ready.connect(lambda stream, generation: streams.append((stream, generation)))
     worker.speech_ready.connect(lambda *args: legacy.append(args))
     clock = [10.0]
-    monkeypatch.setattr("interpreter.gui.workers.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("ludivoxa.gui.workers.time.monotonic", lambda: clock[0])
     frame = np.zeros((20, 80, 4), dtype=np.uint8)
     worker._process_frame(frame, 7)
     assert not streams
@@ -570,7 +570,7 @@ def test_preview_reuses_settle_wait_without_reading_or_committing_early(qapp, mo
     spoken = []
     worker.speech_stream_ready.connect(lambda stream, _: spoken.append(stream))
     clock = [10.0]
-    monkeypatch.setattr("interpreter.gui.workers.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("ludivoxa.gui.workers.time.monotonic", lambda: clock[0])
     frame = np.zeros((20, 80, 4), dtype=np.uint8)
     worker._process_frame(frame)
     client._chat.assert_not_called()
@@ -590,7 +590,7 @@ def test_preview_reuses_settle_wait_without_reading_or_committing_early(qapp, mo
 def test_stale_gui_signal_cancels_the_stream_instead_of_leaving_a_blocked_producer(qapp):
     from PySide6.QtWidgets import QMainWindow
 
-    from interpreter.gui.main_window import MainWindow
+    from ludivoxa.gui.main_window import MainWindow
 
     window = MainWindow.__new__(MainWindow)
     QMainWindow.__init__(window)
@@ -601,7 +601,7 @@ def test_stale_gui_signal_cancels_the_stream_instead_of_leaving_a_blocked_produc
 
 
 def test_native_interface_selection_keeps_the_same_endpoint_and_rejects_ambiguity(monkeypatch):
-    monkeypatch.setattr("interpreter.speech.os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr("ludivoxa.speech.os", SimpleNamespace(name="nt"))
     current = {"name": "Speakers (High Definition", "index": 3, "hostapi": 0, "max_output_channels": 2}
     native = {"name": "Speakers (High Definition Audio Device)", "index": 12, "hostapi": 1, "max_output_channels": 2}
     devices = [current, native]
@@ -637,7 +637,7 @@ def test_one_packet_with_several_sentences_and_abbreviation_preserves_text():
     assert spoken == ["Hỏi Dr. Smith nhé.", "Đợi tôi.", "Tạm biệt."]
 
 
-@pytest.mark.skipif(not os.environ.get("INTERPRETER_TEST_VOICE"), reason="Real audio device required")
+@pytest.mark.skipif(not os.environ.get("LUDIVOXA_TEST_VOICE"), reason="Real audio device required")
 def test_one_native_audio_stream_drains_all_chunks_during_ui_stalls(qapp):
     import sounddevice as sd
 

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from interpreter.ocr import OCR, OCRResult
+from ludivoxa.ocr import OCR, OCRResult
 
 
 def _chars(text: str, x: int, y: int, conf: float = 0.9, size: int = 10) -> list[dict]:

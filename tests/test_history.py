@@ -8,11 +8,11 @@ import numpy as np
 import pytest
 from PySide6.QtWidgets import QApplication
 
-from interpreter.config import Config, LLMSettings, OutputMode, OverlayMode
-from interpreter.gui.history_page import HISTORY_LIMIT, HistoryPage
-from interpreter.gui.workers import DialogueEntry, ProcessWorker
-from interpreter.llm_translate import LLMTranslator
-from interpreter.ocr import OCRResult
+from ludivoxa.config import Config, LLMSettings, OutputMode, OverlayMode
+from ludivoxa.gui.history_page import HISTORY_LIMIT, HistoryPage
+from ludivoxa.gui.workers import DialogueEntry, ProcessWorker
+from ludivoxa.llm_translate import LLMTranslator
+from ludivoxa.ocr import OCRResult
 
 
 @pytest.mark.parametrize(
@@ -25,7 +25,7 @@ from interpreter.ocr import OCRResult
 )
 def test_worker_records_stable_success_once_and_can_record_same_line_after_scene_break(monkeypatch, output, overlay):
     clock = [5.0]
-    monkeypatch.setattr("interpreter.gui.workers.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("ludivoxa.gui.workers.time.monotonic", lambda: clock[0])
     worker = ProcessWorker(Config(source_language="English", output_mode=output))
     worker.set_mode(overlay)
     worker._ocr = MagicMock()
@@ -71,7 +71,7 @@ def test_worker_records_stable_success_once_and_can_record_same_line_after_scene
 
 def test_worker_never_adds_source_error_fallback_to_history(monkeypatch):
     clock = [5.0]
-    monkeypatch.setattr("interpreter.gui.workers.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("ludivoxa.gui.workers.time.monotonic", lambda: clock[0])
     worker = ProcessWorker(Config(source_language="English", output_mode=OutputMode.OVERLAY))
     worker._ocr = MagicMock()
     worker._ocr.extract_text_regions.return_value = [OCRResult("Welcome", {})]
@@ -88,7 +88,7 @@ def test_worker_never_adds_source_error_fallback_to_history(monkeypatch):
 @pytest.mark.parametrize("overlay", [OverlayMode.BANNER, OverlayMode.INPLACE])
 def test_stale_overlay_keeps_history_and_skips_a_late_translation(monkeypatch, overlay):
     clock = [5.0]
-    monkeypatch.setattr("interpreter.gui.workers.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("ludivoxa.gui.workers.time.monotonic", lambda: clock[0])
     worker = ProcessWorker(Config(source_language="English", output_mode=OutputMode.OVERLAY, hide_stale_overlay=True))
     worker.set_mode(overlay)
     worker._running = True

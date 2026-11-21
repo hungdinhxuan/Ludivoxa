@@ -92,7 +92,7 @@ def test_bootstrap_detects_a_consistently_better_candidate() -> None:
 
 def _comparison_report(sample_ids: list[str], **configuration_overrides: object) -> dict:
     configuration = {
-        "pipeline": "src/interpreter/ocr.py::OCR.extract_text_regions",
+        "pipeline": "src/ludivoxa/ocr.py::OCR.extract_text_regions",
         "join": "single ASCII space between non-empty regions",
         "confidence_threshold": 0.3,
         "repeats": 5,

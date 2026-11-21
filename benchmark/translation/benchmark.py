@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI for the Interpreter Japanese-to-English translation benchmark."""
+"""CLI for the Ludivoxa Japanese-to-English translation benchmark."""
 
 from __future__ import annotations
 

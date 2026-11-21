@@ -640,7 +640,7 @@ class WindowsCaptureStream:
             return
         self._running = True
         self._stop_event.clear()
-        self._thread = threading.Thread(target=self._run, name="interpreter-capture", daemon=True)
+        self._thread = threading.Thread(target=self._run, name="ludivoxa-capture", daemon=True)
         self._thread.start()
 
     @property
@@ -904,7 +904,7 @@ class WindowsCaptureStream:
                     f"  - Try running the application in windowed or borderless windowed mode\n"
                     f"  - For emulators: switch video driver to 'gl', 'glcore', or 'd3d11' (not 'vulkan' exclusive)\n"
                     f"  - Make sure the window is visible and not minimized\n"
-                    f"  - Try running interpreter-v2 as Administrator"
+                    f"  - Try running ludivoxa as Administrator"
                 ) from e
             else:
                 raise RuntimeError(

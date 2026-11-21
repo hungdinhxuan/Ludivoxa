@@ -10,14 +10,14 @@ import numpy as np
 import pytest
 from PIL import Image, ImageDraw, ImageFont
 
-from interpreter.config import Config, OCRBackend, PaddleSettings
-from interpreter.language_detection import detect_language
-from interpreter.ocr import create_ocr
-from interpreter.paddle_ocr import IsolatedPaddleOCR, PaddleOCR
+from ludivoxa.config import Config, OCRBackend, PaddleSettings
+from ludivoxa.language_detection import detect_language
+from ludivoxa.ocr import create_ocr
+from ludivoxa.paddle_ocr import IsolatedPaddleOCR, PaddleOCR
 
-ROOT = os.environ.get("INTERPRETER_TEST_MODEL_ROOT")
+ROOT = os.environ.get("LUDIVOXA_TEST_MODEL_ROOT")
 pytestmark = pytest.mark.skipif(
-    not ROOT or os.name != "nt", reason="Set INTERPRETER_TEST_MODEL_ROOT; Windows fonts required"
+    not ROOT or os.name != "nt", reason="Set LUDIVOXA_TEST_MODEL_ROOT; Windows fonts required"
 )
 
 CASES = [

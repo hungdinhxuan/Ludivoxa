@@ -10,9 +10,9 @@ import pytest
 import requests
 import yaml
 
-EXE = os.environ.get("INTERPRETER_TEST_EXE")
+EXE = os.environ.get("LUDIVOXA_TEST_EXE")
 pytestmark = pytest.mark.skipif(
-    not EXE or os.name != "nt", reason="Set INTERPRETER_TEST_EXE for a built Windows bundle"
+    not EXE or os.name != "nt", reason="Set LUDIVOXA_TEST_EXE for a built Windows bundle"
 )
 
 

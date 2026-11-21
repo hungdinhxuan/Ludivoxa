@@ -7,14 +7,14 @@ from PySide6.QtGui import QColor, QImage
 from PySide6.QtMultimedia import QVideoFrameFormat
 from PySide6.QtWidgets import QApplication
 
-from interpreter.capture.video_device import (
+from ludivoxa.capture.video_device import (
     MAX_FRAME_AREA,
     VideoDeviceCapture,
     choose_format,
     find_video_device,
     qimage_to_bgra,
 )
-from interpreter.config import Config
+from ludivoxa.config import Config
 
 
 @pytest.fixture(scope="module")
@@ -133,7 +133,7 @@ def test_live_capture_from_attached_device(qapp):
     """
     from PySide6.QtCore import QDeadlineTimer
 
-    from interpreter.capture.video_device import list_video_devices
+    from ludivoxa.capture.video_device import list_video_devices
 
     devices = list_video_devices()
     if not devices:
@@ -170,7 +170,7 @@ class FakeDevice:
 
 def test_find_video_device_matches_id_before_name(monkeypatch):
     """Greptile: two cards of the same model share a description; the id tells them apart."""
-    import interpreter.capture.video_device as module
+    import ludivoxa.capture.video_device as module
 
     first, second = FakeDevice("USB Video", "usb#1"), FakeDevice("USB Video", "usb#2")
     monkeypatch.setattr(module, "list_video_devices", lambda: [first, second])

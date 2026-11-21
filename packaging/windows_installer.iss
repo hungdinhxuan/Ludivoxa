@@ -5,10 +5,10 @@
   #define OutputDir "..\dist\installer"
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.7.0"
+  #define AppVersion "2.0.0"
 #endif
 #ifndef AppNumericVersion
-  #define AppNumericVersion "1.7.0.0"
+  #define AppNumericVersion "2.0.0.0"
 #endif
 #ifdef DeltaFrom
   #ifndef AppUpdateOnly
@@ -42,8 +42,8 @@ OutputBaseFilename=Ludivoxa-{#AppVersion}-App-Update
 #else
 OutputBaseFilename=Ludivoxa-{#AppVersion}-Full-Offline-Setup
 #endif
-SetupIconFile=..\src\interpreter\resources\icons\icon.ico
-UninstallDisplayIcon={app}\Interpreter.exe
+SetupIconFile=..\src\ludivoxa\resources\icons\icon.ico
+UninstallDisplayIcon={app}\Ludivoxa.exe
 Compression=lzma2/fast
 SolidCompression=yes
 LZMANumBlockThreads=4
@@ -66,7 +66,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 #include DeltaDeletes
 #else
 ; importlib.metadata must see only the newly installed application version.
-Type: filesandordirs; Name: "{app}\_internal\interpreter_v2-*.dist-info"
+Type: filesandordirs; Name: "{app}\_internal\ludivoxa-*.dist-info"
 #endif
 
 [Files]
@@ -75,7 +75,7 @@ Type: filesandordirs; Name: "{app}\_internal\interpreter_v2-*.dist-info"
 Source: "{#DeltaManifest}"; Flags: dontcopy
 #include DeltaFiles
 #else
-Source: "{#PayloadDir}\Interpreter.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#PayloadDir}\Ludivoxa.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
 #endif
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
@@ -87,15 +87,44 @@ Source: "{#PayloadDir}\config.default.yml"; DestDir: "{app}"; DestName: "config.
 #endif
 
 [Icons]
-Name: "{group}\Ludivoxa"; Filename: "{app}\Interpreter.exe"; WorkingDir: "{app}"
+Name: "{group}\Ludivoxa"; Filename: "{app}\Ludivoxa.exe"; WorkingDir: "{app}"
 Name: "{group}\Uninstall Ludivoxa"; Filename: "{uninstallexe}"
-Name: "{userdesktop}\Ludivoxa"; Filename: "{app}\Interpreter.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{userdesktop}\Ludivoxa"; Filename: "{app}\Ludivoxa.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\Interpreter.exe"; Description: "Open Ludivoxa"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
-Filename: "{app}\Interpreter.exe"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: IsUpdateRestart
+Filename: "{app}\Ludivoxa.exe"; Description: "Open Ludivoxa"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Ludivoxa.exe"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: IsUpdateRestart
 
 [Code]
+var
+  LegacyMetadata: String;
+
+function FileAttributes(const Path: String): Cardinal;
+  external 'GetFileAttributesW@kernel32.dll stdcall';
+
+function FindLegacyMetadata: String;
+var
+  Directory: String;
+  Entry: TFindRec;
+begin
+  Result := '';
+  if not FileExists(ExpandConstant('{app}\Interpreter.exe')) or
+     not FileExists(ExpandConstant('{app}\config.yml')) then Exit;
+  Directory := ExpandConstant('{app}\_internal');
+  if (FileAttributes(ExpandConstant('{app}')) and $410) <> $10 then Exit;
+  if (FileAttributes(Directory) and $410) <> $10 then Exit;
+  Directory := AddBackslash(Directory);
+  if FindFirst(Directory + 'interpreter_v2-1.*.dist-info', Entry) then
+  begin
+    try
+      if ((Entry.Attributes and $410) = $10) then
+        Result := Directory + Entry.Name;
+    finally
+      FindClose(Entry);
+    end;
+  end;
+end;
+
 function IsUpdateRestart: Boolean;
 begin
   Result := ExpandConstant('{param:LUDIVOXARESTART|0}') = '1';
@@ -114,9 +143,6 @@ begin
 end;
 
 #ifdef DeltaFrom
-function FileAttributes(const Path: String): Cardinal;
-  external 'GetFileAttributesW@kernel32.dll stdcall';
-
 function DeltaBaseMatches: Boolean;
 var
   Lines: TArrayOfString;
@@ -169,11 +195,12 @@ end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
+  LegacyMetadata := FindLegacyMetadata;
 #ifdef AppUpdateOnly
-  if (not FileExists(ExpandConstant('{app}\Interpreter.exe'))) or
+  if ((LegacyMetadata = '') and not FileExists(ExpandConstant('{app}\Ludivoxa.exe'))) or
      (not FileExists(ExpandConstant('{app}\config.yml'))) then
   begin
-    Result := 'Select an existing Ludivoxa installation containing Interpreter.exe and config.yml, or use the full offline installer first.';
+    Result := 'Select an existing Ludivoxa installation containing Ludivoxa.exe and config.yml, or use the full offline installer first.';
     Exit;
   end;
 #endif
@@ -186,6 +213,23 @@ begin
 #endif
   StopOwnedRuntime;
   Result := '';
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  LegacyPackage: String;
+begin
+  if (CurStep <> ssPostInstall) or (LegacyMetadata = '') or
+     not FileExists(ExpandConstant('{app}\Ludivoxa.exe')) then Exit;
+  if DeleteFile(ExpandConstant('{app}\Interpreter.exe')) then
+  begin
+    DelTree(LegacyMetadata, True, True, True);
+    LegacyPackage := ExpandConstant('{app}\_internal\interpreter');
+    if (FileAttributes(LegacyPackage) and $410) = $10 then
+      DelTree(LegacyPackage, True, True, True);
+  end
+  else
+    Log('Could not remove the previous Ludivoxa executable.');
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

@@ -20,12 +20,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from interpreter.config import CharacterVoices, Config, LLMSettings, TranslationBackend, character_name
-from interpreter.gui.character_voices import CharacterVoicesDialog
-from interpreter.gui.main_window import MainWindow
-from interpreter.gui.workers import ProcessWorker
-from interpreter.ocr import OCRResult
-from interpreter.speech import SpeechController, SpeechStream
+from ludivoxa.config import CharacterVoices, Config, LLMSettings, TranslationBackend, character_name
+from ludivoxa.gui.character_voices import CharacterVoicesDialog
+from ludivoxa.gui.main_window import MainWindow
+from ludivoxa.gui.workers import ProcessWorker
+from ludivoxa.ocr import OCRResult
+from ludivoxa.speech import SpeechController, SpeechStream
 
 REGION = dict(x=0.1, y=0.1, width=0.3, height=0.1)
 
@@ -70,7 +70,7 @@ def test_invalid_profiles_are_safe_and_names_are_not_gender_guesses():
 
 @pytest.fixture
 def routed_worker(qapp, monkeypatch):
-    from interpreter.gui import workers
+    from ludivoxa.gui import workers
 
     clock = [0.0]
     monkeypatch.setattr(workers, "time", SimpleNamespace(monotonic=lambda: clock[0], perf_counter=time.perf_counter))
@@ -246,7 +246,7 @@ def main(qapp):
 
 @pytest.mark.parametrize("capturing", [True, False])
 def test_character_editor_uses_active_capture_or_selected_source(main, monkeypatch, capturing):
-    from interpreter.gui import main_window
+    from ludivoxa.gui import main_window
 
     main._capturing = capturing
     main._detected_character = "Alice"
@@ -379,7 +379,7 @@ def test_identical_translation_uses_each_characters_preset_without_interrupting(
 
 
 def test_complete_ocr_cached_llm_gui_and_speech_route_same_words_to_two_voices(routed_worker, main):
-    from interpreter.llm_translate import LLMTranslator
+    from ludivoxa.llm_translate import LLMTranslator
 
     worker, _, observe, _, _, _, _ = routed_worker
     worker._config.translation_backend = TranslationBackend.LLM
@@ -413,9 +413,9 @@ def test_complete_ocr_cached_llm_gui_and_speech_route_same_words_to_two_voices(r
 def test_character_metadata_from_preset_and_override_reaches_overlay_translation(routed_worker, monkeypatch):
     import json
 
-    from interpreter.config import OutputMode
-    from interpreter.gui import workers
-    from interpreter.llm_translate import LLMTranslator
+    from ludivoxa.config import OutputMode
+    from ludivoxa.gui import workers
+    from ludivoxa.llm_translate import LLMTranslator
 
     worker, profile, observe, _, _, _, _ = routed_worker
     worker._config.output_mode = OutputMode.OVERLAY
@@ -439,7 +439,7 @@ def test_character_metadata_from_preset_and_override_reaches_overlay_translation
 
 
 def test_dialog_requires_name_area_and_saves_assignments_without_mutating_input(qapp, monkeypatch):
-    from interpreter.gui import character_voices
+    from ludivoxa.gui import character_voices
 
     monkeypatch.setattr(character_voices, "voice_details", lambda _: [("One", 1), ("Two", 2)])
     original = CharacterVoices()
@@ -464,7 +464,7 @@ def test_dialog_requires_name_area_and_saves_assignments_without_mutating_input(
 
 @pytest.mark.parametrize("size", [(640, 360), (800, 450)])
 def test_character_dialog_actions_remain_reachable_on_small_remote_screen(qapp, monkeypatch, size):
-    from interpreter.gui import character_voices
+    from ludivoxa.gui import character_voices
 
     monkeypatch.setattr(character_voices, "voice_details", lambda _: [("One", 1)])
     dialog = CharacterVoicesDialog(None, "Game", CharacterVoices(), "voice")
@@ -485,7 +485,7 @@ def test_character_dialog_actions_remain_reachable_on_small_remote_screen(qapp, 
 
 
 def test_existing_box_editor_can_select_name_area_without_ocr_settings(qapp):
-    from interpreter.gui.ocr_config import OCRConfigDialog
+    from ludivoxa.gui.ocr_config import OCRConfigDialog
 
     dialog = OCRConfigDialog(initial_region=REGION, selection_only=True)
     try:

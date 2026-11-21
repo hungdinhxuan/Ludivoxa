@@ -4,10 +4,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from interpreter.config import Config, OverlayMode
-from interpreter.gui.workers import MAX_CONSECUTIVE_OCR_FAILURES, MAX_CONSECUTIVE_TRANSLATION_FAILURES, ProcessWorker
-from interpreter.ocr import OCRResult
-from interpreter.owocr_ocr import OwocrOCRError
+from ludivoxa.config import Config, OverlayMode
+from ludivoxa.gui.workers import MAX_CONSECUTIVE_OCR_FAILURES, MAX_CONSECUTIVE_TRANSLATION_FAILURES, ProcessWorker
+from ludivoxa.ocr import OCRResult
+from ludivoxa.owocr_ocr import OwocrOCRError
 
 
 class _FlakyTranslator:
@@ -108,7 +108,7 @@ def test_reload_clears_failure_state(worker, monkeypatch):
     worker._translation_error = "old"
     healthy = _FlakyTranslator()
     healthy.failing = False
-    monkeypatch.setattr("interpreter.gui.workers.create_translator", lambda config: healthy)
+    monkeypatch.setattr("ludivoxa.gui.workers.create_translator", lambda config: healthy)
 
     worker._load_translator()
 
@@ -199,7 +199,7 @@ def test_reload_ocr_builds_a_fresh_engine_and_closes_the_old_one(ocr_worker, mon
     ocr_worker._ocr_error = "old"
     ocr_worker._confidence_threshold = 0.42
     fresh = _FakeOCR()
-    monkeypatch.setattr("interpreter.gui.workers.create_ocr", lambda config: fresh)
+    monkeypatch.setattr("ludivoxa.gui.workers.create_ocr", lambda config: fresh)
 
     ocr_worker._load_ocr()
 
@@ -216,7 +216,7 @@ def test_reload_ocr_failure_is_recorded(ocr_worker, monkeypatch):
     def broken(config):
         raise RuntimeError("Cannot reach owocr")
 
-    monkeypatch.setattr("interpreter.gui.workers.create_ocr", broken)
+    monkeypatch.setattr("ludivoxa.gui.workers.create_ocr", broken)
     ocr_worker._load_ocr()
     assert ocr_worker._ocr is None
     assert ocr_worker._ocr_failed
@@ -256,8 +256,8 @@ def test_stop_waits_for_the_worker_thread(monkeypatch):
 
     healthy = _FlakyTranslator()
     healthy.failing = False
-    monkeypatch.setattr("interpreter.gui.workers.create_ocr", lambda config: _SlowOCR())
-    monkeypatch.setattr("interpreter.gui.workers.create_translator", lambda config: healthy)
+    monkeypatch.setattr("ludivoxa.gui.workers.create_ocr", lambda config: _SlowOCR())
+    monkeypatch.setattr("ludivoxa.gui.workers.create_translator", lambda config: healthy)
     worker = ProcessWorker(Config())
     worker.start(0.6)
     worker.submit_frame("frame")
@@ -321,8 +321,8 @@ def test_discard_pending_frames_keeps_inflight_generation(monkeypatch):
 
     healthy = _FlakyTranslator()
     healthy.failing = False
-    monkeypatch.setattr("interpreter.gui.workers.create_ocr", lambda config: SlowOCR())
-    monkeypatch.setattr("interpreter.gui.workers.create_translator", lambda config: healthy)
+    monkeypatch.setattr("ludivoxa.gui.workers.create_ocr", lambda config: SlowOCR())
+    monkeypatch.setattr("ludivoxa.gui.workers.create_translator", lambda config: healthy)
     worker = ProcessWorker(Config())
 
     def on_text(text, generation):
@@ -352,8 +352,8 @@ def test_discard_pending_frames_keeps_inflight_generation(monkeypatch):
 
 def test_reload_builds_a_fresh_engine_so_caches_do_not_leak_across_settings(monkeypatch):
     """Changing model, target language or prompt must not reuse the old engine's cache."""
-    from interpreter.config import LLMSettings, TranslationBackend
-    from interpreter.llm_translate import LLMTranslator
+    from ludivoxa.config import LLMSettings, TranslationBackend
+    from ludivoxa.llm_translate import LLMTranslator
 
     config = Config(translation_backend=TranslationBackend.LLM, llm=LLMSettings(model="m", target_language="English"))
     worker = ProcessWorker(config)

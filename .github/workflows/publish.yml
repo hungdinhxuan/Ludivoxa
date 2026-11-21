@@ -32,4 +32,4 @@ jobs:
           path: dist/
 
 # Windows release assets are uploaded explicitly after binary verification.
-# This fork never publishes to the upstream interpreter-v2 PyPI project.
+# Source distributions are attached to the GitHub Actions run.

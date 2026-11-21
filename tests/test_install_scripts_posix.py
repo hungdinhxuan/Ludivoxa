@@ -78,7 +78,7 @@ printf 'UV_TOOL_DIR=%s\\n' "${UV_TOOL_DIR:-}" >>"$UV_TEST_LOG"
 printf 'UV_PYTHON_INSTALL_DIR=%s\\n' "${UV_PYTHON_INSTALL_DIR:-}" >>"$UV_TEST_LOG"
 case "$1 $2" in
 "tool dir") echo "${UV_TOOL_DIR:-$HOME/.local/share/uv/tools}" ;;
-"tool list") echo "interpreter-v2 v2.17.6" ;;
+"tool list") echo "ludivoxa v2.17.6" ;;
 "tool install") exit "${UV_TEST_INSTALL_EXIT:-0}" ;;
 esac
 exit 0
@@ -97,7 +97,7 @@ def _environment(tmp_path: Path, *, with_uv: bool = True) -> tuple[dict[str, str
     model_hub = tmp_path / "huggingface" / "hub"
     environment = os.environ.copy()
     for name in (
-        "INTERPRETER_HOME",
+        "LUDIVOXA_HOME",
         "UV_TOOL_DIR",
         "UV_PYTHON_INSTALL_DIR",
         "UV_CACHE_DIR",
@@ -135,7 +135,7 @@ def _log_lines(command_log: Path) -> list[str]:
 
 
 def _pointer(home: Path) -> Path:
-    return home / ".interpreter" / "install-dir"
+    return home / ".ludivoxa" / "install-dir"
 
 
 # --- install.sh ---------------------------------------------------------------
@@ -148,7 +148,7 @@ def test_default_install_keeps_previous_behavior(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stdout + result.stderr
     lines = _log_lines(command_log)
-    assert "tool install --upgrade --python 3.12 interpreter-v2" in lines
+    assert "tool install --upgrade --python 3.12 ." in lines
     assert "UV_TOOL_DIR=" in lines
     assert not _pointer(home).exists()
     assert "home directory" in result.stdout
@@ -181,23 +181,23 @@ def test_linux_install_warns_without_rejecting_uncached_pulse(tmp_path: Path, pu
 
 def test_install_to_custom_location(tmp_path: Path) -> None:
     environment, home, _, command_log = _environment(tmp_path)
-    root = tmp_path / "other-drive" / "interpreter"
+    root = tmp_path / "other-drive" / "ludivoxa"
     root_posix = _posix(root)
-    environment["INTERPRETER_HOME"] = root_posix
+    environment["LUDIVOXA_HOME"] = root_posix
 
     result = _run(INSTALL_SCRIPT, environment)
 
     assert result.returncode == 0, result.stdout + result.stderr
     lines = _log_lines(command_log)
     install_index = lines.index(
-        f"tool install --upgrade --python 3.12 --cache-dir {root_posix}/uv-cache interpreter-v2"
+        f"tool install --upgrade --python 3.12 --cache-dir {root_posix}/uv-cache ."
     )
     assert lines[install_index + 1] == f"UV_TOOL_DIR={root_posix}/uv/tools"
     assert lines[install_index + 2] == f"UV_PYTHON_INSTALL_DIR={root_posix}/uv/python"
     assert f"cache clean --cache-dir {root_posix}/uv-cache" in lines
     assert not any(line.startswith("tool uninstall") for line in lines)
     assert root.is_dir()
-    assert (root / ".interpreter-v2").is_file()
+    assert (root / ".ludivoxa").is_file()
     assert not (root / "uv-cache").exists()
     assert _pointer(home).read_text(encoding="utf-8") == root_posix
     assert f"Installed to {root_posix}" in result.stdout
@@ -206,23 +206,23 @@ def test_install_to_custom_location(tmp_path: Path) -> None:
 
 def test_relative_and_tilde_locations_are_normalized(tmp_path: Path) -> None:
     environment, home, _, _ = _environment(tmp_path)
-    environment["INTERPRETER_HOME"] = "~/apps/interpreter"
+    environment["LUDIVOXA_HOME"] = "~/apps/ludivoxa"
 
     result = _run(INSTALL_SCRIPT, environment)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert _pointer(home).read_text(encoding="utf-8") == f"{_posix(home)}/apps/interpreter"
+    assert _pointer(home).read_text(encoding="utf-8") == f"{_posix(home)}/apps/ludivoxa"
 
-    environment["INTERPRETER_HOME"] = "relative/interpreter/"
+    environment["LUDIVOXA_HOME"] = "relative/ludivoxa/"
     result = _run(INSTALL_SCRIPT, environment, cwd=tmp_path)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert _pointer(home).read_text(encoding="utf-8") == f"{_posix(tmp_path)}/relative/interpreter"
+    assert _pointer(home).read_text(encoding="utf-8") == f"{_posix(tmp_path)}/relative/ludivoxa"
 
 
 def test_filesystem_root_is_rejected(tmp_path: Path) -> None:
     environment, home, _, command_log = _environment(tmp_path)
-    environment["INTERPRETER_HOME"] = "/"
+    environment["LUDIVOXA_HOME"] = "/"
 
     result = _run(INSTALL_SCRIPT, environment)
 
@@ -234,27 +234,27 @@ def test_filesystem_root_is_rejected(tmp_path: Path) -> None:
 
 def test_upgrade_reuses_recorded_location(tmp_path: Path) -> None:
     environment, home, _, command_log = _environment(tmp_path)
-    root = tmp_path / "other-drive" / "interpreter"
+    root = tmp_path / "other-drive" / "ludivoxa"
     root_posix = _posix(root)
     _create_file(_pointer(home), root_posix)
-    _create_file(root / "uv" / "tools" / "interpreter-v2" / "pyvenv.cfg")
+    _create_file(root / "uv" / "tools" / "ludivoxa" / "pyvenv.cfg")
 
     result = _run(INSTALL_SCRIPT, environment)
 
     assert result.returncode == 0, result.stdout + result.stderr
     lines = _log_lines(command_log)
-    assert f"tool install --upgrade --python 3.12 --cache-dir {root_posix}/uv-cache interpreter-v2" in lines
+    assert f"tool install --upgrade --python 3.12 --cache-dir {root_posix}/uv-cache ." in lines
     assert not any(line.startswith("tool uninstall") for line in lines)
-    assert (root / "uv" / "tools" / "interpreter-v2" / "pyvenv.cfg").exists()
+    assert (root / "uv" / "tools" / "ludivoxa" / "pyvenv.cfg").exists()
     assert _pointer(home).read_text(encoding="utf-8") == root_posix
 
 
 def test_moving_from_home_removes_previous_environment(tmp_path: Path) -> None:
     environment, home, _, command_log = _environment(tmp_path)
-    default_environment = home / ".local" / "share" / "uv" / "tools" / "interpreter-v2"
+    default_environment = home / ".local" / "share" / "uv" / "tools" / "ludivoxa"
     _create_file(default_environment / "pyvenv.cfg")
-    root = tmp_path / "other-drive" / "interpreter"
-    environment["INTERPRETER_HOME"] = _posix(root)
+    root = tmp_path / "other-drive" / "ludivoxa"
+    environment["LUDIVOXA_HOME"] = _posix(root)
 
     result = _run(INSTALL_SCRIPT, environment)
 
@@ -262,7 +262,7 @@ def test_moving_from_home_removes_previous_environment(tmp_path: Path) -> None:
     lines = _log_lines(command_log)
     # --force lets uv replace the launcher left in the shared bin directory.
     install_index = lines.index(
-        f"tool install --force --upgrade --python 3.12 --cache-dir {_posix(root)}/uv-cache interpreter-v2"
+        f"tool install --force --upgrade --python 3.12 --cache-dir {_posix(root)}/uv-cache ."
     )
     assert lines[install_index + 1] == f"UV_TOOL_DIR={_posix(root)}/uv/tools"
     # The old environment is deleted directly: `uv tool uninstall` there would
@@ -274,22 +274,22 @@ def test_moving_from_home_removes_previous_environment(tmp_path: Path) -> None:
 
 def test_moving_between_custom_locations_removes_previous_environment(tmp_path: Path) -> None:
     environment, home, _, command_log = _environment(tmp_path)
-    old_root = tmp_path / "old-drive" / "interpreter"
-    new_root = tmp_path / "new-drive" / "interpreter"
+    old_root = tmp_path / "old-drive" / "ludivoxa"
+    new_root = tmp_path / "new-drive" / "ludivoxa"
     _create_file(_pointer(home), _posix(old_root))
-    _create_file(old_root / "uv" / "tools" / "interpreter-v2" / "pyvenv.cfg")
+    _create_file(old_root / "uv" / "tools" / "ludivoxa" / "pyvenv.cfg")
     _create_file(old_root / "models" / MODEL_CACHE_NAMES[0] / "blobs" / "model.bin")
-    environment["INTERPRETER_HOME"] = _posix(new_root)
+    environment["LUDIVOXA_HOME"] = _posix(new_root)
 
     result = _run(INSTALL_SCRIPT, environment)
 
     assert result.returncode == 0, result.stdout + result.stderr
     lines = _log_lines(command_log)
     assert (
-        f"tool install --force --upgrade --python 3.12 --cache-dir {_posix(new_root)}/uv-cache interpreter-v2" in lines
+        f"tool install --force --upgrade --python 3.12 --cache-dir {_posix(new_root)}/uv-cache ." in lines
     )
     assert not any(line.startswith("tool uninstall") for line in lines)
-    assert not (old_root / "uv" / "tools" / "interpreter-v2").exists()
+    assert not (old_root / "uv" / "tools" / "ludivoxa").exists()
     # Models are never deleted by the installer; the user is told where they are.
     assert (old_root / "models" / MODEL_CACHE_NAMES[0]).exists()
     assert f"remain in {_posix(old_root)}/models" in result.stdout
@@ -298,10 +298,10 @@ def test_moving_between_custom_locations_removes_previous_environment(tmp_path: 
 
 def test_failed_install_keeps_previous_install(tmp_path: Path) -> None:
     environment, home, _, command_log = _environment(tmp_path)
-    default_environment = home / ".local" / "share" / "uv" / "tools" / "interpreter-v2"
+    default_environment = home / ".local" / "share" / "uv" / "tools" / "ludivoxa"
     _create_file(default_environment / "pyvenv.cfg")
-    root = tmp_path / "other-drive" / "interpreter"
-    environment["INTERPRETER_HOME"] = _posix(root)
+    root = tmp_path / "other-drive" / "ludivoxa"
+    environment["LUDIVOXA_HOME"] = _posix(root)
     environment["UV_TEST_INSTALL_EXIT"] = "42"
     _create_file(root / "uv-cache" / "partial-download.whl")
 
@@ -321,13 +321,13 @@ def test_failed_install_keeps_previous_install(tmp_path: Path) -> None:
 
 def _populate_install(root: Path, home: Path, model_hub: Path, *, marker: bool = True) -> Path:
     if marker:
-        _create_file(root / ".interpreter-v2", "Created by the interpreter-v2 installer.")
-    _create_file(root / "uv" / "tools" / "interpreter-v2" / "pyvenv.cfg")
+        _create_file(root / ".ludivoxa", "Created by the ludivoxa installer.")
+    _create_file(root / "uv" / "tools" / "ludivoxa" / "pyvenv.cfg")
     _create_file(root / "uv" / "python" / "cpython-3.12" / "bin" / "python")
     _create_file(root / "uv-cache" / "partial-download.whl")
     for model_cache_name in MODEL_CACHE_NAMES:
         _create_file(root / "models" / model_cache_name / "blobs" / "model.bin")
-    _create_file(home / ".interpreter" / "config.yml")
+    _create_file(home / ".ludivoxa" / "config.yml")
     # A model left in the default cache by an install that was later moved.
     _create_file(model_hub / MODEL_CACHE_NAMES[2] / "blobs" / "model.bin")
     unrelated_model = model_hub / "models--someone-else--unrelated"
@@ -337,7 +337,7 @@ def _populate_install(root: Path, home: Path, model_hub: Path, *, marker: bool =
 
 def test_uninstall_removes_recorded_location(tmp_path: Path) -> None:
     environment, home, model_hub, command_log = _environment(tmp_path)
-    root = tmp_path / "other-drive" / "interpreter"
+    root = tmp_path / "other-drive" / "ludivoxa"
     unrelated_model = _populate_install(root, home, model_hub)
     _create_file(_pointer(home), _posix(root))
 
@@ -345,10 +345,10 @@ def test_uninstall_removes_recorded_location(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stdout + result.stderr
     lines = _log_lines(command_log)
-    uninstall_index = lines.index("tool uninstall interpreter-v2")
+    uninstall_index = lines.index("tool uninstall ludivoxa")
     assert lines[uninstall_index + 1] == f"UV_TOOL_DIR={_posix(root)}/uv/tools"
     assert not root.exists()
-    assert not (home / ".interpreter").exists()
+    assert not (home / ".ludivoxa").exists()
     assert not (model_hub / MODEL_CACHE_NAMES[2]).exists()
     assert unrelated_model.exists()
     assert f"Removed install location {_posix(root)}" in result.stdout
@@ -356,10 +356,10 @@ def test_uninstall_removes_recorded_location(tmp_path: Path) -> None:
 
 def test_uninstall_keeps_location_with_other_files_and_works_without_uv(tmp_path: Path) -> None:
     environment, home, model_hub, command_log = _environment(tmp_path, with_uv=False)
-    root = tmp_path / "other-drive" / "interpreter"
+    root = tmp_path / "other-drive" / "ludivoxa"
     _populate_install(root, home, model_hub)
     _create_file(root / "my-notes.txt", "keep me")
-    environment["INTERPRETER_HOME"] = _posix(root)
+    environment["LUDIVOXA_HOME"] = _posix(root)
 
     result = _run(UNINSTALL_SCRIPT, environment)
 
@@ -371,23 +371,23 @@ def test_uninstall_keeps_location_with_other_files_and_works_without_uv(tmp_path
     assert not (root / "models").exists()
     assert (root / "my-notes.txt").read_text(encoding="utf-8") == "keep me"
     assert "Kept" in result.stdout
-    assert not (home / ".interpreter").exists()
+    assert not (home / ".ludivoxa").exists()
 
 
 def test_uninstall_leaves_location_without_installer_marker_alone(tmp_path: Path) -> None:
-    """A mistyped or shared INTERPRETER_HOME must not have its contents deleted."""
+    """A mistyped or shared LUDIVOXA_HOME must not have its contents deleted."""
     environment, home, model_hub, _ = _environment(tmp_path)
     root = tmp_path / "shared-tools"
     _populate_install(root, home, model_hub, marker=False)
     _create_file(root / "uv" / "tools" / "other-tool" / "pyvenv.cfg")
-    environment["INTERPRETER_HOME"] = _posix(root)
+    environment["LUDIVOXA_HOME"] = _posix(root)
 
     result = _run(UNINSTALL_SCRIPT, environment)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "was not created by the interpreter-v2 installer" in result.stdout
-    # Only interpreter-v2's own tool environment goes; everything else stays.
-    assert not (root / "uv" / "tools" / "interpreter-v2").exists()
+    assert "was not created by the ludivoxa installer" in result.stdout
+    # Only ludivoxa's own tool environment goes; everything else stays.
+    assert not (root / "uv" / "tools" / "ludivoxa").exists()
     assert (root / "uv" / "tools" / "other-tool" / "pyvenv.cfg").exists()
     assert (root / "uv" / "python").exists()
     assert (root / "uv-cache").exists()
@@ -397,7 +397,7 @@ def test_uninstall_leaves_location_without_installer_marker_alone(tmp_path: Path
 
 def test_uninstall_without_custom_location_removes_default_models(tmp_path: Path) -> None:
     environment, home, model_hub, command_log = _environment(tmp_path)
-    _create_file(home / ".interpreter" / "config.yml")
+    _create_file(home / ".ludivoxa" / "config.yml")
     for model_cache_name in MODEL_CACHE_NAMES:
         _create_file(model_hub / model_cache_name / "blobs" / "model.bin")
         _create_file(model_hub / ".locks" / model_cache_name / "download.lock")
@@ -409,11 +409,11 @@ def test_uninstall_without_custom_location_removes_default_models(tmp_path: Path
     result = _run(UNINSTALL_SCRIPT, environment)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "tool uninstall interpreter-v2" in _log_lines(command_log)
+    assert "tool uninstall ludivoxa" in _log_lines(command_log)
     for model_cache_name in MODEL_CACHE_NAMES:
         assert not (model_hub / model_cache_name).exists()
         assert not (model_hub / ".locks" / model_cache_name).exists()
-    assert not legacy_model.exists()
+    assert legacy_model.exists()
     assert unrelated_model.exists()
-    assert not (home / ".interpreter").exists()
+    assert not (home / ".ludivoxa").exists()
     assert "No custom install location" in result.stdout

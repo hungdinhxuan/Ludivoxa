@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 # Load the module from its file so these tests run without the package being
-# installed (interpreter/__init__ reads the distribution version on import).
-_PATHS_FILE = Path(__file__).resolve().parents[1] / "src" / "interpreter" / "paths.py"
-_spec = importlib.util.spec_from_file_location("interpreter_paths_under_test", _PATHS_FILE)
+# installed (ludivoxa/__init__ reads the distribution version on import).
+_PATHS_FILE = Path(__file__).resolve().parents[1] / "src" / "ludivoxa" / "paths.py"
+_spec = importlib.util.spec_from_file_location("ludivoxa_paths_under_test", _PATHS_FILE)
 paths = importlib.util.module_from_spec(_spec)
 sys.modules[_spec.name] = paths
 _spec.loader.exec_module(paths)
@@ -29,7 +29,7 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _write_pointer(home_dir: Path, value: str) -> None:
-    config_dir = home_dir / ".interpreter"
+    config_dir = home_dir / ".ludivoxa"
     config_dir.mkdir(exist_ok=True)
     (config_dir / paths.INSTALL_ROOT_FILE_NAME).write_text(value, encoding="utf-8")
 
@@ -44,7 +44,7 @@ def test_default_layout_when_nothing_is_configured(home: Path) -> None:
 
 
 def test_environment_variable_sets_install_root(home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    root = tmp_path / "other-drive" / "interpreter"
+    root = tmp_path / "other-drive" / "ludivoxa"
     monkeypatch.setenv(paths.INSTALL_ROOT_ENV, str(root))
 
     assert paths.get_install_root() == root
@@ -52,11 +52,20 @@ def test_environment_variable_sets_install_root(home: Path, tmp_path: Path, monk
 
 
 def test_pointer_file_sets_install_root(home: Path, tmp_path: Path) -> None:
-    root = tmp_path / "other-drive" / "interpreter"
+    root = tmp_path / "other-drive" / "ludivoxa"
     _write_pointer(home, f"{root}\n")
 
     assert paths.get_install_root() == root
     assert paths.get_models_dir() == root / "models"
+
+
+def test_legacy_install_pointer_is_used_until_the_new_pointer_is_set(home: Path, tmp_path: Path) -> None:
+    legacy = home / ".interpreter"
+    legacy.mkdir()
+    (legacy / paths.INSTALL_ROOT_FILE_NAME).write_text(str(tmp_path / "old"), encoding="utf-8")
+    assert paths.get_models_dir() == tmp_path / "old" / "models"
+    _write_pointer(home, str(tmp_path / "new"))
+    assert paths.get_models_dir() == tmp_path / "new" / "models"
 
 
 def test_environment_variable_wins_over_pointer_file(
@@ -85,26 +94,26 @@ def test_blank_environment_variable_falls_back_to_pointer(
 
 
 def test_tilde_is_expanded(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(paths.INSTALL_ROOT_ENV, "~/interpreter")
+    monkeypatch.setenv(paths.INSTALL_ROOT_ENV, "~/ludivoxa")
 
-    assert paths.get_install_root() == home / "interpreter"
+    assert paths.get_install_root() == home / "ludivoxa"
 
 
 def test_relative_value_is_anchored_to_working_directory(
     home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv(paths.INSTALL_ROOT_ENV, "relative/interpreter/")
+    monkeypatch.setenv(paths.INSTALL_ROOT_ENV, "relative/ludivoxa/")
 
     root = paths.get_install_root()
 
     assert root is not None
     assert root.is_absolute()
-    assert root == tmp_path / "relative" / "interpreter"
+    assert root == tmp_path / "relative" / "ludivoxa"
 
 
 def test_apply_environment_redirects_hf_cache(home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    root = tmp_path / "other-drive" / "interpreter"
+    root = tmp_path / "other-drive" / "ludivoxa"
     monkeypatch.setenv(paths.INSTALL_ROOT_ENV, str(root))
     monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "generic-hf-cache"))
 
@@ -116,7 +125,7 @@ def test_apply_environment_redirects_hf_cache(home: Path, tmp_path: Path, monkey
 def test_apply_environment_matches_huggingface_hub(home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """huggingface_hub reads HF_HUB_CACHE once at import; check it honors ours."""
     pytest.importorskip("huggingface_hub")
-    root = tmp_path / "other-drive" / "interpreter"
+    root = tmp_path / "other-drive" / "ludivoxa"
     monkeypatch.setenv(paths.INSTALL_ROOT_ENV, str(root))
     monkeypatch.delitem(sys.modules, "huggingface_hub", raising=False)
     monkeypatch.delitem(sys.modules, "huggingface_hub.constants", raising=False)

@@ -25,7 +25,7 @@ def test_payload_checksums_and_portable_defaults(tmp_path, monkeypatch):
     app, runtime, store, output = (tmp_path / part for part in ("app", "runtime", "store", "output"))
     app.mkdir()
     runtime.mkdir()
-    (app / "Interpreter.exe").write_bytes(b"app")
+    (app / "Ludivoxa.exe").write_bytes(b"app")
     (runtime / "ollama.exe").write_bytes(b"runtime")
     (runtime / "ollama.zip").write_bytes(b"redundant distribution archive")
     (runtime / "ollama.pid.json").write_text('{"pid": 12345}')

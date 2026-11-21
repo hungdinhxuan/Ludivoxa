@@ -5,11 +5,11 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from interpreter.config import Config, GameProfile, OCRBackend, PaddleSettings
-from interpreter.gui.workers import ProcessWorker
-from interpreter.models import ModelLoadError
-from interpreter.ocr import OCRResult, create_ocr
-from interpreter.paddle_ocr import IsolatedPaddleOCR
+from ludivoxa.config import Config, GameProfile, OCRBackend, PaddleSettings
+from ludivoxa.gui.workers import ProcessWorker
+from ludivoxa.models import ModelLoadError
+from ludivoxa.ocr import OCRResult, create_ocr
+from ludivoxa.paddle_ocr import IsolatedPaddleOCR
 
 
 def loaded_engine():

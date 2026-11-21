@@ -1,4 +1,4 @@
-"""Run the exact Interpreter OCR pipeline and compare paired results."""
+"""Run the exact Ludivoxa OCR pipeline and compare paired results."""
 
 from __future__ import annotations
 
@@ -47,31 +47,31 @@ def _load_module(name: str, path: Path):
 
 
 def load_application_ocr(repo_root: Path):
-    """Load src/interpreter/ocr.py without importing GUI/capture backends.
+    """Load src/ludivoxa/ocr.py without importing GUI/capture backends.
 
     This preserves the production OCR and post-processing code while allowing
     it to run in a tiny isolated candidate environment containing only
     meikiocr and its dependencies.
     """
 
-    source_root = repo_root / "src" / "interpreter"
+    source_root = repo_root / "src" / "ludivoxa"
     if not (source_root / "ocr.py").is_file():
-        raise BenchmarkError(f"Interpreter OCR source not found under {repo_root}")
+        raise BenchmarkError(f"Ludivoxa OCR source not found under {repo_root}")
 
-    package = types.ModuleType("interpreter")
+    package = types.ModuleType("ludivoxa")
     package.__path__ = [str(source_root)]
-    sys.modules["interpreter"] = package
+    sys.modules["ludivoxa"] = package
 
-    capture_package = types.ModuleType("interpreter.capture")
+    capture_package = types.ModuleType("ludivoxa.capture")
     capture_package.__path__ = [str(source_root / "capture")]
-    sys.modules["interpreter.capture"] = capture_package
+    sys.modules["ludivoxa.capture"] = capture_package
 
-    log_module = types.ModuleType("interpreter.log")
+    log_module = types.ModuleType("ludivoxa.log")
     log_module.get_logger = lambda *_args, **_kwargs: _SilentLogger()
-    sys.modules["interpreter.log"] = log_module
+    sys.modules["ludivoxa.log"] = log_module
 
-    _load_module("interpreter.capture.convert", source_root / "capture" / "convert.py")
-    ocr_module = _load_module("interpreter.ocr", source_root / "ocr.py")
+    _load_module("ludivoxa.capture.convert", source_root / "capture" / "convert.py")
+    ocr_module = _load_module("ludivoxa.ocr", source_root / "ocr.py")
     return ocr_module.OCR
 
 
@@ -121,7 +121,7 @@ def _git_metadata(repo_root: Path) -> dict[str, Any]:
         "commit": command("rev-parse", "HEAD"),
         "branch": command("branch", "--show-current"),
         "tracked_files_dirty": bool(dirty),
-        "ocr_source_sha256": sha256_file(repo_root / "src" / "interpreter" / "ocr.py"),
+        "ocr_source_sha256": sha256_file(repo_root / "src" / "ludivoxa" / "ocr.py"),
     }
 
 
@@ -287,7 +287,7 @@ def run_benchmark(
         "label": label,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "configuration": {
-            "pipeline": "src/interpreter/ocr.py::OCR.extract_text_regions",
+            "pipeline": "src/ludivoxa/ocr.py::OCR.extract_text_regions",
             "join": "single ASCII space between non-empty regions",
             "confidence_threshold": confidence,
             "repeats": repeats,
@@ -467,11 +467,11 @@ def compare_results(
     baseline_ocr_source = baseline.get("application", {}).get("ocr_source_sha256")
     candidate_ocr_source = candidate.get("application", {}).get("ocr_source_sha256")
     if not isinstance(baseline_ocr_source, str) or not baseline_ocr_source:
-        raise BenchmarkError("Baseline report has no Interpreter OCR source hash")
+        raise BenchmarkError("Baseline report has no Ludivoxa OCR source hash")
     if not isinstance(candidate_ocr_source, str) or not candidate_ocr_source:
-        raise BenchmarkError("Candidate report has no Interpreter OCR source hash")
+        raise BenchmarkError("Candidate report has no Ludivoxa OCR source hash")
     if baseline_ocr_source != candidate_ocr_source:
-        raise BenchmarkError("Cannot compare runs made with different Interpreter OCR pipeline source")
+        raise BenchmarkError("Cannot compare runs made with different Ludivoxa OCR pipeline source")
 
     baseline_workload = _comparison_workload(baseline, "Baseline")
     candidate_workload = _comparison_workload(candidate, "Candidate")

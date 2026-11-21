@@ -5,11 +5,11 @@ import json
 import pytest
 from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QLineEdit, QPlainTextEdit, QPushButton
 
-from interpreter.config import Config, LLMSettings, OCRBackend, OwocrSettings, TranslationBackend
-from interpreter.gui.main_window import MainWindow
-from interpreter.gui.theme import ERROR
-from interpreter.languages import SOURCE_LANGUAGES
-from interpreter.llm_translate import DEFAULT_SYSTEM_PROMPT, PROVIDER_LABELS, PROVIDERS
+from ludivoxa.config import Config, LLMSettings, OCRBackend, OwocrSettings, TranslationBackend
+from ludivoxa.gui.main_window import MainWindow
+from ludivoxa.gui.theme import ERROR
+from ludivoxa.languages import SOURCE_LANGUAGES
+from ludivoxa.llm_translate import DEFAULT_SYSTEM_PROMPT, PROVIDER_LABELS, PROVIDERS
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def capture_window(qapp, monkeypatch):
     from PySide6.QtCore import QCoreApplication, QEvent
     from PySide6.QtWidgets import QMainWindow
 
-    from interpreter.config import OverlayMode
+    from ludivoxa.config import OverlayMode
 
     win = MainWindow.__new__(MainWindow)
     QMainWindow.__init__(win)
@@ -64,7 +64,7 @@ def test_capture_feeds_latest_frames_without_repainting_every_poll(capture_windo
 
     import numpy as np
 
-    import interpreter.gui.main_window as module
+    import ludivoxa.gui.main_window as module
 
     win = capture_window
     frame = np.zeros((2, 4, 4), dtype=np.uint8)
@@ -96,10 +96,10 @@ def test_scene_break_and_ocr_miss_preserve_audio_repeat_contract(
     import numpy as np
     from PySide6.QtCore import QObject, Signal
 
-    from interpreter.config import OutputMode, TranslationBackend
-    from interpreter.gui import workers
-    from interpreter.ocr import OCRResult
-    from interpreter.speech import SpeechController, SpeechStream
+    from ludivoxa.config import OutputMode, TranslationBackend
+    from ludivoxa.gui import workers
+    from ludivoxa.ocr import OCRResult
+    from ludivoxa.speech import SpeechController, SpeechStream
 
     win = capture_window
     win._capturing = True
@@ -204,7 +204,7 @@ def test_window_capture_interruption_reports_waiting_and_resumes_processing(capt
 
     import numpy as np
 
-    from interpreter.gui.main_window import NO_SIGNAL_NOTICE_MS, PROCESS_INTERVAL_MS
+    from ludivoxa.gui.main_window import NO_SIGNAL_NOTICE_MS, PROCESS_INTERVAL_MS
 
     win = capture_window
     win._current_window_title = "Game"
@@ -232,7 +232,7 @@ def test_native_capture_dispatch_uses_latest_frame_and_falls_back_when_idle(capt
 
     import numpy as np
 
-    import interpreter.gui.main_window as module
+    import ludivoxa.gui.main_window as module
 
     class TimedCapture(module.WindowCapture):
         bounds = {}
@@ -292,7 +292,7 @@ def test_roi_editor_previews_without_speech_and_saves_only_on_ok(capture_window,
     import numpy as np
     from PySide6.QtCore import QRectF
 
-    from interpreter.gui.ocr_config import OCRConfigDialog
+    from ludivoxa.gui.ocr_config import OCRConfigDialog
 
     win = capture_window
     win._capturing = True
@@ -330,7 +330,7 @@ def test_roi_editor_previews_without_speech_and_saves_only_on_ok(capture_window,
 def test_failed_capture_start_releases_partial_source(capture_window, monkeypatch, source):
     from unittest.mock import MagicMock
 
-    import interpreter.gui.main_window as module
+    import ludivoxa.gui.main_window as module
 
     win = capture_window
     capture = MagicMock()
@@ -396,8 +396,8 @@ def test_queued_results_from_stopped_capture_are_ignored(capture_window, restart
     import threading
     from unittest.mock import MagicMock
 
-    from interpreter.config import OverlayMode
-    from interpreter.ocr import OCRResult
+    from ludivoxa.config import OverlayMode
+    from ludivoxa.ocr import OCRResult
 
     win = capture_window
     win._capturing = True
@@ -466,7 +466,7 @@ def test_wayland_failure_displays_details_and_cleans_up_before_retry(capture_win
 
     monkeypatch.setitem(
         sys.modules,
-        "interpreter.capture.linux_wayland",
+        "ludivoxa.capture.linux_wayland",
         SimpleNamespace(
             WaylandPortalCapture=Portal,
             WaylandCaptureStream=Stream,
@@ -551,7 +551,7 @@ def _panel(config: Config) -> MainWindow:
 
 def test_llm_test_uses_the_pending_source_language(qapp, monkeypatch):
     """Greptile: Test must validate the language the user selected, not the last applied one."""
-    import interpreter.gui.main_window as module
+    import ludivoxa.gui.main_window as module
 
     seen = {}
 
@@ -764,7 +764,7 @@ def _source_window(config: Config, monkeypatch, windows: list[dict], devices: li
 
     QComboBox hands item data back as lists (QVariant), so expectations below use lists.
     """
-    import interpreter.gui.main_window as module
+    import ludivoxa.gui.main_window as module
 
     monkeypatch.setattr(module, "list_video_devices", lambda: list(devices))
     # Fresh copies: the window stores the list it gets, and the tests mutate the originals
@@ -847,7 +847,7 @@ def test_banner_click_during_video_session_is_not_persisted(qapp):
     """Greptile: clicking the (already checked) Banner button while locked must not save Banner."""
     from PySide6.QtWidgets import QPushButton
 
-    from interpreter.config import OverlayMode
+    from ludivoxa.config import OverlayMode
 
     config = Config(overlay_mode=OverlayMode.INPLACE)
     win = MainWindow.__new__(MainWindow)
@@ -880,8 +880,8 @@ def test_no_signal_state_is_reset_when_capture_stops(qapp, monkeypatch):
     import numpy as np
     from PySide6.QtWidgets import QLabel, QMainWindow, QPushButton
 
-    import interpreter.gui.main_window as module
-    from interpreter.config import OverlayMode
+    import ludivoxa.gui.main_window as module
+    from ludivoxa.config import OverlayMode
 
     class NoSignalVideo:
         """A video device that never delivers a frame."""

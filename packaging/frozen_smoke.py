@@ -22,14 +22,14 @@ def run_smoke(report_path):
         from PIL import Image, ImageDraw, ImageFont
         from PySide6.QtWidgets import QApplication
 
-        from interpreter import __version__
-        from interpreter.config import CharacterVoices, Config, OutputMode
-        from interpreter.gui.workers import ProcessWorker
-        from interpreter.languages import TARGET_LANGUAGE_PRESETS, contains_kana, contains_script
-        from interpreter.llm_translate import LLMTranslator
-        from interpreter.ocr import create_ocr
-        from interpreter.paddle_ocr import IsolatedPaddleOCR
-        from interpreter.speech import (
+        from ludivoxa import __version__
+        from ludivoxa.config import CharacterVoices, Config, OutputMode
+        from ludivoxa.gui.workers import ProcessWorker
+        from ludivoxa.languages import TARGET_LANGUAGE_PRESETS, contains_kana, contains_script
+        from ludivoxa.llm_translate import LLMTranslator
+        from ludivoxa.ocr import create_ocr
+        from ludivoxa.paddle_ocr import IsolatedPaddleOCR
+        from ludivoxa.speech import (
             OfflineSynthesizer,
             PCMPlayer,
             SpeechController,
@@ -298,7 +298,7 @@ def run_smoke(report_path):
             raise AssertionError(f"Expected one stable utterance, got {spoken}")
         report["stable_pipeline_utterances"] = len(spoken)
 
-        from interpreter.ocr import OCRResult
+        from ludivoxa.ocr import OCRResult
 
         class JitterOCR:
             confidence_threshold = config.ocr_confidence
@@ -326,7 +326,7 @@ def run_smoke(report_path):
         # OCR while restoring detection positions for the full-window overlay.
         from types import SimpleNamespace
 
-        from interpreter.gui.main_window import MainWindow
+        from ludivoxa.gui.main_window import MainWindow
 
         canvas = Image.new("RGB", (1100, 500), "white")
         ImageDraw.Draw(canvas).text(

@@ -12,7 +12,7 @@ import pytest
 if sys.platform != "win32":
     pytest.skip("Win32 capture", allow_module_level=True)
 
-from interpreter.capture import windows as capture
+from ludivoxa.capture import windows as capture
 
 
 @pytest.fixture

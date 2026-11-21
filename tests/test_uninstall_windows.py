@@ -72,7 +72,7 @@ def _base_environment(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path,
         }
     )
     environment.pop("HF_HOME", None)
-    environment.pop("INTERPRETER_HOME", None)
+    environment.pop("LUDIVOXA_HOME", None)
     environment.pop("UV_CACHE_DIR", None)
     environment.pop("UV_PYTHON_INSTALL_DIR", None)
     environment.pop("UV_TOOL_BIN_DIR", None)
@@ -83,7 +83,7 @@ def _base_environment(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path,
 
 
 def _populate_user_data(user_profile: Path, model_hub: Path) -> Path:
-    _create_file(user_profile / ".interpreter" / "config.yml")
+    _create_file(user_profile / ".ludivoxa" / "config.yml")
     for model_cache_name in MODEL_CACHE_NAMES:
         _create_file(model_hub / model_cache_name / "blobs" / "model.bin")
         _create_file(model_hub / ".locks" / model_cache_name / "download.lock")
@@ -111,13 +111,13 @@ def test_removes_partial_install_models_and_prunes_uv_cache(tmp_path: Path) -> N
 echo %*>>"%UV_TEST_LOG%"
 if "%1 %2 %3"=="tool dir --bin" echo %UV_TOOL_BIN_DIR%
 if "%1 %2"=="tool dir" if not "%3"=="--bin" echo %UV_TOOL_DIR%
-if "%1 %2"=="tool list" echo interpreter-v2 v2.17.4
+if "%1 %2"=="tool list" echo ludivoxa v2.17.4
 exit /b 0
 """,
     )
 
-    partial_environment = tool_root / "interpreter-v2"
-    orphan_executable = tool_bin / "interpreter-v2.exe"
+    partial_environment = tool_root / "ludivoxa"
+    orphan_executable = tool_bin / "ludivoxa.exe"
     _create_file(partial_environment / "partial-download.whl")
     _create_file(orphan_executable)
     unrelated_model = _populate_user_data(user_profile, model_hub)
@@ -136,15 +136,15 @@ exit /b 0
     assert result.returncode == 0, result.stdout + result.stderr
     assert not partial_environment.exists()
     assert not orphan_executable.exists()
-    assert not (user_profile / ".interpreter").exists()
+    assert not (user_profile / ".ludivoxa").exists()
     for model_cache_name in MODEL_CACHE_NAMES:
         assert not (model_hub / model_cache_name).exists()
         assert not (model_hub / ".locks" / model_cache_name).exists()
-    assert not (model_hub / "models--bquenin--legacy-model").exists()
+    assert (model_hub / "models--bquenin--legacy-model").exists()
     assert unrelated_model.exists()
 
     uv_commands = command_log.read_text(encoding="utf-8").splitlines()
-    assert "tool uninstall interpreter-v2" in uv_commands
+    assert "tool uninstall ludivoxa" in uv_commands
     assert not any(command.startswith("cache clean ") for command in uv_commands)
     assert "cache prune" in uv_commands
 
@@ -170,7 +170,7 @@ exit /b 0
             "UV_TEST_LOG": str(command_log),
         }
     )
-    install_cache = local_app_data / "interpreter-v2" / "uv-cache"
+    install_cache = local_app_data / "ludivoxa" / "uv-cache"
     _create_file(install_cache / "partial-download.whl")
 
     result = _run_powershell_script(INSTALL_SCRIPT, environment)
@@ -181,7 +181,7 @@ exit /b 0
     assert f"--cache-dir {install_cache}" in install_command
     assert f"cache clean --cache-dir {install_cache}" in uv_commands
     assert not install_cache.exists()
-    assert not (user_profile / ".local" / "bin" / "interpreter-v2.exe").exists()
+    assert not (user_profile / ".local" / "bin" / "ludivoxa.exe").exists()
 
 
 @pytest.mark.parametrize("use_custom_tool_dirs", [False, True], ids=["default-dirs", "custom-dirs"])
@@ -200,9 +200,9 @@ def test_cleans_files_and_models_when_uv_is_unavailable(tmp_path: Path, use_cust
         tool_root = app_data / "uv" / "tools"
         tool_bin = user_profile / ".local" / "bin"
 
-    partial_environment = tool_root / "interpreter-v2"
-    orphan_executable = tool_bin / "interpreter-v2.exe"
-    install_cache = local_app_data / "interpreter-v2" / "uv-cache"
+    partial_environment = tool_root / "ludivoxa"
+    orphan_executable = tool_bin / "ludivoxa.exe"
+    install_cache = local_app_data / "ludivoxa" / "uv-cache"
     _create_file(partial_environment / "partial-download.whl")
     _create_file(orphan_executable)
     _create_file(install_cache / "partial-download.whl")
@@ -215,13 +215,13 @@ def test_cleans_files_and_models_when_uv_is_unavailable(tmp_path: Path, use_cust
     assert not partial_environment.exists()
     assert not orphan_executable.exists()
     assert not install_cache.exists()
-    assert not (user_profile / ".interpreter").exists()
+    assert not (user_profile / ".ludivoxa").exists()
     for model_cache_name in MODEL_CACHE_NAMES:
         assert not (model_hub / model_cache_name).exists()
     assert unrelated_model.exists()
 
 
-# --- Custom install location (INTERPRETER_HOME) -------------------------------
+# --- Custom install location (LUDIVOXA_HOME) -------------------------------
 
 # Records every call plus the uv directories it would use, and answers the
 # queries the scripts make. UV_TEST_INSTALL_EXIT makes `tool install` fail.
@@ -231,7 +231,7 @@ echo UV_TOOL_DIR=%UV_TOOL_DIR%>>"%UV_TEST_LOG%"
 echo UV_PYTHON_INSTALL_DIR=%UV_PYTHON_INSTALL_DIR%>>"%UV_TEST_LOG%"
 if "%1 %2 %3"=="tool dir --bin" echo %UV_TOOL_BIN_DIR%
 if "%1 %2"=="tool dir" if not "%3"=="--bin" echo %UV_TOOL_DIR%
-if "%1 %2"=="tool list" echo interpreter-v2 v2.17.6
+if "%1 %2"=="tool list" echo ludivoxa v2.17.6
 if "%1 %2"=="tool install" if not "%UV_TEST_INSTALL_EXIT%"=="" exit /b %UV_TEST_INSTALL_EXIT%
 exit /b 0
 """
@@ -251,12 +251,12 @@ def _log_lines(command_log: Path) -> list[str]:
 
 
 def _pointer(user_profile: Path) -> Path:
-    return user_profile / ".interpreter" / "install-dir"
+    return user_profile / ".ludivoxa" / "install-dir"
 
 
 def _install_command(root: Path | None, local_app_data: Path) -> str:
-    cache = root / "uv-cache" if root else local_app_data / "interpreter-v2" / "uv-cache"
-    return f"tool install --force --upgrade --python 3.12 --cache-dir {cache} interpreter-v2"
+    cache = root / "uv-cache" if root else local_app_data / "ludivoxa" / "uv-cache"
+    return f"tool install --force --upgrade --python 3.12 --cache-dir {cache} ."
 
 
 def test_default_install_keeps_previous_behavior(tmp_path: Path) -> None:
@@ -275,8 +275,8 @@ def test_default_install_keeps_previous_behavior(tmp_path: Path) -> None:
 
 def test_install_to_custom_location(tmp_path: Path) -> None:
     environment, user_profile, _, local_app_data, _, command_log = _environment_with_uv_stub(tmp_path)
-    root = tmp_path / "other-drive" / "interpreter"
-    environment["INTERPRETER_HOME"] = str(root)
+    root = tmp_path / "other-drive" / "ludivoxa"
+    environment["LUDIVOXA_HOME"] = str(root)
 
     result = _run_powershell_script(INSTALL_SCRIPT, environment)
 
@@ -288,9 +288,9 @@ def test_install_to_custom_location(tmp_path: Path) -> None:
     assert f"cache clean --cache-dir {root / 'uv-cache'}" in lines
     assert not any(line.startswith("tool uninstall") for line in lines)
     assert root.is_dir()
-    assert (root / ".interpreter-v2").is_file()
+    assert (root / ".ludivoxa").is_file()
     assert not (root / "uv-cache").exists()
-    assert not (local_app_data / "interpreter-v2").exists()
+    assert not (local_app_data / "ludivoxa").exists()
     assert _pointer(user_profile).read_text(encoding="utf-8") == str(root)
     assert f"Installed to {root}" in result.stdout
     assert str(root / "models") in result.stdout
@@ -298,17 +298,17 @@ def test_install_to_custom_location(tmp_path: Path) -> None:
 
 def test_relative_location_and_trailing_separator_are_normalized(tmp_path: Path) -> None:
     environment, user_profile, _, _, _, _ = _environment_with_uv_stub(tmp_path)
-    environment["INTERPRETER_HOME"] = "relative\\interpreter\\"
+    environment["LUDIVOXA_HOME"] = "relative\\ludivoxa\\"
 
     result = _run_powershell_script(INSTALL_SCRIPT, environment, cwd=tmp_path)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert _pointer(user_profile).read_text(encoding="utf-8") == str(tmp_path / "relative" / "interpreter")
+    assert _pointer(user_profile).read_text(encoding="utf-8") == str(tmp_path / "relative" / "ludivoxa")
 
 
 def test_drive_root_is_rejected(tmp_path: Path) -> None:
     environment, user_profile, _, _, _, command_log = _environment_with_uv_stub(tmp_path)
-    environment["INTERPRETER_HOME"] = tmp_path.anchor  # e.g. C:\\
+    environment["LUDIVOXA_HOME"] = tmp_path.anchor  # e.g. C:\\
 
     result = _run_powershell_script(INSTALL_SCRIPT, environment)
 
@@ -320,9 +320,9 @@ def test_drive_root_is_rejected(tmp_path: Path) -> None:
 
 def test_upgrade_reuses_recorded_location(tmp_path: Path) -> None:
     environment, user_profile, _, local_app_data, _, command_log = _environment_with_uv_stub(tmp_path)
-    root = tmp_path / "other-drive" / "interpreter"
+    root = tmp_path / "other-drive" / "ludivoxa"
     _create_file(_pointer(user_profile), str(root))
-    _create_file(root / "uv" / "tools" / "interpreter-v2" / "pyvenv.cfg")
+    _create_file(root / "uv" / "tools" / "ludivoxa" / "pyvenv.cfg")
 
     result = _run_powershell_script(INSTALL_SCRIPT, environment)
 
@@ -330,16 +330,16 @@ def test_upgrade_reuses_recorded_location(tmp_path: Path) -> None:
     lines = _log_lines(command_log)
     assert _install_command(root, local_app_data) in lines
     assert not any(line.startswith("tool uninstall") for line in lines)
-    assert (root / "uv" / "tools" / "interpreter-v2" / "pyvenv.cfg").exists()
+    assert (root / "uv" / "tools" / "ludivoxa" / "pyvenv.cfg").exists()
     assert _pointer(user_profile).read_text(encoding="utf-8") == str(root)
 
 
 def test_moving_from_user_profile_removes_previous_environment(tmp_path: Path) -> None:
     environment, _, app_data, _, _, command_log = _environment_with_uv_stub(tmp_path)
-    default_environment = app_data / "uv" / "tools" / "interpreter-v2"
+    default_environment = app_data / "uv" / "tools" / "ludivoxa"
     _create_file(default_environment / "pyvenv.cfg")
-    root = tmp_path / "other-drive" / "interpreter"
-    environment["INTERPRETER_HOME"] = str(root)
+    root = tmp_path / "other-drive" / "ludivoxa"
+    environment["LUDIVOXA_HOME"] = str(root)
 
     result = _run_powershell_script(INSTALL_SCRIPT, environment)
 
@@ -356,12 +356,12 @@ def test_moving_from_user_profile_removes_previous_environment(tmp_path: Path) -
 
 def test_moving_between_custom_locations_removes_previous_environment(tmp_path: Path) -> None:
     environment, user_profile, _, local_app_data, _, command_log = _environment_with_uv_stub(tmp_path)
-    old_root = tmp_path / "old-drive" / "interpreter"
-    new_root = tmp_path / "new-drive" / "interpreter"
+    old_root = tmp_path / "old-drive" / "ludivoxa"
+    new_root = tmp_path / "new-drive" / "ludivoxa"
     _create_file(_pointer(user_profile), str(old_root))
-    _create_file(old_root / "uv" / "tools" / "interpreter-v2" / "pyvenv.cfg")
+    _create_file(old_root / "uv" / "tools" / "ludivoxa" / "pyvenv.cfg")
     _create_file(old_root / "models" / MODEL_CACHE_NAMES[0] / "blobs" / "model.bin")
-    environment["INTERPRETER_HOME"] = str(new_root)
+    environment["LUDIVOXA_HOME"] = str(new_root)
 
     result = _run_powershell_script(INSTALL_SCRIPT, environment)
 
@@ -369,7 +369,7 @@ def test_moving_between_custom_locations_removes_previous_environment(tmp_path: 
     lines = _log_lines(command_log)
     assert _install_command(new_root, local_app_data) in lines
     assert not any(line.startswith("tool uninstall") for line in lines)
-    assert not (old_root / "uv" / "tools" / "interpreter-v2").exists()
+    assert not (old_root / "uv" / "tools" / "ludivoxa").exists()
     # Models are never deleted by the installer; the user is told where they are.
     assert (old_root / "models" / MODEL_CACHE_NAMES[0]).exists()
     assert f"remain in {old_root / 'models'}" in result.stdout
@@ -378,10 +378,10 @@ def test_moving_between_custom_locations_removes_previous_environment(tmp_path: 
 
 def test_failed_install_to_custom_location_keeps_previous_install(tmp_path: Path) -> None:
     environment, user_profile, app_data, _, _, command_log = _environment_with_uv_stub(tmp_path)
-    default_environment = app_data / "uv" / "tools" / "interpreter-v2"
+    default_environment = app_data / "uv" / "tools" / "ludivoxa"
     _create_file(default_environment / "pyvenv.cfg")
-    root = tmp_path / "other-drive" / "interpreter"
-    environment["INTERPRETER_HOME"] = str(root)
+    root = tmp_path / "other-drive" / "ludivoxa"
+    environment["LUDIVOXA_HOME"] = str(root)
     environment["UV_TEST_INSTALL_EXIT"] = "42"
     _create_file(root / "uv-cache" / "partial-download.whl")
 
@@ -398,13 +398,13 @@ def test_failed_install_to_custom_location_keeps_previous_install(tmp_path: Path
 
 def _populate_custom_install(root: Path, user_profile: Path, model_hub: Path, *, marker: bool = True) -> Path:
     if marker:
-        _create_file(root / ".interpreter-v2", "Created by the interpreter-v2 installer.")
-    _create_file(root / "uv" / "tools" / "interpreter-v2" / "pyvenv.cfg")
+        _create_file(root / ".ludivoxa", "Created by the ludivoxa installer.")
+    _create_file(root / "uv" / "tools" / "ludivoxa" / "pyvenv.cfg")
     _create_file(root / "uv" / "python" / "cpython-3.12" / "python.exe")
     _create_file(root / "uv-cache" / "partial-download.whl")
     for model_cache_name in MODEL_CACHE_NAMES:
         _create_file(root / "models" / model_cache_name / "blobs" / "model.bin")
-    _create_file(user_profile / ".interpreter" / "config.yml")
+    _create_file(user_profile / ".ludivoxa" / "config.yml")
     # A model left in the default cache by an install that was later moved.
     _create_file(model_hub / MODEL_CACHE_NAMES[2] / "blobs" / "model.bin")
     unrelated_model = model_hub / "models--someone-else--unrelated"
@@ -414,21 +414,21 @@ def _populate_custom_install(root: Path, user_profile: Path, model_hub: Path, *,
 
 def test_uninstall_removes_recorded_location(tmp_path: Path) -> None:
     environment, user_profile, app_data, _, model_hub, command_log = _environment_with_uv_stub(tmp_path)
-    root = tmp_path / "other-drive" / "interpreter"
+    root = tmp_path / "other-drive" / "ludivoxa"
     unrelated_model = _populate_custom_install(root, user_profile, model_hub)
     _create_file(_pointer(user_profile), str(root))
-    leftover_default_environment = app_data / "uv" / "tools" / "interpreter-v2"
+    leftover_default_environment = app_data / "uv" / "tools" / "ludivoxa"
     _create_file(leftover_default_environment / "pyvenv.cfg")
 
     result = _run_uninstaller(environment)
 
     assert result.returncode == 0, result.stdout + result.stderr
     lines = _log_lines(command_log)
-    uninstall_index = lines.index("tool uninstall interpreter-v2")
+    uninstall_index = lines.index("tool uninstall ludivoxa")
     assert lines[uninstall_index + 1] == f"UV_TOOL_DIR={root / 'uv' / 'tools'}"
     assert not root.exists()
     assert not leftover_default_environment.exists()
-    assert not (user_profile / ".interpreter").exists()
+    assert not (user_profile / ".ludivoxa").exists()
     assert not (model_hub / MODEL_CACHE_NAMES[2]).exists()
     assert unrelated_model.exists()
     assert f"Removed install location {root}" in result.stdout
@@ -439,10 +439,10 @@ def test_uninstall_keeps_location_with_other_files_and_works_without_uv(tmp_path
     empty_path = tmp_path / "empty-path"
     empty_path.mkdir()
     environment["PATH"] = str(empty_path)
-    root = tmp_path / "other-drive" / "interpreter"
+    root = tmp_path / "other-drive" / "ludivoxa"
     _populate_custom_install(root, user_profile, model_hub)
     _create_file(root / "my-notes.txt", "keep me")
-    environment["INTERPRETER_HOME"] = str(root)
+    environment["LUDIVOXA_HOME"] = str(root)
 
     result = _run_uninstaller(environment)
 
@@ -453,23 +453,23 @@ def test_uninstall_keeps_location_with_other_files_and_works_without_uv(tmp_path
     assert not (root / "models").exists()
     assert (root / "my-notes.txt").read_text(encoding="utf-8") == "keep me"
     assert "Kept" in result.stdout
-    assert not (user_profile / ".interpreter").exists()
+    assert not (user_profile / ".ludivoxa").exists()
 
 
 def test_uninstall_leaves_location_without_installer_marker_alone(tmp_path: Path) -> None:
-    """A mistyped or shared INTERPRETER_HOME must not have its contents deleted."""
+    """A mistyped or shared LUDIVOXA_HOME must not have its contents deleted."""
     environment, user_profile, _, _, model_hub, _ = _environment_with_uv_stub(tmp_path)
     root = tmp_path / "shared-tools"
     _populate_custom_install(root, user_profile, model_hub, marker=False)
     _create_file(root / "uv" / "tools" / "other-tool" / "pyvenv.cfg")
-    environment["INTERPRETER_HOME"] = str(root)
+    environment["LUDIVOXA_HOME"] = str(root)
 
     result = _run_uninstaller(environment)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "was not created by the interpreter-v2 installer" in result.stdout
-    # Only interpreter-v2's own tool environment goes; everything else stays.
-    assert not (root / "uv" / "tools" / "interpreter-v2").exists()
+    assert "was not created by the ludivoxa installer" in result.stdout
+    # Only ludivoxa's own tool environment goes; everything else stays.
+    assert not (root / "uv" / "tools" / "ludivoxa").exists()
     assert (root / "uv" / "tools" / "other-tool" / "pyvenv.cfg").exists()
     assert (root / "uv" / "python").exists()
     assert (root / "uv-cache").exists()

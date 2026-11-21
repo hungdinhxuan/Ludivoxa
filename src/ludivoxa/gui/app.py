@@ -47,7 +47,7 @@ def _get_gpu_info() -> str:
         return "cpu"
 
 
-class InterpreterApp:
+class LudivoxaApp:
     """Main application."""
 
     def __init__(self, config: Config):
@@ -62,7 +62,7 @@ class InterpreterApp:
 
         # Set desktop filename before creating QApplication (required for Wayland app_id)
         if platform.system() == "Linux":
-            QApplication.setDesktopFileName("interpreter-v2")
+            QApplication.setDesktopFileName("ludivoxa")
 
         self._app = QApplication(sys.argv)
         self._app.setApplicationName("Ludivoxa")
@@ -177,6 +177,6 @@ def run():
     config = Config.load()
 
     # Create and run app
-    app = InterpreterApp(config)
+    app = LudivoxaApp(config)
     app.setup()
     sys.exit(app.run())

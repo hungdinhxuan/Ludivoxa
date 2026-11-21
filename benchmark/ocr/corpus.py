@@ -17,7 +17,7 @@ from benchlib import (
     write_json,
 )
 
-USER_AGENT = "InterpreterOCRBenchmark/1.0 (https://github.com/bquenin/interpreter)"
+USER_AGENT = "LudivoxaOCRBenchmark/1.0 (https://github.com/hungdinhxuan/Ludivoxa)"
 
 
 def _safe_target(data_dir: Path, relative: str) -> Path:

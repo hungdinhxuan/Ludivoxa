@@ -14,7 +14,7 @@ import pytest
 import requests
 from PySide6.QtWidgets import QApplication
 
-from interpreter.config import (
+from ludivoxa.config import (
     Config,
     LLMSettings,
     OCRBackend,
@@ -23,13 +23,13 @@ from interpreter.config import (
     PaddleSettings,
     TranslationBackend,
 )
-from interpreter.gui.workers import ProcessWorker
-from interpreter.language_detection import detect_language
-from interpreter.languages import SAMPLE_TEXT, contains_script
-from interpreter.llm_translate import LLMTranslationError, LLMTranslator
-from interpreter.models import ModelLoadError
-from interpreter.ocr import OCRResult
-from interpreter.paddle_ocr import PaddleOCR
+from ludivoxa.gui.workers import ProcessWorker
+from ludivoxa.language_detection import detect_language
+from ludivoxa.languages import SAMPLE_TEXT, contains_script
+from ludivoxa.llm_translate import LLMTranslationError, LLMTranslator
+from ludivoxa.models import ModelLoadError
+from ludivoxa.ocr import OCRResult
+from ludivoxa.paddle_ocr import PaddleOCR
 
 LANGUAGES = ["English", "Japanese", "Korean"]
 TARGET_TRANSLATIONS = {
@@ -201,10 +201,10 @@ def test_target_preserves_unicode_and_uses_overlay_with_saved_speech_mode(
 def test_first_read_ocr_jitter_reaches_http_and_audio_once(endpoint, qapp, monkeypatch, provider):
     from PySide6.QtCore import QObject, Signal
 
-    from interpreter.config import OutputMode
-    from interpreter.gui import workers
-    from interpreter.ocr import OCRResult
-    from interpreter.speech import SpeechController, _wav_bytes
+    from ludivoxa.config import OutputMode
+    from ludivoxa.gui import workers
+    from ludivoxa.ocr import OCRResult
+    from ludivoxa.speech import SpeechController, _wav_bytes
 
     base, calls = endpoint
     config = Config(
@@ -343,6 +343,26 @@ def test_config_compatibility_and_paddle_roundtrip(tmp_path):
     loaded = Config.load(str(path))
     assert loaded.paddle == config.paddle and loaded.source_language == "Auto"
     assert LLMSettings().target_language == "Vietnamese"
+
+
+def test_home_config_is_carried_over_to_the_new_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    legacy = tmp_path / ".interpreter" / "config.yml"
+    legacy.parent.mkdir()
+    original = "source_language: Korean\nllm:\n  target_language: Japanese\n"
+    legacy.write_text(original, encoding="utf-8")
+
+    config = Config.load()
+    assert config.source_language == "Korean"
+    assert config.llm.target_language == "Japanese"
+    config.llm.target_language = "Traditional Chinese"
+    config.save()
+
+    assert legacy.read_text(encoding="utf-8") == original
+    assert (tmp_path / ".ludivoxa" / "config.yml").is_file()
+    assert Config.load().llm.target_language == "Traditional Chinese"
     assert PaddleSettings.from_dict({"cpu_threads": -1, "max_side": "bad"}) == PaddleSettings()
 
 

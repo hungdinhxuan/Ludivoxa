@@ -23,14 +23,14 @@ def isolated_definition(tmp_path):
     start, end = text.index("[Icons]"), text.index("[Run]")
     text = text[:start] + text[end:]
     text = text.replace(
-        'Filename: "{app}\\Interpreter.exe"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: IsUpdateRestart',
+        'Filename: "{app}\\Ludivoxa.exe"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: IsUpdateRestart',
         'Filename: "{sys}\\WindowsPowerShell\\v1.0\\powershell.exe"; '
         'Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\\_internal\\restart-test.ps1"""; '
         'WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: IsUpdateRestart',
     )
     for old, new in (
         (r"..\LICENSE", ROOT / "LICENSE"),
-        (r"..\src\interpreter\resources\icons\icon.ico", ROOT / "src/interpreter/resources/icons/icon.ico"),
+        (r"..\src\ludivoxa\resources\icons\icon.ico", ROOT / "src/ludivoxa/resources/icons/icon.ico"),
         ('"Stop-LocalRuntime.ps1"', '"' + str(ROOT / "packaging/Stop-LocalRuntime.ps1") + '"'),
         ('"THIRD_PARTY_NOTICES.txt"', '"' + str(ROOT / "packaging/THIRD_PARTY_NOTICES.txt") + '"'),
     ):
@@ -41,15 +41,15 @@ def isolated_definition(tmp_path):
 
 
 @pytest.mark.skipif(os.name != "nt" or not COMPILER.is_file(), reason="Native Inno Setup compiler required")
-@pytest.mark.parametrize("app_version", ["1.0.1", "1.1.2rc1"])
-def test_app_update_preserves_models_and_configuration_in_isolated_install(tmp_path, app_version):
+@pytest.mark.parametrize("app_version,legacy", [("1.0.1", False), ("1.1.2rc1", False), ("1.0.1", True)])
+def test_app_update_preserves_models_and_configuration_in_isolated_install(tmp_path, app_version, legacy):
     payload = tmp_path / "payload"
     payload.mkdir()
-    (payload / "Interpreter.exe").write_bytes(b"new-app-file")
+    (payload / "Ludivoxa.exe").write_bytes(b"new-app-file")
     (payload / "_internal").mkdir()
     (payload / "_internal/library.dat").write_bytes(b"new-native-library")
-    (payload / "_internal/interpreter_v2-1.0.1.dist-info").mkdir()
-    (payload / "_internal/interpreter_v2-1.0.1.dist-info/METADATA").write_text("Version: 1.0.1\n")
+    (payload / "_internal/ludivoxa-1.0.1.dist-info").mkdir()
+    (payload / "_internal/ludivoxa-1.0.1.dist-info/METADATA").write_text("Version: 1.0.1\n")
     (payload / "_internal/restart-test.ps1").write_text(
         "[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'restart-observed.txt'), 'ok')"
     )
@@ -58,10 +58,17 @@ def test_app_update_preserves_models_and_configuration_in_isolated_install(tmp_p
         (payload / name / "keep.dat").write_bytes(b"must-not-be-packaged")
     destination = tmp_path / "install with spaces"
     destination.mkdir()
-    (destination / "Interpreter.exe").write_bytes(b"old-app-file")
+    previous_exe = destination / ("Interpreter.exe" if legacy else "Ludivoxa.exe")
+    previous_exe.write_bytes(b"old-app-file")
     (destination / "config.yml").write_text("window_title: My game\n")
-    (destination / "_internal/interpreter_v2-1.0.0.dist-info").mkdir(parents=True)
-    (destination / "_internal/interpreter_v2-1.0.0.dist-info/METADATA").write_text("Version: 1.0.0\n")
+    previous_package = "interpreter_v2" if legacy else "ludivoxa"
+    previous_metadata = destination / "_internal" / f"{previous_package}-1.0.0.dist-info"
+    previous_metadata.mkdir(parents=True)
+    (previous_metadata / "METADATA").write_text("Version: 1.0.0\n")
+    if legacy:
+        obsolete_resources = destination / "_internal/interpreter/resources"
+        obsolete_resources.mkdir(parents=True)
+        (obsolete_resources / "old-icon.png").touch()
     (destination / "_internal/other_package-1.0.0.dist-info").mkdir()
     (destination / "_internal/other_package-1.0.0.dist-info/METADATA").write_text("Version: 1.0.0\n")
     for name in ("models", "llm-models", "runtime"):
@@ -96,10 +103,13 @@ def test_app_update_preserves_models_and_configuration_in_isolated_install(tmp_p
         timeout=30,
     )
     assert result.returncode == 0
-    assert (destination / "Interpreter.exe").read_bytes() == b"new-app-file"
+    assert (destination / "Ludivoxa.exe").read_bytes() == b"new-app-file"
     assert (destination / "_internal/library.dat").read_bytes() == b"new-native-library"
-    assert not (destination / "_internal/interpreter_v2-1.0.0.dist-info").exists()
-    assert (destination / "_internal/interpreter_v2-1.0.1.dist-info/METADATA").read_text() == "Version: 1.0.1\n"
+    assert not previous_metadata.exists()
+    if legacy:
+        assert not previous_exe.exists()
+        assert not obsolete_resources.exists()
+    assert (destination / "_internal/ludivoxa-1.0.1.dist-info/METADATA").read_text() == "Version: 1.0.1\n"
     assert (destination / "_internal/other_package-1.0.0.dist-info/METADATA").read_text() == "Version: 1.0.0\n"
     assert (destination / "config.yml").read_text() == "window_title: My game\n"
     for name in ("models", "llm-models", "runtime"):
@@ -131,7 +141,7 @@ def test_app_update_preserves_models_and_configuration_in_isolated_install(tmp_p
         timeout=30,
     )
     assert rejected.returncode != 0
-    assert not (fresh / "Interpreter.exe").exists()
+    assert not (fresh / "Ludivoxa.exe").exists()
 
 
 @pytest.mark.skipif(os.name != "nt" or not COMPILER.is_file(), reason="Native Inno Setup compiler required")
@@ -144,10 +154,10 @@ def test_delta_installer_verifies_base_and_only_replaces_changed_files(tmp_path,
     library_name = "_internal/libs/Bình (shared).dll"
     shared = b"unchanged native dependency"
     for root, version in ((destination, "1.0.0"), (target, "1.0.1")):
-        info = root / f"_internal/interpreter_v2-{version}.dist-info"
+        info = root / f"_internal/ludivoxa-{version}.dist-info"
         info.mkdir(parents=True)
         (info / "METADATA").write_text(f"Version: {version}\n")
-        (root / "Interpreter.exe").write_bytes(version.encode())
+        (root / "Ludivoxa.exe").write_bytes(version.encode())
         (root / library_name).parent.mkdir()
         (root / library_name).write_bytes(shared)
     (destination / "_internal/old.dll").write_bytes(b"obsolete")
@@ -177,7 +187,7 @@ def test_delta_installer_verifies_base_and_only_replaces_changed_files(tmp_path,
     rejected = subprocess.run([*command, f"/LOG={tmp_path / 'rejected.log'}"], timeout=30)
     assert rejected.returncode == 7
     assert "does not match the smaller update" in (tmp_path / "rejected.log").read_text(encoding="utf-8-sig")
-    assert (destination / "Interpreter.exe").read_bytes() == b"1.0.0"
+    assert (destination / "Ludivoxa.exe").read_bytes() == b"1.0.0"
     assert (destination / "_internal/old.dll").is_file()
     assert not (destination / "_internal/new data/file.txt").exists()
     library.write_bytes(shared)
@@ -186,11 +196,11 @@ def test_delta_installer_verifies_base_and_only_replaces_changed_files(tmp_path,
 
     result = subprocess.run([*command, "/LUDIVOXARESTART=1", f"/LOG={tmp_path / 'installed.log'}"], timeout=30)
     assert result.returncode == 0, (tmp_path / "installed.log").read_text(encoding="utf-8-sig")
-    assert (destination / "Interpreter.exe").read_bytes() == b"1.0.1"
+    assert (destination / "Ludivoxa.exe").read_bytes() == b"1.0.1"
     assert library.stat().st_mtime_ns == original_mtime
     assert not (destination / "_internal/old.dll").exists()
-    assert not (destination / "_internal/interpreter_v2-1.0.0.dist-info").exists()
-    assert (destination / "_internal/interpreter_v2-1.0.1.dist-info/METADATA").is_file()
+    assert not (destination / "_internal/ludivoxa-1.0.0.dist-info").exists()
+    assert (destination / "_internal/ludivoxa-1.0.1.dist-info/METADATA").is_file()
     assert (destination / "_internal/new data/file.txt").read_text() == "new file"
     assert all(path.read_text() == "user data" for path in keep)
     marker = destination / "_internal/restart-observed.txt"

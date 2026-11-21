@@ -177,7 +177,7 @@ class UpdatesPage(QWidget):
                             pass
 
             try:
-                return client.download(release, Path.home() / ".interpreter/updates", progress)
+                return client.download(release, Path.home() / ".ludivoxa/updates", progress)
             finally:
                 client.close()
 

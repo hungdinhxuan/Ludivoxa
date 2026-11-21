@@ -35,8 +35,8 @@ def load_engine(args):
 
     if not args.detector or not args.recognizer:
         raise ValueError("PaddleOCR needs --detector and --recognizer pointing to local model directories.")
-    from interpreter.config import PaddleSettings
-    from interpreter.paddle_ocr import PaddleOCR
+    from ludivoxa.config import PaddleSettings
+    from ludivoxa.paddle_ocr import PaddleOCR
 
     settings = PaddleSettings(
         str(args.detector.resolve()), str(args.recognizer.resolve()), cpu_threads=args.threads, max_side=args.max_side

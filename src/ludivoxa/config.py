@@ -1,4 +1,4 @@
-"""Configuration management for Interpreter."""
+"""Configuration management for Ludivoxa."""
 
 import math
 import os
@@ -18,6 +18,7 @@ from .languages import (
     is_vietnamese_target,
     normalize_source_language,
 )
+from .paths import get_config_dir, get_legacy_config_dir
 
 
 class OverlayMode(str, Enum):
@@ -480,17 +481,23 @@ class Config:
         Returns:
             Config instance with loaded values.
         """
+        migrated_path = None
         if config_path is None:
             # Look for config in common locations
             search_paths = [
                 Path("config.yml"),
                 Path(__file__).parent.parent / "config.yml",
-                Path.home() / ".interpreter" / "config.yml",
+                get_config_dir() / "config.yml",
             ]
             for path in search_paths:
                 if path.exists():
                     config_path = str(path)
                     break
+            if config_path is None:
+                legacy = get_legacy_config_dir() / "config.yml"
+                if legacy.is_file():
+                    config_path = str(legacy)
+                    migrated_path = str(get_config_dir() / legacy.name)
 
         if config_path and os.path.exists(config_path):
             # Resolve to absolute path for clear display
@@ -547,7 +554,7 @@ class Config:
                 background_color=data.get("background_color", "#404040"),
                 background_opacity=float(data.get("background_opacity", 0.8)),
                 hotkeys=hotkeys,
-                config_path=config_path,
+                config_path=migrated_path or config_path,
                 banner_x=data.get("banner_x"),
                 banner_y=data.get("banner_y"),
                 exclusion_zones=data.get("exclusion_zones", {}),
@@ -579,7 +586,7 @@ class Config:
 
     def _create_default_config(self) -> None:
         """Create a default config file in the user's home directory."""
-        config_dir = Path.home() / ".interpreter"
+        config_dir = get_config_dir()
         config_path = config_dir / "config.yml"
 
         # Don't overwrite if it already exists
@@ -745,15 +752,11 @@ hotkeys:
 
         Args:
             config_path: Path to save to. If None, uses the path the config was loaded from,
-                        or creates in ~/.interpreter/config.yml
+                        or creates in ~/.ludivoxa/config.yml
         """
         if config_path is None:
-            config_path = self.config_path
-
-        if config_path is None:
-            config_dir = Path.home() / ".interpreter"
-            config_dir.mkdir(parents=True, exist_ok=True)
-            config_path = str(config_dir / "config.yml")
+            config_path = self.config_path or str(get_config_dir() / "config.yml")
+            Path(config_path).parent.mkdir(parents=True, exist_ok=True)
 
         # Explicitly convert to basic types to avoid Python-specific YAML tags
         data = {

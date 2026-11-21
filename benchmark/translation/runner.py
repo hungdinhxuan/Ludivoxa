@@ -36,8 +36,8 @@ def _git_metadata(repo_root: Path) -> dict[str, Any]:
             return None
 
     dirty = command("status", "--porcelain", "--untracked-files=no")
-    translate_path = repo_root / "src" / "interpreter" / "translate.py"
-    worker_path = repo_root / "src" / "interpreter" / "gui" / "workers.py"
+    translate_path = repo_root / "src" / "ludivoxa" / "translate.py"
+    worker_path = repo_root / "src" / "ludivoxa" / "gui" / "workers.py"
     return {
         "commit": command("rev-parse", "HEAD"),
         "branch": command("branch", "--show-current"),

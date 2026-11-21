@@ -1,4 +1,4 @@
-"""PySide6 GUI module for Interpreter.
+"""PySide6 GUI module for Ludivoxa.
 
 This module provides the graphical user interface including:
 - Main settings window

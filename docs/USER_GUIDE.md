@@ -253,7 +253,7 @@ offline. Tính năng cập nhật dùng mạng GitHub, độc lập với OCR/LL
 Updater từ v1.4.0 ưu tiên gói vá nhỏ khi bản phát hành có gói phù hợp và mã băm
 các tệp ứng dụng đang cài khớp. Nếu xác minh thất bại, tab Updates hiển thị
 dung lượng gói chuẩn để bạn chọn tải. Cả gói vá và **App-Update** đều giữ
-config, model và Ollama đã cài. Chọn thư mục có `Interpreter.exe` và
+config, model và Ollama đã cài. Chọn thư mục có `Ludivoxa.exe` và
 `config.yml` khi cập nhật thủ công. Nếu bản phát hành chỉ có bộ offline đầy
 đủ, updater sẽ hiển thị tổng dung lượng của EXE và các tệp BIN.
 
@@ -262,7 +262,7 @@ hay đăng nhập GitHub. App không đọc thông tin đăng nhập Git hoặc 
 Credential Manager. Nếu không truy cập được release hoặc bị giới hạn lượt
 truy cập GitHub, app sẽ báo lỗi để thử lại sau, không xem là “đã mới nhất”.
 
-Tải cache nằm ở `%USERPROFILE%/.interpreter/updates`; nếu cài đặt lỗi, xem
+Tải cache nằm ở `%USERPROFILE%/.ludivoxa/updates`; nếu cài đặt lỗi, xem
 `install.log` trong thư mục phiên bản đó. Cài tự động dành cho EXE Windows;
 bản chạy từ source cần dùng bộ cài hoặc cập nhật mã nguồn thủ công. Bộ cài
 hiện vẫn chưa ký số. Bản v1.0.0 đã phát hành trước đó chưa có trang Updates;
@@ -277,8 +277,7 @@ cần chạy gói `Ludivoxa-1.1.1-App-Update.exe` thủ công một lần vào t
 - Chậm: chọn English cho game tiếng Anh, giữ box gọn; lần đầu cần tải model.
   Thời gian OCR không phải toàn bộ độ trễ đến tiếng đầu tiên.
 - Endpoint lỗi: kiểm tra URL/model, chờ Ready, rồi dùng Fix Models nếu cần.
-- Settings nằm trong `config.yml` cạnh EXE; log ở `%USERPROFILE%/.interpreter/logs`.
-  Các tên tương thích này được giữ từ Interpreter.
+- Settings nằm trong `config.yml` cạnh EXE; log ở `%USERPROFILE%/.ludivoxa/logs`.
 
 Xem [changelog](../CHANGELOG.md), [phát triển/build](DEVELOPMENT.md),
 [số đo và giới hạn](PERFORMANCE.md), [ghi công/giấy phép](../NOTICE.md).

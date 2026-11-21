@@ -1,12 +1,17 @@
 #!/bin/bash
-# install.sh - One-liner installer for interpreter-v2
-# Usage: curl -LsSf https://raw.githubusercontent.com/bquenin/interpreter/main/install.sh | bash
+# Install the Ludivoxa source checkout as a uv tool.
+# Usage: bash install.sh
 #
 # To install somewhere other than your home directory (for example on a second
-# drive), set INTERPRETER_HOME first. The choice is remembered for upgrades:
-#   curl -LsSf https://raw.githubusercontent.com/bquenin/interpreter/main/install.sh | INTERPRETER_HOME=/mnt/data/interpreter bash
+# drive), set LUDIVOXA_HOME first. The choice is remembered for upgrades:
+#   LUDIVOXA_HOME=/mnt/data/ludivoxa bash install.sh
 
 set -e
+SOURCE_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+if [ ! -f "$SOURCE_DIR/pyproject.toml" ]; then
+	echo "Run install.sh from a Ludivoxa source checkout." >&2
+	exit 1
+fi
 
 # Colors
 CYAN='\033[0;36m'
@@ -24,17 +29,17 @@ else
 fi
 
 echo ""
-echo -e "${CYAN}=== interpreter-v2 Installer ===${NC}"
+echo -e "${CYAN}=== ludivoxa Installer ===${NC}"
 echo "Offline screen translator for Japanese retro games"
 echo -e "${GRAY}Plan for at least 6 GB of free disk space, including first-run model downloads.${NC}"
 echo ""
 
-# Resolve the install location. INTERPRETER_HOME wins; otherwise reuse the
+# Resolve the install location. LUDIVOXA_HOME wins; otherwise reuse the
 # location recorded by a previous run so plain re-runs upgrade in place. The
-# layout under the root mirrors src/interpreter/paths.py; keep them in sync:
+# layout under the root mirrors src/ludivoxa/paths.py; keep them in sync:
 #   <root>/uv/tools    tool environment      <root>/uv-cache  install downloads
 #   <root>/uv/python   uv-managed Python     <root>/models    HuggingFace cache
-CONFIG_DIR="$HOME/.interpreter"
+CONFIG_DIR="$HOME/.ludivoxa"
 INSTALL_ROOT_FILE="$CONFIG_DIR/install-dir"
 PREVIOUS_ROOT=""
 if [ -f "$INSTALL_ROOT_FILE" ]; then
@@ -42,7 +47,7 @@ if [ -f "$INSTALL_ROOT_FILE" ]; then
 	PREVIOUS_ROOT="${PREVIOUS_ROOT%/}"
 fi
 
-INSTALL_ROOT="${INTERPRETER_HOME:-$PREVIOUS_ROOT}"
+INSTALL_ROOT="${LUDIVOXA_HOME:-$PREVIOUS_ROOT}"
 UV_CACHE_ARGS=()
 if [ -n "$INSTALL_ROOT" ]; then
 	# Expand a leading ~ and make relative paths absolute.
@@ -53,13 +58,13 @@ if [ -n "$INSTALL_ROOT" ]; then
 	esac
 	INSTALL_ROOT="${INSTALL_ROOT%/}"
 	if [ -z "$INSTALL_ROOT" ]; then
-		echo -e "${RED}Error: INTERPRETER_HOME must be a directory, not the filesystem root. Try /opt/interpreter${NC}"
+		echo -e "${RED}Error: LUDIVOXA_HOME must be a directory, not the filesystem root. Try /opt/ludivoxa${NC}"
 		exit 1
 	fi
 	mkdir -p "$INSTALL_ROOT"
 	# The uninstaller only removes folders next to this marker, so a mistyped
-	# or shared INTERPRETER_HOME never has unrelated content deleted.
-	echo "Created by the interpreter-v2 installer. The uninstaller removes the uv, uv-cache and models folders next to this file." >"$INSTALL_ROOT/.interpreter-v2"
+	# or shared LUDIVOXA_HOME never has unrelated content deleted.
+	echo "Created by the ludivoxa installer. The uninstaller removes the uv, uv-cache and models folders next to this file." >"$INSTALL_ROOT/.ludivoxa"
 	export UV_TOOL_DIR="$INSTALL_ROOT/uv/tools"
 	export UV_PYTHON_INSTALL_DIR="$INSTALL_ROOT/uv/python"
 	# Keep the multi-gigabyte package downloads off the home drive too, and
@@ -71,7 +76,7 @@ if [ -n "$INSTALL_ROOT" ]; then
 else
 	INSTALL_CACHE_DIR=""
 	MODELS_DIR=""
-	echo -e "${GRAY}Install location: home directory (set INTERPRETER_HOME to choose another drive)${NC}"
+	echo -e "${GRAY}Install location: home directory (set LUDIVOXA_HOME to choose another drive)${NC}"
 fi
 echo ""
 
@@ -93,8 +98,8 @@ else
 	echo -e "${GREEN}[1/${TOTAL_STEPS}] uv is already installed${NC}"
 fi
 
-# Install or upgrade interpreter-v2
-echo -e "${YELLOW}[2/${TOTAL_STEPS}] Installing interpreter-v2 from PyPI...${NC}"
+# Install or upgrade the local checkout.
+echo -e "${YELLOW}[2/${TOTAL_STEPS}] Installing Ludivoxa from source...${NC}"
 echo -e "${GRAY}     (this may take a minute on first install)${NC}"
 # Use Python 3.12 - uv-managed Python includes tkinter, system Python 3.13+ often doesn't
 # When the install location changes, the launcher from the old location still
@@ -102,9 +107,9 @@ echo -e "${GRAY}     (this may take a minute on first install)${NC}"
 PREVIOUS_TOOL_ENV=""
 if [ "$PREVIOUS_ROOT" != "$INSTALL_ROOT" ]; then
 	if [ -n "$PREVIOUS_ROOT" ]; then
-		PREVIOUS_TOOL_ENV="$PREVIOUS_ROOT/uv/tools/interpreter-v2"
+		PREVIOUS_TOOL_ENV="$PREVIOUS_ROOT/uv/tools/ludivoxa"
 	else
-		PREVIOUS_TOOL_ENV="${XDG_DATA_HOME:-$HOME/.local/share}/uv/tools/interpreter-v2"
+		PREVIOUS_TOOL_ENV="${XDG_DATA_HOME:-$HOME/.local/share}/uv/tools/ludivoxa"
 	fi
 fi
 UV_FORCE_ARGS=()
@@ -112,7 +117,7 @@ if [ -n "$PREVIOUS_TOOL_ENV" ] && [ -d "$PREVIOUS_TOOL_ENV" ]; then
 	UV_FORCE_ARGS=(--force)
 fi
 INSTALL_OK=1
-uv tool install "${UV_FORCE_ARGS[@]}" --upgrade --python 3.12 "${UV_CACHE_ARGS[@]}" interpreter-v2 2>&1 || INSTALL_OK=0
+(cd -- "$SOURCE_DIR" && uv tool install "${UV_FORCE_ARGS[@]}" --upgrade --python 3.12 "${UV_CACHE_ARGS[@]}" .) 2>&1 || INSTALL_OK=0
 if [ -n "$INSTALL_CACHE_DIR" ]; then
 	uv cache clean --cache-dir "$INSTALL_CACHE_DIR" >/dev/null 2>&1 || true
 	rm -rf "$INSTALL_CACHE_DIR"
@@ -153,12 +158,12 @@ fi
 
 # Pre-compile bytecode and warm up OS caches
 echo -e "${YELLOW}[3/${TOTAL_STEPS}] Optimizing for fast startup...${NC}"
-TOOL_DIR="${UV_TOOL_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/uv/tools}/interpreter-v2"
+TOOL_DIR="${UV_TOOL_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/uv/tools}/ludivoxa"
 if [ -d "$TOOL_DIR" ]; then
 	# Compile bytecode (exclude .tmpl.py template files that aren't valid Python)
 	"$TOOL_DIR/bin/python" -m compileall -q -x '\.tmpl\.py$' "$TOOL_DIR/lib" 2>/dev/null || true
 	# Warm up OS caches by running once
-	interpreter-v2 --list-windows >/dev/null 2>&1 || true
+	ludivoxa --list-windows >/dev/null 2>&1 || true
 fi
 
 # Check Linux runtime dependencies (Linux only)
@@ -211,23 +216,23 @@ if [[ "$(uname)" == "Linux" ]]; then
 	if [ -n "$ICON_SRC" ]; then
 		# Install icon using xdg-icon-resource if available, otherwise fall back to manual copy
 		if command -v xdg-icon-resource &>/dev/null; then
-			xdg-icon-resource install --novendor --size 256 "$ICON_SRC" interpreter-v2
+			xdg-icon-resource install --novendor --size 256 "$ICON_SRC" ludivoxa
 		else
 			mkdir -p "$HOME/.local/share/icons/hicolor/256x256/apps"
-			cp "$ICON_SRC" "$HOME/.local/share/icons/hicolor/256x256/apps/interpreter-v2.png"
+			cp "$ICON_SRC" "$HOME/.local/share/icons/hicolor/256x256/apps/ludivoxa.png"
 			gtk-update-icon-cache -f "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 		fi
 		# Install desktop entry
 		mkdir -p "$HOME/.local/share/applications"
-		cat >"$HOME/.local/share/applications/interpreter-v2.desktop" <<'EOF'
+		cat >"$HOME/.local/share/applications/ludivoxa.desktop" <<'EOF'
 [Desktop Entry]
-Name=Interpreter
+Name=Ludivoxa
 Comment=Offline screen translator for Japanese games
-Exec=interpreter-v2
-Icon=interpreter-v2
+Exec=ludivoxa
+Icon=ludivoxa
 Type=Application
 Categories=Utility;Translation;
-StartupWMClass=interpreter-v2
+StartupWMClass=ludivoxa
 EOF
 
 		update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
@@ -249,7 +254,7 @@ if [ -n "$INSTALL_ROOT" ]; then
 fi
 echo "To start, run:"
 echo ""
-echo -e "  ${CYAN}interpreter-v2${NC}"
+echo -e "  ${CYAN}ludivoxa${NC}"
 echo ""
 if [[ "$(uname)" == "Linux" ]]; then
 	echo -e "${YELLOW}Hotkeys:${NC} To use global hotkeys, add yourself to the input group:"

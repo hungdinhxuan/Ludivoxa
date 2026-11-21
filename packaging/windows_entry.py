@@ -1,4 +1,4 @@
-"""Windows executable entry point; application behavior stays in interpreter.main."""
+"""Windows executable entry point; application behavior stays in ludivoxa.main."""
 
 import os
 import sys
@@ -17,7 +17,7 @@ def run():
     if getattr(sys, "frozen", False):
         os.chdir(Path(sys.executable).parent)
         if sys.stdout is None or sys.stderr is None:
-            log_dir = Path.home() / ".interpreter" / "logs"
+            log_dir = Path.home() / ".ludivoxa" / "logs"
             log_dir.mkdir(parents=True, exist_ok=True)
             stream = (log_dir / "windows.log").open("a", encoding="utf-8", buffering=1)
             sys.stdout = sys.stderr = stream
@@ -29,7 +29,7 @@ def run():
             from frozen_smoke import run_smoke
 
             return run_smoke(report)
-        from interpreter import main
+        from ludivoxa import main
 
         return main()
     finally:

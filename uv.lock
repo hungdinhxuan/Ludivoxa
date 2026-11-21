@@ -642,8 +642,8 @@ wheels = [
 ]
 
 [[package]]
-name = "interpreter-v2"
-version = "1.7.0"
+name = "ludivoxa"
+version = "2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "ctranslate2" },

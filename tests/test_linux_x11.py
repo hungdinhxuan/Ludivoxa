@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("Xlib")
 
-from interpreter.capture import linux_x11 as capture
+from ludivoxa.capture import linux_x11 as capture
 
 
 @pytest.fixture

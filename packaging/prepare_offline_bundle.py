@@ -22,7 +22,7 @@ def prepare(app, runtime, store, output):
         raise ValueError("Installer staging must not overlap any source directory.")
     if output.exists() and any(output.iterdir()):
         raise ValueError("Installer staging directory must be empty; existing files are never deleted.")
-    if not (app / "Interpreter.exe").is_file() or not (runtime / "ollama.exe").is_file():
+    if not (app / "Ludivoxa.exe").is_file() or not (runtime / "ollama.exe").is_file():
         raise ValueError("Build the Windows app and provision the Ollama runtime first.")
     manifest_relative = Path("manifests-v2/ollama.com/library/qwen3-hauhau-aggressive/4b-q4_k_m")
     manifest_path = store / manifest_relative
@@ -86,7 +86,7 @@ def prepare(app, runtime, store, output):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", default="dist/Interpreter")
+    parser.add_argument("--app", default="dist/Ludivoxa")
     parser.add_argument("--runtime", default=".test-models/ollama-runtime")
     parser.add_argument("--store", default=".test-models/ollama-models")
     parser.add_argument("--output", required=True)

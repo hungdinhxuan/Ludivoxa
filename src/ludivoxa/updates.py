@@ -87,14 +87,14 @@ def verify_delta_base(raw, directory, check_cancel=lambda: None):
         if (
             not separator
             or not re.fullmatch(r"[0-9a-f]{64}|-", digest)
-            or (name != "Interpreter.exe" and not (len(parts) > 1 and parts[0] == "_internal"))
+            or (name != "Ludivoxa.exe" and not (len(parts) > 1 and parts[0] == "_internal"))
             or len(parts) > 128
             or any(not part or part.endswith((".", " ")) or re.search(r'[\x00-\x1f\\:<>"|?*]', part) for part in parts)
             or key in seen
         ):
             raise ValueError("Invalid delta base manifest")
         seen.add(key)
-        includes_exe |= name == "Interpreter.exe" and digest != "-"
+        includes_exe |= name == "Ludivoxa.exe" and digest != "-"
         check_cancel()
         path = directory.joinpath(*parts)
         entry = entries(path.parent).get(path.name.lower())
@@ -303,7 +303,7 @@ class GitHubUpdates:
                 lookup = {asset.name: asset for asset in assets}
                 installer, base = lookup.get(prefix + ".exe"), lookup.get(prefix + ".base.sha256")
                 if (
-                    executable.name.lower() == "interpreter.exe"
+                    executable.name.lower() == "ludivoxa.exe"
                     and installer
                     and base
                     and base.size <= DELTA_BASE_LIMIT
@@ -404,7 +404,7 @@ def launch_update(update, executable=None, cancel=None):
             "Automatic installation is available in the Windows EXE. Use the release installer for source runs."
         )
     executable = Path(executable or sys.executable).resolve()
-    if executable.name.lower() != "interpreter.exe":
+    if executable.name.lower() != "ludivoxa.exe":
         raise UpdateError("Cannot identify this application installation.")
     update.verify()  # Recheck immediately before executing a cached installer.
     if cancel is not None and cancel.is_set():
