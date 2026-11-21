@@ -1,46 +1,88 @@
-# Ludivoxa
+# Ludivoxa — Offline Game Translator with OCR and Vietnamese TTS
 
-Offline game OCR, local LLM translation and Vietnamese speech.
+**Ludivoxa** is an open-source screen translator for PC games. It reads English
+or Japanese dialogue with offline OCR, translates it into Vietnamese by default
+using a local LLM, and shows the result over the game or reads it aloud. Use it
+for visual novels, RPGs and other games with on-screen dialogue.
 
-[Tiếng Việt](README.vi.md) · [User guide](docs/USER_GUIDE.md) ·
-[Changelog](CHANGELOG.md) · [Releases](https://github.com/hungdinhxuan/Ludivoxa/releases)
+[Download for Windows](#install-on-windows) · [Set up game translation](#translate-your-first-game-dialogue) ·
+[Guide in Vietnamese](docs/USER_GUIDE.md) · [Tiếng Việt](README.vi.md)
 
-Ludivoxa extends [Interpreter](https://github.com/bquenin/interpreter), retaining
-its capture → OCR → translation → overlay pipeline and Qt interface. This fork
-starts at **v1.0.0**; see [attribution and licenses](NOTICE.md).
+**Stable release v1.5.0** adds dialogue history, per-game profiles, capture and
+audio diagnostics, and independent speech volume. [Release notes](docs/releases/v1.5.0.md)
 
-**Latest stable [v1.5.0](docs/releases/v1.5.0.md)** adds dialogue history,
-per-game profiles, capture and audio diagnostics, and independent speech
-volume. For a new installation, use the full offline v1.1.1 package, then
-apply the app update.
+## Game translation features
 
-## Features
+### Offline screen OCR for English and Japanese
 
-- Offline English/Japanese PaddleOCR with a fast English profile, automatic
-  source detection and a manual language fallback.
-- Select multiple dialogue boxes per game. OCR reads the selected pixels in
-  one pass. The full-window and exclusion options remain available.
-- Reuse of the existing LLM translator with local Ollama or configurable
-  OpenAI-compatible/LAN endpoints, prompts and translation context.
-- Vietnamese translation by default; other LLM target languages remain available.
-- Overlay only, automatic Vietnamese TTS only, or both.
-- Eleven VieNeu Nano presets, optional local reference-audio cloning, and the
-  existing 67 Piper speaker choices in the full Windows package.
-- Assign a voice preset to each speaker name per game. The app reads the name
-  in a separate OCR area and uses the default voice for unassigned speakers.
-  Use names and optional gender labels to guide Vietnamese forms of address.
-  TTS reads the dialogue itself.
-- Background OCR/speech, bounded frame/prefetch queues, cached models/results,
-  visual duplicate suppression and streaming native audio for Nano speech.
-- Dialogue history with replay and retranslation, per-game prompts and ignored
-  phrases, and capture/audio diagnostics.
-- Optional clearing of stale overlay text and independent speech volume.
-- Private bundled Ollama stops with the last app instance, including forced
-  termination of a running app. External/local shared and LAN servers are retained.
-- Existing MeikiOCR, Sugoi V4, owocr and capture backends remain available.
-- An Updates page with opt-in startup checks,
-  verified background downloads and explicit install/restart, with app-only
-  update packages that keep local models and settings.
+Use the fast English PaddleOCR profile or select Japanese, with automatic
+language detection available for mixed dialogue. Save multiple dialogue boxes
+per game and scan them in one pass. Full-window capture and exclusion zones
+are also available. Choose a game window or a video capture device as input.
+
+### Local LLM translation with Ollama or a LAN server
+
+Translate to Vietnamese or choose another target language. Use the bundled
+Ollama runtime, your own local Ollama instance, or a compatible API on a LAN
+GPU server. Dialogue context, custom prompts and speaker metadata help carry
+names and forms of address between lines.
+
+### On-screen translations and Vietnamese text-to-speech
+
+Choose a subtitle banner, translations at the original text positions, speech,
+or a combination. Local TTS provides 11 VieNeu Nano presets, optional voice
+cloning from a local recording and 67 Piper speaker choices in the full Windows
+package. Assign a voice by character name using a separate name box. TTS reads
+the dialogue, and you can adjust its volume independently. The overlay can
+clear the old translation while the next line is being translated.
+
+### Dialogue history, game profiles and diagnostics
+
+Replay, copy or retranslate recent dialogue from History. Save the source
+language, prompt and ignored OCR phrases per game. Use Diagnostics to check
+capture, OCR, translation and audio or copy a report for a bug ticket.
+
+## Install on Windows
+
+The offline installer targets **Windows x64**. It includes Python, Ollama,
+HauhauCS Qwen3 4B Aggressive Q4_K_M, English and Japanese OCR models, and
+Vietnamese TTS. The full download is about **4.9 GB** and uses about **6.4 GB**
+after installation.
+
+1. Download the setup EXE and **all three BIN files** from the
+   [v1.1.1 full offline installer](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1).
+2. Check the downloads against `SHA256SUMS.txt`, put all four files in one
+   directory, and run the EXE.
+3. Open **Updates → Check for updates** and install the current stable version.
+
+Use the files under **Assets** for Windows installation. The **Source code**
+archives are for development.
+
+**Already installed?** Use **Updates** or run the standard **App-Update.exe**
+from the [latest stable release](https://github.com/hungdinhxuan/Ludivoxa/releases/latest)
+and select the existing installation directory. A matching v1.4.0 installation
+can download the smaller v1.5.0 patch. Updates keep your models, Ollama runtime
+and `config.yml`. GitHub release downloads work without sign-in. The Windows
+installer is unsigned.
+
+## Translate your first game dialogue
+
+1. Open the game in windowed or borderless mode, choose its window in
+   Ludivoxa and select **Start Capture**.
+2. Open **Configure OCR**, choose **Only selected boxes**, and draw the dialogue
+   regions. Select **OK** to save them for that game.
+3. In **Engines**, choose **English** and `en_PP-OCRv5_mobile_rec` for English
+   games. Use **Japanese** or **Auto** with `PP-OCRv5_mobile_rec` for Japanese
+   or mixed English/Japanese dialogue.
+4. Choose **Overlay only**, **TTS only** or **Overlay + TTS**. Use **F8** to
+   toggle subtitles and **Stop reading** to stop speech.
+
+The offline profile runs OCR, translation and speech on your PC after
+installation. Its private Ollama endpoint is `http://127.0.0.1:11435`.
+You can set another local endpoint or a LAN server in **Engines**. The app
+uses the configured endpoint without automatic cloud fallback. Use **Overlay
+only** for other target languages because the bundled voices read Vietnamese.
+[Local and LAN setup](docs/USER_GUIDE.md#ollama-local-và-gpu-server-lan)
 
 ## Architecture
 
@@ -70,9 +112,13 @@ flowchart TD
 ```
 
 When configured, speaker-name OCR supplies context to the LLM and selects the
-voice for speech. Sugoi V4 is an alternative translation backend for Japanese.
-The Windows updater checks GitHub Releases separately from the translation
-pipeline.
+voice for speech. Background workers handle OCR and speech, and VieNeu Nano
+streams audio as it becomes available. MeikiOCR and owocr are alternative OCR
+backends. Sugoi V4 translates Japanese into English.
+
+The bundled Ollama process stops when the last instance closes. Shared local
+and LAN servers run independently. The Windows updater uses GitHub Releases
+and can check for updates at startup if enabled.
 
 ## TTFA benchmarks by version
 
@@ -97,6 +143,12 @@ lower is faster.
 | v1.3.1 stable | Synthetic short replay below | **1,014.42 ms** in frame replay | Not measured |
 | v1.4.0 stable | Synthetic two-sentence replay | **1,108.41 ms** in frame replay | Not measured |
 | v1.5.0 stable | Synthetic two-sentence replay | **914.23 ms** in frame replay | Not measured |
+
+In v1.5.0, the median TTFA was about **0.91 s** on two synthetic dialogue samples.
+[v1.5.0 trials and conditions](docs/PERFORMANCE.md#v150-windows-frame-replay)
+
+<details>
+<summary>Measurement notes and historical results</summary>
 
 Measured on Windows 11, Core i7-13700F and RTX 4090 24 GB, using the same saved
 dialogue crops, English OCR → Vietnamese, local HauhauCS Qwen3 4B Q4_K_M,
@@ -182,45 +234,7 @@ dialogue and **1,108.41 ms** for two sentences. [Trials and test conditions](doc
 **v1.5.0 Windows frame replay.** Median TTFA was **910.24 ms** for a short
 dialogue and **914.23 ms** for two sentences. [Trials and test conditions](docs/PERFORMANCE.md#v150-windows-frame-replay)
 
-## Install on Windows
-
-The packaged release targets **Windows x64**. Download its setup EXE and **all
-three BIN files** from [the full v1.1.1 release](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1),
-place them in one folder and run the EXE. Compare the files with `SHA256SUMS.txt`.
-The complete offline download is approximately 4.9 GB, with about 6.4 GB installed.
-
-Python, English/Japanese OCR models, Vietnamese speech, Ollama 0.40.16 and
-HauhauCS Qwen3 4B Aggressive Q4_K_M are included. No separate model download is
-needed for that profile. The installer preserves an existing `config.yml`.
-
-Then open **Updates** to install v1.5.0 (also supported from v1.1.2rc1).
-The v1.4.0 updater offers the smaller patch when the installed files match.
-For v1.0.0 or a standard manual update, run **Ludivoxa-1.5.0-App-Update.exe**
-from [v1.5.0](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.5.0) and select the existing
-installation directory. This smaller package preserves your models, runtime
-and settings. Public release checks and downloads need no GitHub token or sign-in.
-
-GitHub's automatic **Source code** archives do not include models or runtimes.
-The Windows build is unsigned. Executable/config compatibility names such as
-`Interpreter.exe` and `.interpreter` are retained from upstream.
-
-## First dialogue
-
-1. Open your game and Ludivoxa; select the game window and **Start Capture**.
-2. Open **Configure OCR** → **Scan: Only selected box**.
-3. Draw the dialogue rectangle and press **OK**. It is saved per source.
-4. Choose **Overlay only**, **TTS only** or **Overlay + TTS**.
-
-Use **English** with `en_PP-OCRv5_mobile_rec` for English games. For Japanese or
-mixed English/Japanese, select **Japanese/Auto** and `PP-OCRv5_mobile_rec`.
-**F8** toggles the overlay without interrupting speech; **Stop reading** cancels
-audio. Bundled speech is Vietnamese-only; choose Overlay only for other targets.
-
-The default private Ollama address is `http://127.0.0.1:11435`. For another local
-server use its address/model, for example `http://127.0.0.1:11434`; LAN Ollama and
-OpenAI-compatible `/v1` endpoints are also supported. The offline profile has no
-automatic cloud fallback. Restarting the app reloads its private model after
-shutdown. Detailed setup is in the [user guide](docs/USER_GUIDE.md).
+</details>
 
 ## Develop and build
 
@@ -238,13 +252,17 @@ distribution/namespace and configuration locations remain unchanged. Legacy
 root install scripts install upstream Interpreter from PyPI; use the Ludivoxa
 release or [source instructions](docs/DEVELOPMENT.md) for this fork.
 
+- [Changelog](CHANGELOG.md) and [published releases](https://github.com/hungdinhxuan/Ludivoxa/releases)
 - [Development, provisioning and Windows builds](docs/DEVELOPMENT.md)
 - [Release process and tagged artifacts](docs/RELEASING.md)
 - [Measurements and limitations](docs/PERFORMANCE.md)
 - [OneOCR and PaddleOCR pixel-dialogue comparison](benchmark/ocr/README.md#oneocr-and-paddleocr-on-pixel-dialogue)
-- [MIT application license](LICENSE) and [third-party attribution](NOTICE.md)
 
 OCR and synthesis timings depend on text length, font, region size and hardware.
 Version 1.1.0 starts Nano speech from completed audio chunks; the
 in-place overlay and callback-only driver paths retain buffered playback. Recorded-frame
 benchmarks do not establish live game FPS or guarantee latency for every scene.
+
+Ludivoxa builds on Interpreter's capture, OCR, translation and overlay pipeline.
+[Upstream Interpreter](https://github.com/bquenin/interpreter) ·
+[MIT license](LICENSE) · [Third-party notices](NOTICE.md)

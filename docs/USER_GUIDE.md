@@ -1,4 +1,12 @@
-# Hướng dẫn sử dụng Ludivoxa
+# Hướng dẫn dùng Ludivoxa để dịch game offline trên Windows
+
+Dùng Ludivoxa để đọc hội thoại tiếng Anh hoặc tiếng Nhật trên màn hình,
+dịch qua Ollama và hiển thị phụ đề hoặc phát giọng đọc tiếng Việt. Hướng dẫn
+này dành cho bộ cài Windows x64 và có cách kết nối máy chủ dịch trong LAN.
+
+[Cài đặt Windows](#cài-bản-windows-offline) · [Khoanh ô hội thoại](#dịch-hội-thoại) ·
+[Phụ đề và giọng đọc](#overlay-và-giọng-đọc) · [Ollama local hoặc LAN](#ollama-local-và-gpu-server-lan) ·
+[Xử lý sự cố](#xử-lý-sự-cố)
 
 ## Cài bản Windows offline
 
@@ -13,13 +21,15 @@ Người dùng mới: từ [bộ offline v1.1.1](https://github.com/hungdinhxuan
 Đặt EXE và cả ba BIN trong cùng thư mục, rồi chạy EXE. Không chạy từng BIN.
 Không dùng nút **Source code** để cài app: đó là mã nguồn, không chứa runtime
 và model. Bản offline có dung lượng khoảng 4,9 GB; app cài xong khoảng 6,4 GB.
-Python và Ollama đã có sẵn trong bộ cài. Cài đặt mặc định theo tài khoản người
-dùng. Sau đó cài **v1.3.1 App-Update** qua tab **Updates** hoặc
-[bản phát hành ổn định](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.3.1).
+Python, Ollama, model dịch, OCR Anh/Nhật và TTS tiếng Việt đã có sẵn. Bộ cài
+mặc định cài theo tài khoản Windows đang dùng. Sau khi cài bản offline, mở
+**Updates → Check for updates** và áp dụng gói cập nhật hiện tại.
+[Bản phát hành ổn định mới nhất](https://github.com/hungdinhxuan/Ludivoxa/releases/latest)
 
 ## Dịch hội thoại
 
-1. Mở game, mở Ludivoxa, chọn **Refresh** rồi chọn đúng cửa sổ game.
+1. Mở game ở chế độ cửa sổ hoặc borderless. Trong Ludivoxa, chọn **Refresh**
+   rồi chọn đúng cửa sổ game.
 2. Chờ OCR, translation và voice sẵn sàng, rồi chọn **Start Capture**.
 3. Mở **Configure OCR** → **Scan: Only selected boxes**.
 4. Kéo khoanh từng vùng hội thoại, rồi nhấn **OK**.
@@ -217,30 +227,26 @@ nguyên bản; không tự làm nhẹ, tăng nặng hay thêm chi tiết. Prompt
 
 ## Cập nhật ứng dụng
 
-Để lên **v1.3.1**, dùng tab **Updates**, hoặc tải
-`Ludivoxa-1.3.1-App-Update.exe` từ
-[bản phát hành ổn định](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.3.1)
-và chọn thư mục Ludivoxa đang cài. Gói cập nhật giữ model/runtime/cấu hình.
-Người dùng mới cần cài bộ offline v1.1.1 ở đầu hướng dẫn trước.
-Các bản v1.1.1, v1.1.2-rc.1, v1.1.2 và v1.1.3 đều cập nhật được qua tab Updates.
-
-Từ v1.1.0, mở **Updates** ở thanh bên:
+Mở **Updates** ở thanh bên để nâng cấp bản đang cài. Bạn cũng có thể tải gói
+**App-Update.exe** và chọn thư mục Ludivoxa hiện tại khi chạy bộ cài.
+[Bản phát hành ổn định mới nhất](https://github.com/hungdinhxuan/Ludivoxa/releases/latest)
 
 1. Chọn **Check for updates** để kiểm tra release ổn định mới hơn trên GitHub.
-2. Đọc release notes và dung lượng, rồi chọn **Download update**. Có thể hủy
-   tải; app vẫn dịch/đọc bình thường trong lúc kiểm tra hoặc tải.
-3. Khi file được xác minh SHA-256, chọn **Install and restart** lúc thuận tiện.
-   App đóng, bộ cài cập nhật đúng thư mục hiện tại rồi mở lại ứng dụng.
+2. Xem dung lượng rồi chọn **Download smaller update** hoặc **Download update**.
+   App vẫn dịch và đọc trong lúc kiểm tra hoặc tải.
+3. Sau khi xác minh SHA-256, chọn **Install and restart**. Bộ cài nâng cấp
+   đúng thư mục rồi mở lại ứng dụng.
 
 **Check for updates when Ludivoxa starts** bật kiểm tra tự động và thông báo
 trong UI; tải/cài vẫn do bạn chọn. Mặc định tùy chọn này tắt để giữ cách chạy
 offline. Tính năng cập nhật dùng mạng GitHub, độc lập với OCR/LLM/TTS local.
 
-Nếu release có gói **App-Update**, app ưu tiên gói đó: không tải lại hay ghi đè
-model OCR/TTS, kho model LLM, runtime Ollama hoặc `config.yml`. Gói này chỉ cài
-vào một thư mục Ludivoxa đã có `Interpreter.exe` và `config.yml`. Release cũ
-chỉ có bộ cài offline đầy đủ vẫn được hỗ trợ; khi đó phải tải cả EXE và BIN,
-và UI hiển thị toàn bộ dung lượng trước khi tải.
+Updater từ v1.4.0 ưu tiên gói vá nhỏ khi bản phát hành có gói phù hợp và mã băm
+các tệp ứng dụng đang cài khớp. Nếu xác minh thất bại, tab Updates hiển thị
+dung lượng gói chuẩn để bạn chọn tải. Cả gói vá và **App-Update** đều giữ
+config, model và Ollama đã cài. Chọn thư mục có `Interpreter.exe` và
+`config.yml` khi cập nhật thủ công. Nếu bản phát hành chỉ có bộ offline đầy
+đủ, updater sẽ hiển thị tổng dung lượng của EXE và các tệp BIN.
 
 Repo Ludivoxa đã public. Kiểm tra và tải cập nhật không cần nhập key, token
 hay đăng nhập GitHub. App không đọc thông tin đăng nhập Git hoặc Windows

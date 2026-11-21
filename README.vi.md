@@ -1,38 +1,82 @@
-# Ludivoxa
+# Ludivoxa — Phần mềm dịch game offline và đọc tiếng Việt
 
-Ứng dụng OCR game offline, dịch bằng LLM local và tự đọc tiếng Việt.
+**Ludivoxa** là ứng dụng mã nguồn mở để dịch chữ trên màn hình game PC. App
+dùng OCR offline để đọc hội thoại tiếng Anh hoặc tiếng Nhật, dịch sang tiếng
+Việt bằng LLM local, rồi hiện phụ đề trên game hoặc đọc thành tiếng. Bạn có
+thể dùng Ludivoxa cho visual novel, game nhập vai và các game có hội thoại
+hiện trên màn hình.
 
-[English](README.md) · [Hướng dẫn](docs/USER_GUIDE.md) ·
-[Changelog](CHANGELOG.md) · [Tải bản phát hành](https://github.com/hungdinhxuan/Ludivoxa/releases)
+[Tải cho Windows](#cài-windows-offline) · [Hướng dẫn dịch game](docs/USER_GUIDE.md) ·
+[Sơ đồ kiến trúc](README.md#architecture) · [English](README.md)
 
-Ludivoxa được phát triển từ [Interpreter](https://github.com/bquenin/interpreter)
-của qube/bquenin, giữ pipeline và giao diện Qt hiện có. Dự án này bắt đầu bằng
-**v1.0.0**, độc lập với phiên bản của upstream.
+**Bản ổn định v1.5.0** có lịch sử hội thoại, hồ sơ theo game, Diagnostics
+và âm lượng TTS riêng. [Ghi chú v1.5.0](docs/releases/v1.5.0.md)
 
-**Bản ổn định mới nhất [v1.5.0](docs/releases/v1.5.0.md)** thêm lịch sử hội
-thoại, hồ sơ theo game, chẩn đoán capture và âm thanh, cùng thanh âm lượng riêng
-cho TTS. Người dùng mới cài bộ offline v1.1.1 trước rồi cập nhật app.
+## Tính năng dịch game
 
-## Có gì trong v1.3.0?
+### OCR offline cho game tiếng Anh và tiếng Nhật
 
-Mở **Configure OCR** để chọn nhiều ô hội thoại. Trong **Character voices…**,
-khoanh vùng tên rồi gán giọng và giới tính cho từng nhân vật. LLM dùng thông tin
-người nói để chọn cách xưng hô phù hợp. [Ghi chú bản phát hành](docs/releases/v1.3.0.md)
+Dùng PaddleOCR để quét toàn cửa sổ hoặc chỉ quét các ô hội thoại đã khoanh.
+Có thể chọn nhiều ô, lưu riêng theo game và lọc vùng không cần dịch. Chọn
+**English** để ưu tiên tốc độ cho game tiếng Anh, **Japanese** cho game tiếng
+Nhật hoặc **Auto** khi hội thoại trộn hai ngôn ngữ.
 
-- OCR Anh/Nhật offline, phát hiện ngôn ngữ hoặc chọn thủ công.
-- Khoanh nhiều vùng hội thoại để chỉ quét phần cần dịch. Vùng chọn lưu riêng
-  theo game. Bạn vẫn có thể chuyển sang quét toàn cửa sổ hoặc loại trừ.
-- Ollama local hoặc OpenAI-compatible/GPU server LAN; giữ context, prompt tùy
-  chỉnh, mặc định dịch sang tiếng Việt và không tự fallback sang cloud.
-- Overlay, TTS hoặc cả hai; tự đọc mỗi bản dịch ổn định mới.
-- Nano có 11 preset, clone từ file ghi âm local nếu bạn cung cấp; đồng thời
-  giữ 67 lựa chọn Piper. Không kèm mẫu clone giọng cá nhân.
-- Xử lý nền, cache, chống đọc lặp; dịch từng câu và phát Nano theo từng đoạn
-  audio để giảm thời gian chờ tiếng đầu tiên.
-- Tab Updates: kiểm tra bản mới, tải nền và cài đặt/khởi động lại; không cần
-  GitHub key. Có tùy chọn tự kiểm tra khi mở app.
-- Đóng app cuối cùng tự tắt Ollama riêng cùng model runners; giữ nguyên server
-  local/LAN dùng chung. Mở lại app phải tải model lại.
+### Dịch bằng Ollama local hoặc máy chủ GPU trong LAN
+
+Ludivoxa mặc định dịch sang tiếng Việt và cho phép chọn ngôn ngữ đích khác.
+Dùng Ollama đi kèm, Ollama trên máy bạn hoặc endpoint tương thích OpenAI
+trong mạng LAN. App dùng ngữ cảnh hội thoại và prompt riêng để giữ tên,
+thuật ngữ và cách xưng hô giữa các câu.
+
+### Phụ đề trên game và giọng đọc tiếng Việt
+
+Hiện bản dịch ở banner hoặc ngay tại vị trí chữ gốc, nghe TTS, hoặc dùng cả
+hai. Bộ Windows đầy đủ có 11 preset VieNeu Nano, 67 lựa chọn Piper và tùy
+chọn clone giọng từ đoạn thu âm trên máy. Khoanh riêng vùng tên để gán giọng
+theo nhân vật. TTS đọc lời thoại và có thanh âm lượng riêng. Có thể chọn
+ẩn phụ đề cũ trong lúc dịch câu mới.
+
+### Lịch sử hội thoại, hồ sơ theo game và chẩn đoán
+
+Mở **History** để nghe lại, sao chép hoặc dịch lại câu trước. **Game profile**
+lưu ngôn ngữ nguồn, prompt và cụm từ OCR cần bỏ qua. **Diagnostics** cho
+biết trạng thái chụp hình, dịch và phát âm thanh, hỗ trợ kiểm tra lỗi khi
+dùng Remote Desktop.
+
+## Cài Windows offline
+
+Bộ cài **Windows x64** có sẵn Python, Ollama, HauhauCS Qwen3 4B Aggressive
+Q4_K_M, model OCR Anh/Nhật và giọng đọc tiếng Việt. Bộ đầy đủ tải khoảng
+**4,9 GB** và dùng khoảng **6,4 GB** sau khi cài.
+
+1. Tải EXE và **cả ba tệp BIN** từ
+   [bộ cài offline v1.1.1](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1).
+2. Đối chiếu `SHA256SUMS.txt`, đặt cả bốn tệp chung thư mục, rồi chạy EXE.
+3. Mở **Updates → Check for updates** để cài phiên bản ổn định hiện tại.
+
+**Máy đã có Ludivoxa?** Dùng **Updates** hoặc tải gói **App-Update.exe** từ
+[bản phát hành ổn định mới nhất](https://github.com/hungdinhxuan/Ludivoxa/releases/latest)
+và chọn thư mục đang cài. Từ v1.4.0, updater có thể tải gói vá nhỏ khi tệp
+cài đặt khớp. Gói cập nhật giữ model, Ollama và `config.yml`. Các tệp trong
+mục **Assets** tải được mà không cần đăng nhập GitHub. Bộ cài chưa ký số.
+
+## Cách dịch hội thoại trong game
+
+1. Mở game ở chế độ cửa sổ hoặc borderless, chọn cửa sổ trong Ludivoxa rồi
+   bấm **Start Capture**.
+2. Trong **Configure OCR**, chọn **Only selected boxes**, khoanh các ô hội
+   thoại rồi bấm **OK**.
+3. Trong **Engines**, chọn **English** với `en_PP-OCRv5_mobile_rec` cho game
+   tiếng Anh. Chọn **Japanese** hoặc **Auto** với `PP-OCRv5_mobile_rec` cho
+   game tiếng Nhật hoặc hội thoại Anh/Nhật.
+4. Chọn **Overlay only**, **TTS only** hoặc **Overlay + TTS**. Dùng **F8** để
+   ẩn/hiện phụ đề và **Stop reading** để dừng đọc.
+
+Sau khi cài, cấu hình offline chạy OCR, dịch và đọc ngay trên máy. Ollama đi
+kèm dùng `http://127.0.0.1:11435`. Nếu dùng máy chủ LAN, đặt địa chỉ trong
+**Engines**. App dùng máy chủ đã chọn, không tự chuyển sang dịch cloud. Nếu
+dịch sang ngôn ngữ khác, dùng **Overlay only** vì giọng đi kèm đọc tiếng Việt.
+[Cấu hình Ollama local hoặc LAN](docs/USER_GUIDE.md#ollama-local-và-gpu-server-lan)
 
 ## Benchmark TTFA theo phiên bản
 
@@ -57,6 +101,9 @@ mili giây; càng thấp càng nhanh.
 | v1.3.1 stable | Mẫu ngắn tổng hợp bên dưới | **1.014,42 ms** qua phát lại khung | Chưa đo |
 | v1.4.0 stable | Mẫu tổng hợp hai câu | **1.108,41 ms** qua phát lại khung | Chưa đo |
 | v1.5.0 stable | Mẫu tổng hợp hai câu | **914,23 ms** qua phát lại khung | Chưa đo |
+
+<details>
+<summary>Phương pháp đo và kết quả các bản trước</summary>
 
 Máy đo: Windows 11, Core i7-13700F, RTX 4090 24 GB. Hai lượt dùng cùng ảnh
 hội thoại đã khoanh box, OCR Anh → dịch Việt, HauhauCS Qwen3 4B Q4_K_M local,
@@ -132,39 +179,14 @@ ngắn và **1.108,41 ms** với mẫu hai câu. [Từng lượt và điều ki�
 **Phát lại khung với v1.5.0.** TTFA trung vị là **910,24 ms** với mẫu thoại
 ngắn và **914,23 ms** với mẫu hai câu. [Từng lượt và điều kiện đo](docs/PERFORMANCE.md#v150-windows-frame-replay)
 
-## Cài Windows offline
+</details>
 
-Từ [bộ offline v1.1.1](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1), tải EXE và
-**cả ba file BIN** của cùng phiên bản, đặt chung thư mục rồi chạy EXE. Có
-`SHA256SUMS.txt` để kiểm tra. Tổng khoảng 4,9 GB; app cài xong khoảng 6,4 GB.
-Python, Ollama, OCR/TTS models và HauhauCS Qwen3 4B Aggressive Q4_K_M đã có sẵn.
-Bản build chưa ký số. Các file Source code tự động của GitHub không chứa model.
+## Tài liệu và mã nguồn
 
-Sau đó vào tab **Updates** để cập nhật v1.5.0 (cũng hỗ trợ từ v1.1.2rc1).
-Updater v1.4.0 đề xuất gói vá nhỏ nếu các tệp cài đặt khớp.
-Nếu dùng v1.0.0 hoặc cần gói chuẩn, tải **Ludivoxa-1.5.0-App-Update.exe**
-từ [v1.5.0](https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.5.0), chạy
-và chọn đúng thư mục app đang dùng. Gói nhỏ giữ nguyên cấu hình, Ollama và
-model; v1.0.0 chưa có updater nên cần nâng cấp thủ công một lần.
+- [Hướng dẫn sử dụng và xử lý lỗi](docs/USER_GUIDE.md)
+- [Cách build Ludivoxa từ mã nguồn](docs/DEVELOPMENT.md)
+- [Nhật ký thay đổi](CHANGELOG.md) và [các bản phát hành](https://github.com/hungdinhxuan/Ludivoxa/releases)
 
-Mở game → chọn cửa sổ → **Start Capture → Configure OCR → Only selected box**,
-khoanh hội thoại rồi **OK**. Có thể di chuyển, đổi kích thước hoặc nhập phần
-trăm tọa độ. Chọn **Overlay only**, **TTS only** hoặc **Overlay + TTS**.
-
-- Game Anh: **English**, model `en_PP-OCRv5_mobile_rec`.
-- Game Nhật hoặc hỗn hợp: **Japanese/Auto**, model `PP-OCRv5_mobile_rec`.
-- **F8**: ẩn/hiện overlay. **Stop reading**: dừng giọng.
-- Ollama riêng của app: `http://127.0.0.1:11435`.
-- TTS đi kèm chỉ đọc tiếng Việt; target khác nên dùng Overlay only.
-
-Tên EXE `Interpreter.exe`, namespace Python và vị trí cấu hình cũ được giữ để
-tương thích. Bộ cài nâng cấp giữ cấu hình. Source developer có thể dùng alias
-`ludivoxa`; các script cài legacy ở thư mục gốc vẫn dành cho upstream PyPI.
-
-Xem [hướng dẫn đầy đủ](docs/USER_GUIDE.md), [build từ source](docs/DEVELOPMENT.md),
-[phát hành theo tag](docs/RELEASING.md), [số đo và giới hạn](docs/PERFORMANCE.md).
-OCR/dịch/TTS có độ trễ riêng; đoạn dài vẫn có thể chậm. Các số đo ảnh game đã
-ghi không phải cam kết FPS khi chơi trực tiếp.
-
-Mã ứng dụng dùng [MIT](LICENSE); các dependency/model giữ giấy phép riêng.
-Xem [ghi công và third-party notices](NOTICE.md).
+Ludivoxa phát triển từ [Interpreter](https://github.com/bquenin/interpreter).
+Mã ứng dụng dùng giấy phép MIT. Thư viện và model có giấy phép riêng.
+[Ghi công và giấy phép](NOTICE.md)
