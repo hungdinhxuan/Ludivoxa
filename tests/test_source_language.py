@@ -11,6 +11,7 @@ from interpreter.config import (
     GameProfile,
     LLMSettings,
     OCRBackend,
+    OutputMode,
     OverlayMode,
     OwocrSettings,
     TranslationBackend,
@@ -265,10 +266,13 @@ def _panel(config: Config) -> MainWindow:
     win._llm_model_combo.setEditable(True)
     win._llm_model_combo.setCurrentText(config.llm.model)
     win._llm_api_key_edit = QLineEdit(config.llm.api_key)
-    win._llm_language_edit = QLineEdit(config.llm.target_language)
+    win._target_language_combo = QComboBox()
+    win._target_language_combo.setEditable(True)
+    win._target_language_combo.setCurrentText(config.llm.target_language)
     win._llm_prompt_edit = QPlainTextEdit(config.llm.system_prompt or DEFAULT_SYSTEM_PROMPT)
     win._llm_result_label = QLabel()
     win._process_worker = MagicMock()
+    win._sync_translation_output = MagicMock()
     win._grow_to_fit = MagicMock()
     win.statusBar = MagicMock()
     config.save = MagicMock()
@@ -276,6 +280,52 @@ def _panel(config: Config) -> MainWindow:
 
 
 class TestMainWindow:
+    def test_target_picker_shows_presets_and_keeps_a_custom_language(self, qapp):
+        win = _panel(
+            Config(translation_backend=TranslationBackend.LLM, llm=LLMSettings(model="m", target_language="French"))
+        )
+        card = win._build_language_pair_card()
+        combo = win._target_language_combo
+        assert combo.currentText() == "French"
+        assert [combo.itemText(i) for i in range(combo.count())] == [
+            "Vietnamese",
+            "English",
+            "Simplified Chinese",
+            "Traditional Chinese",
+            "Japanese",
+            "Korean",
+        ]
+        combo.setCurrentIndex(combo.findText("Korean"))
+        assert "Korean" in win._pair_hint.text()
+        assert "Overlay only" in win._pair_hint.text()
+        combo.setEditText("Indonesian")
+        assert win._llm_settings_from_ui().target_language == "Indonesian"
+        card.close()
+
+    def test_output_picker_restores_saved_speech_mode_when_returning_to_vietnamese(self, qapp):
+        config = Config(
+            translation_backend=TranslationBackend.LLM,
+            llm=LLMSettings(target_language="Japanese"),
+            output_mode=OutputMode.TTS,
+        )
+        win = _panel(config)
+        win._output_combo = QComboBox()
+        for mode in OutputMode:
+            win._output_combo.addItem(mode.value, mode.value)
+        changed = []
+        win._output_combo.currentIndexChanged.connect(changed.append)
+
+        win._sync_output_selection()
+        assert win._output_combo.currentData() == OutputMode.OVERLAY.value
+        assert not win._output_combo.isEnabled()
+        assert config.output_mode == OutputMode.TTS
+
+        config.llm.target_language = "Vietnamese"
+        win._sync_output_selection()
+        assert win._output_combo.currentData() == OutputMode.TTS.value
+        assert win._output_combo.isEnabled()
+        assert changed == []
+
     def test_meiki_pins_the_language_to_japanese(self, qapp):
         win = _panel(Config(source_language="Korean"))  # e.g. hand-edited config with MeikiOCR
         win._sync_source_language_combo()
@@ -317,7 +367,7 @@ class TestMainWindow:
         )
         win = _panel(config)
         win._source_language_combo.setCurrentIndex(win._source_language_combo.findData("Korean"))
-        win._llm_language_edit.setText("French")
+        win._target_language_combo.setCurrentText("French")
 
         win._apply_engines()
 
@@ -325,6 +375,7 @@ class TestMainWindow:
         config.save.assert_called_once()
         win._process_worker.reload_ocr.assert_not_called()  # OCR engine and settings unchanged
         win._process_worker.reload_translation.assert_called_once()  # prompt names both languages
+        win._sync_translation_output.assert_called_once()
         assert "Korean" in win._pair_hint.text() and "French" in win._pair_hint.text()
 
     def test_apply_reloads_only_what_changed(self, qapp):

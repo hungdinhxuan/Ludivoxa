@@ -9,8 +9,8 @@ dialogue.
 [Download for Windows](#install-on-windows) · [Set up game translation](#translate-your-first-game-dialogue) ·
 [Documentation](https://ludivoxa.hungdx.com/en/) · [Tiếng Việt](README.vi.md)
 
-**Stable release v1.6.0** adds offline OCR for Simplified and Traditional Chinese
-and Korean. [Release notes](docs/releases/v1.6.0.md)
+**Stable release v1.7.0** adds target presets for English, Simplified and
+Traditional Chinese, Japanese and Korean. [Release notes](docs/releases/v1.7.0.md)
 
 ## Game translation features
 
@@ -23,7 +23,8 @@ are also available. Choose a game window or a video capture device as input.
 
 ### Local LLM translation with Ollama or a LAN server
 
-Translate to Vietnamese or choose another target language. Use the bundled
+Choose Vietnamese, English, Simplified or Traditional Chinese, Japanese,
+Korean, or enter a custom target language. Use the bundled
 Ollama runtime, your own local Ollama instance, or a compatible API on a LAN
 GPU server. Dialogue context, custom prompts and speaker metadata help carry
 names and forms of address between lines.
@@ -61,8 +62,8 @@ archives are for development.
 
 **Already installed?** Use **Updates** or run the standard **App-Update.exe**
 from the [latest stable release](https://github.com/hungdinhxuan/Ludivoxa/releases/latest)
-and select the existing installation directory. A matching v1.5.0 installation
-can download the smaller v1.6.0 patch. Updates keep your models, Ollama runtime
+and select the existing installation directory. A matching v1.6.0 installation
+can download the smaller v1.7.0 patch. Updates keep your models, Ollama runtime
 and `config.yml`. GitHub release downloads work without sign-in. The Windows
 installer is unsigned.
 
@@ -82,8 +83,8 @@ installer is unsigned.
 The offline profile runs OCR, translation and speech on your PC after
 installation. Its private Ollama endpoint is `http://127.0.0.1:11435`.
 You can set another local endpoint or a LAN server in **Engines**. The app
-uses the configured endpoint without automatic cloud fallback. Use **Overlay
-only** for other target languages because the bundled voices read Vietnamese.
+uses the configured endpoint without automatic cloud fallback. Other targets
+use the overlay automatically. The bundled voices read Vietnamese.
 [Local and LAN setup](docs/USER_GUIDE.md#ollama-local-và-gpu-server-lan)
 
 ## Architecture

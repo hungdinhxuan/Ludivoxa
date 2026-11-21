@@ -8,18 +8,18 @@ streaming speech and latency improvements. Use patch
 version **1.1.1** fixes OCR/TTS repeats and audio formats. The published v1.0.0 has no updater;
 its users must install the first updater-enabled version manually once.
 
-**v1.6.0 stable** uses Python/AppVersion `1.6.0` and Windows numeric version
-`1.6.0.0`. Build and test a fresh app stage. The app update includes the
+**v1.7.0 stable** uses Python/AppVersion `1.7.0` and Windows numeric version
+`1.7.0.0`. Build and test a fresh app stage. The app update includes the
 Korean recognizer under `_internal/ocr-models` and uses the existing offline
 models and runtime for the rest of the pipeline.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1 -AppDirectory build/v1.6.0-app/Interpreter -OutputDirectory dist/app-update/v1.6.0
+powershell -ExecutionPolicy Bypass -File packaging/build_app_update.ps1 -AppDirectory build/v1.7.0-app/Interpreter -OutputDirectory dist/app-update/v1.7.0
 ```
 
-Build the delta from the archived v1.5.0 onedir bundle and package both
+Build the delta from the archived v1.6.0 onedir bundle and package both
 installers using the [smaller Windows updates](#smaller-windows-updates)
-instructions. Publish `v1.6.0` with `prerelease=false` and `make_latest=true`.
+instructions. Publish `v1.7.0` with `prerelease=false` and `make_latest=true`.
 Verify anonymous downloads of both packages. New users install the full
 offline v1.1.1 package before this update.
 

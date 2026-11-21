@@ -527,7 +527,9 @@ def _panel(config: Config) -> MainWindow:
     win._llm_model_combo.setEditable(True)
     win._llm_model_combo.setCurrentText(llm.model)
     win._llm_api_key_edit = QLineEdit(llm.api_key)
-    win._llm_language_edit = QLineEdit(llm.target_language)
+    win._target_language_combo = QComboBox()
+    win._target_language_combo.setEditable(True)
+    win._target_language_combo.setCurrentText(llm.target_language)
     win._llm_prompt_edit = QPlainTextEdit(llm.system_prompt or DEFAULT_SYSTEM_PROMPT)
     win._llm_refresh_btn = QPushButton()
     win._llm_test_btn = QPushButton()
@@ -555,6 +557,7 @@ def test_llm_test_uses_the_pending_source_language(qapp, monkeypatch):
 
     def fake_check(settings, source_language):
         seen["language"] = source_language
+        seen["target"] = settings.target_language
         return ("Bonjour", 3)
 
     class _Inline:
@@ -570,10 +573,12 @@ def test_llm_test_uses_the_pending_source_language(qapp, monkeypatch):
     done = []
     win._llm_test_result = type("S", (), {"emit": lambda self, payload: done.append(payload)})()
     win._source_language_combo.setCurrentIndex(win._source_language_combo.findData("Korean"))  # not applied yet
+    win._target_language_combo.setCurrentText("Traditional Chinese")
 
     win._test_llm_endpoint()
 
     assert seen["language"] == "Korean"
+    assert seen["target"] == "Traditional Chinese"
     assert "Korean sample" in win._llm_result_label.toolTip()
     win._on_llm_test_done(done[0])
     assert win._llm_result_label.toolTip() == "OK in 3 ms: Bonjour"

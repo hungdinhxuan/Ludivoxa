@@ -14,7 +14,7 @@ import requests
 from . import log
 from .config import LLM_PROVIDERS, LLMSettings
 from .language_detection import detect_language
-from .languages import DEFAULT_SOURCE_LANGUAGE, SAMPLE_TEXT
+from .languages import DEFAULT_SOURCE_LANGUAGE, SAMPLE_TEXT, is_vietnamese_target, target_language_or_default
 from .models import ModelLoadError
 from .translate import (
     DEFAULT_CACHE_SIZE,
@@ -31,7 +31,7 @@ SPEAKER_INSTRUCTIONS = (
     "Do not add a speaker label or repeat metadata in the reply. Keep names spoken within the dialogue. "
     "The gender refers to the speaker, not the listener. Use the dialogue and previous lines to infer "
     "relationships. For an unspecified gender, don't infer gender from a name or age. "
-    "Use neutral wording, such as tôi, mình, or an omitted pronoun in Vietnamese, unless dialogue establishes gender. "
+    "Use neutral wording in the target language unless dialogue establishes gender. "
     "Keep the original tone and do not add a title or gendered wording unless the context supports it."
 )
 
@@ -277,7 +277,7 @@ class LLMTranslator:
 
     @property
     def target_language(self) -> str:
-        return self._settings.target_language or "Vietnamese"
+        return target_language_or_default(self._settings.target_language)
 
     @property
     def sample_text(self) -> str:
@@ -406,6 +406,8 @@ class LLMTranslator:
         prompt = self.system_prompt if prompt is None else prompt
         if speaker is not None or any(len(turn) == 3 for turn in history):
             prompt += "\n\n" + SPEAKER_INSTRUCTIONS
+            if is_vietnamese_target(self.target_language):
+                prompt += " In Vietnamese, neutral options include tôi, mình, or an omitted pronoun."
         messages = [{"role": "system", "content": prompt}]
         for source, translation, *context in history:
             messages.append({"role": "user", "content": self._speaker_input(source, context[0] if context else None)})

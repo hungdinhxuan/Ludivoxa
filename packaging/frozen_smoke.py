@@ -25,6 +25,7 @@ def run_smoke(report_path):
         from interpreter import __version__
         from interpreter.config import CharacterVoices, Config, OutputMode
         from interpreter.gui.workers import ProcessWorker
+        from interpreter.languages import TARGET_LANGUAGE_PRESETS, contains_kana, contains_script
         from interpreter.llm_translate import LLMTranslator
         from interpreter.ocr import create_ocr
         from interpreter.paddle_ocr import IsolatedPaddleOCR
@@ -139,6 +140,50 @@ def run_smoke(report_path):
             finally:
                 worker._discard_ocr()
         report["cjk_translations"] = cjk_translations
+        target_translations = []
+        for target in TARGET_LANGUAGE_PRESETS[1:]:
+            language_config = copy.deepcopy(config)
+            language_config.llm.target_language = target
+            language_config.output_mode = OutputMode.TTS
+            language_config.tts_enabled = True
+            if target == "English":
+                source, text, font_name = "Japanese", "日が暮れる前に村へ戻ってください。", "msgothic.ttc"
+            else:
+                source, text, font_name = "English", "Please return to the village after sunset.", "arial.ttf"
+            language_config.source_language = source
+            worker = ProcessWorker(language_config)
+            worker._ocr = ocr  # The already-loaded Japanese recognizer reads English as well.
+            worker._load_translator()
+            if worker.has_failed_models():
+                raise AssertionError(worker.get_failure_message())
+            try:
+                overlays, speech = [], []
+                worker.text_ready.connect(lambda value, _, results=overlays: results.append(value))
+                worker.speech_ready.connect(lambda value, _, results=speech: results.append(value))
+                worker.speech_stream_ready.connect(lambda value, _, results=speech: results.append(value))
+                image = Image.new("RGBA", (900, 100), "white")
+                font = ImageFont.truetype(str(Path("C:/Windows/Fonts") / font_name), 36)
+                ImageDraw.Draw(image).text((15, 10), text, fill="black", font=font)
+                frame = np.asarray(image)[:, :, [2, 1, 0, 3]].copy()
+                start = time.perf_counter()
+                worker._process_frame(frame)
+                elapsed = (time.perf_counter() - start) * 1000
+                result = overlays[0] if len(overlays) == 1 else ""
+                script = "Chinese" if target.endswith("Chinese") else target
+                if speech or result == text or not contains_script(result, script):
+                    raise AssertionError(f"Failed {source} to {target} overlay: {overlays!r}, speech={bool(speech)}")
+                if target == "Japanese" and not contains_kana(result):
+                    raise AssertionError(f"Expected kana in Japanese output: {result!r}")
+                if target == "Simplified Chinese" and not any(char in result for char in "请后庄归"):
+                    raise AssertionError(f"Expected Simplified Chinese output: {result!r}")
+                if target == "Traditional Chinese" and not any(char in result for char in "請後莊歸"):
+                    raise AssertionError(f"Expected Traditional Chinese output: {result!r}")
+                target_translations.append(
+                    {"source_language": source, "target_language": target, "translation": result, "ms": elapsed}
+                )
+            finally:
+                worker._translator._session.close()
+        report["target_translations"] = target_translations
         start = time.perf_counter()
         synthesizer = OfflineSynthesizer()
         audio = synthesizer.synthesize(

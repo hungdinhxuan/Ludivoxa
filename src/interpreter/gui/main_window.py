@@ -7,7 +7,7 @@ import time
 
 import numpy as np
 from PIL import Image, ImageDraw
-from PySide6.QtCore import Qt, QTimer, Signal, Slot
+from PySide6.QtCore import QSignalBlocker, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QFont, QImage, QKeySequence, QPixmap
 from PySide6.QtMultimedia import QMediaDevices
 from PySide6.QtWidgets import (
@@ -54,7 +54,13 @@ from ..config import (
     TranslationBackend,
     normalize_ocr_regions,
 )
-from ..languages import DEFAULT_SOURCE_LANGUAGE, OCR_SOURCE_LANGUAGES
+from ..languages import (
+    DEFAULT_SOURCE_LANGUAGE,
+    OCR_SOURCE_LANGUAGES,
+    TARGET_LANGUAGE_PRESETS,
+    is_vietnamese_target,
+    target_language_or_default,
+)
 from ..llm_translate import (
     DEFAULT_BASE_URLS,
     DEFAULT_SYSTEM_PROMPT,
@@ -128,7 +134,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._config = config
         self._speech = SpeechController(self)
-        self._speech.set_enabled(config.tts_enabled)
+        self._speech.set_enabled(config.live_speech_enabled)
         self._speech.set_volume(config.tts_volume)
         self._last_ocr_results: list = []
         self._preview_pixmap: QPixmap | None = None
@@ -266,7 +272,7 @@ class MainWindow(QMainWindow):
         translation_group = self._build_translation_group()
         header = self._build_header()
         self._setup_hotkeys()
-        self._llm_language_edit.setEnabled(self._config.translation_backend == TranslationBackend.LLM)
+        self._target_language_combo.setEnabled(self._config.translation_backend == TranslationBackend.LLM)
         self._update_pair_hint()
 
         layout.addWidget(header)
@@ -354,7 +360,7 @@ class MainWindow(QMainWindow):
             ("Overlay + TTS", OutputMode.BOTH),
         ):
             self._output_combo.addItem(label, value.value)
-        self._output_combo.setCurrentIndex(self._output_combo.findData(self._config.output_mode.value))
+        self._sync_output_selection()
         self._output_combo.currentIndexChanged.connect(self._on_output_changed)
         output_label.setBuddy(self._output_combo)
         output_row.addWidget(output_label)
@@ -556,11 +562,23 @@ class MainWindow(QMainWindow):
         arrow = QLabel("\u2192")
         arrow.setProperty("role", "hint")
         grid.addWidget(arrow, 0, 2)
-        grid.addWidget(QLabel("Translate to:"), 0, 3)
-        self._llm_language_edit = QLineEdit(self._config.llm.target_language)
-        self._llm_language_edit.setToolTip("Sugoi V4 always outputs English; the LLM engine can output any language")
-        grid.addWidget(self._llm_language_edit, 0, 4)
+        target_label = QLabel("Translate to:")
+        grid.addWidget(target_label, 0, 3)
+        self._target_language_combo = QComboBox()
+        self._target_language_combo.setEditable(True)
+        self._target_language_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self._target_language_combo.addItems(TARGET_LANGUAGE_PRESETS)
+        target = target_language_or_default(self._config.llm.target_language)
+        target_index = self._target_language_combo.findText(target)
+        self._target_language_combo.setCurrentIndex(target_index)
+        if target_index < 0:
+            self._target_language_combo.setEditText(target)
+        self._target_language_combo.setToolTip("Pick a target language or type a language supported by your LLM model.")
+        self._target_language_combo.currentTextChanged.connect(self._update_pair_hint)
+        target_label.setBuddy(self._target_language_combo)
+        grid.addWidget(self._target_language_combo, 0, 4)
         self._pair_hint = QLabel("")
+        self._pair_hint.setTextFormat(Qt.TextFormat.PlainText)
         self._pair_hint.setWordWrap(True)
         grid.addWidget(self._pair_hint, 1, 0, 1, 5)
         grid.setColumnStretch(1, 1)
@@ -583,10 +601,14 @@ class MainWindow(QMainWindow):
             self._pair_hint.setText(" ".join(problems))
         else:
             set_role(self._pair_hint, "hint")
-            target = self._llm_language_edit.text().strip() or "Vietnamese"
+            target = target_language_or_default(self._target_language_combo.currentText())
+            hint = ""
             if self._selected_backend() == TranslationBackend.SUGOI:
                 target = "English"
-            self._pair_hint.setText(f"{source} \u2192 {target}: the selected engines handle this pair.")
+                hint = " · Sugoi V4"
+            elif not is_vietnamese_target(target):
+                hint = " · Overlay only. The bundled voices read Vietnamese."
+            self._pair_hint.setText(f"{source} \u2192 {target}{hint}")
 
     def _build_capture_group(self) -> QGroupBox:
         """Source selection, capture controls and the preview."""
@@ -1050,8 +1072,11 @@ class MainWindow(QMainWindow):
                 and PADDLE_LANGUAGE_MODELS.get(source_language) != PADDLE_LANGUAGE_MODELS.get(config.source_language)
             )
         )
+        target_changed = translation_backend != config.translation_backend or (
+            translation_backend == TranslationBackend.LLM and llm.target_language != config.llm.target_language
+        )
         translation_changed = (
-            translation_backend != config.translation_backend
+            target_changed
             or llm != config.llm
             or source_language != config.source_language  # the LLM prompt names the source language
         )
@@ -1080,6 +1105,8 @@ class MainWindow(QMainWindow):
         if translation_changed:
             self._translation_status_label.setToolTip("")
             self._process_worker.reload_translation()
+        if target_changed:
+            self._sync_translation_output()
         self.statusBar().showMessage("Reloading engines...")
 
     def _set_pair_error(self, message: str):
@@ -1200,7 +1227,7 @@ class MainWindow(QMainWindow):
             base_url=self._llm_url_edit.text().strip() or DEFAULT_BASE_URLS[self._selected_provider()],
             model=self._llm_model_combo.currentText().strip(),
             api_key=self._llm_api_key_edit.text().strip(),
-            target_language=self._llm_language_edit.text().strip() or "Vietnamese",
+            target_language=target_language_or_default(self._target_language_combo.currentText()),
             system_prompt=None if not prompt or prompt == DEFAULT_SYSTEM_PROMPT else prompt,
             # Config-only fields (no widgets) are carried over so Apply never drops them
             context_lines=self._config.llm.context_lines,
@@ -1212,7 +1239,7 @@ class MainWindow(QMainWindow):
         """Show the LLM panel only when the LLM engine is selected."""
         is_llm = self._selected_backend() == TranslationBackend.LLM
         self._llm_panel.setVisible(is_llm)
-        self._llm_language_edit.setEnabled(is_llm)  # Sugoi V4 always outputs English
+        self._target_language_combo.setEnabled(is_llm)  # Sugoi V4 always outputs English
         self._update_pair_hint()
         self._grow_to_fit()
 
@@ -1413,7 +1440,7 @@ class MainWindow(QMainWindow):
         self._start_btn.setEnabled(True)
         self.statusBar().showMessage("Ready")
         logger.debug("models loaded")
-        if self._config.tts_enabled and hasattr(self, "_speech"):
+        if self._config.live_speech_enabled and hasattr(self, "_speech"):
             self._speech.prepare(self._config.tts_model_path)
 
     def _on_models_failed(self, error: str):
@@ -1914,7 +1941,7 @@ class MainWindow(QMainWindow):
         if not self._capturing:
             return
         self._paused = not self._paused
-        logger.debug("overlay visibility toggled", hidden=self._paused, tts_continues=self._config.tts_enabled)
+        logger.debug("overlay visibility toggled", hidden=self._paused, tts_continues=self._config.live_speech_enabled)
         if self._paused:
             self._pause_btn.setText("Show")
             self._banner_overlay.hide()
@@ -2066,7 +2093,7 @@ class MainWindow(QMainWindow):
 
     def _show_overlay(self):
         """Show the appropriate overlay."""
-        if self._config.output_mode == OutputMode.TTS:
+        if self._config.effective_output_mode == OutputMode.TTS:
             self._banner_overlay.hide()
             self._inplace_overlay.hide()
             return
@@ -2189,7 +2216,7 @@ class MainWindow(QMainWindow):
         if self._mode == OverlayMode.INPLACE and bounds and not self._paused:
             self._inplace_overlay.position_over_window(bounds)
 
-        if self._paused and not (self._config.tts_enabled or self._ocr_config_dialog):
+        if self._paused and not (self._config.live_speech_enabled or self._ocr_config_dialog):
             return
 
         if captured_at is not None:
@@ -2323,7 +2350,7 @@ class MainWindow(QMainWindow):
             self._capturing
             and generation == self._capture_generation
             and not self._paused
-            and self._config.output_mode != OutputMode.TTS
+            and self._config.effective_output_mode != OutputMode.TTS
         ):
             self._banner_overlay.set_text(translated)
 
@@ -2335,14 +2362,10 @@ class MainWindow(QMainWindow):
         if (
             self._capturing
             and generation == self._capture_generation
-            and self._config.tts_enabled
-            and self._config.output_mode != OutputMode.OVERLAY
+            and self._config.live_speech_enabled
             and hasattr(self, "_speech")
         ):
-            # This iteration provides a Vietnamese voice; other translation targets still work.
-            if self._config.translation_backend == TranslationBackend.LLM and (
-                self._config.llm.target_language or "Vietnamese"
-            ).strip().casefold() in ("vietnamese", "vi", "vi-vn", "tiếng việt"):
+            if self._config.translation_backend == TranslationBackend.LLM:
                 preset = self._config.tts_speaker_id
                 reference = self._config.tts_reference_audio
                 if isinstance(translated, SpeechStream):
@@ -2484,12 +2507,33 @@ class MainWindow(QMainWindow):
         finally:
             self._character_dialog = None
 
+    def _sync_output_selection(self):
+        mode = self._config.effective_output_mode
+        speech_supported = self._config.target_supports_speech
+        with QSignalBlocker(self._output_combo):
+            self._output_combo.setCurrentIndex(self._output_combo.findData(mode.value))
+        self._output_combo.setEnabled(speech_supported)
+        self._output_combo.setToolTip("" if speech_supported else "The bundled voices read Vietnamese.")
+
+    def _sync_translation_output(self):
+        self._sync_output_selection()
+        self._speech.stop(reset=True, reason="translation target changed")
+        self._speech.set_enabled(self._config.live_speech_enabled)
+        if self._capturing:
+            self._capture_generation += 1
+            self._last_ocr_capture = None
+            self._process_worker.discard_pending_frames()
+            self._banner_overlay.set_text("")
+            self._inplace_overlay.clear_regions()
+            if not self._paused:
+                self._show_overlay()
+
     def _on_output_changed(self):
         self._config.output_mode = OutputMode(self._output_combo.currentData())
         self._config.tts_enabled = self._config.output_mode != OutputMode.OVERLAY
         self._speech.stop(reset=True, reason="output mode changed")
-        self._speech.set_enabled(self._config.tts_enabled)
-        if self._config.tts_enabled:
+        self._speech.set_enabled(self._config.live_speech_enabled)
+        if self._config.live_speech_enabled:
             self._speech.prepare(self._config.tts_model_path)
         if self._capturing and not self._paused:
             self._show_overlay()
@@ -2594,7 +2638,7 @@ class MainWindow(QMainWindow):
             self._capturing
             and generation == self._capture_generation
             and not self._paused
-            and self._config.output_mode != OutputMode.TTS
+            and self._config.effective_output_mode != OutputMode.TTS
         ):
             # Get content offset from capture (accounts for window decorations)
             content_offset = (0, 0)

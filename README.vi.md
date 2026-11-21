@@ -9,8 +9,8 @@ hiện trên màn hình.
 [Tải cho Windows](#cài-windows-offline) · [Wiki Ludivoxa](https://ludivoxa.hungdx.com/) ·
 [Sơ đồ kiến trúc](README.md#architecture) · [English](README.md)
 
-**Bản ổn định v1.6.0** hỗ trợ OCR offline tiếng Trung giản thể, phồn thể và
-tiếng Hàn. [Ghi chú v1.6.0](docs/releases/v1.6.0.md)
+**Bản ổn định v1.7.0** thêm lựa chọn dịch sang tiếng Anh, Trung giản thể,
+Trung phồn thể, Nhật và Hàn. [Ghi chú v1.7.0](docs/releases/v1.7.0.md)
 
 ## Tính năng dịch game
 
@@ -24,7 +24,8 @@ giản thể và phồn thể, hoặc **Korean** cho tiếng Hàn.
 
 ### Dịch bằng Ollama local hoặc máy chủ GPU trong LAN
 
-Ludivoxa mặc định dịch sang tiếng Việt và cho phép chọn ngôn ngữ đích khác.
+Ludivoxa mặc định dịch sang tiếng Việt. Bạn có thể chọn tiếng Anh, Trung giản
+thể, Trung phồn thể, Nhật, Hàn hoặc gõ một ngôn ngữ mà model hỗ trợ.
 Dùng Ollama đi kèm, Ollama trên máy bạn hoặc endpoint tương thích OpenAI
 trong mạng LAN. App dùng ngữ cảnh hội thoại và prompt riêng để giữ tên,
 thuật ngữ và cách xưng hô giữa các câu.
@@ -76,8 +77,8 @@ mục **Assets** tải được mà không cần đăng nhập GitHub. Bộ cài
 
 Sau khi cài, cấu hình offline chạy OCR, dịch và đọc ngay trên máy. Ollama đi
 kèm dùng `http://127.0.0.1:11435`. Nếu dùng máy chủ LAN, đặt địa chỉ trong
-**Engines**. App dùng máy chủ đã chọn, không tự chuyển sang dịch cloud. Nếu
-dịch sang ngôn ngữ khác, dùng **Overlay only** vì giọng đi kèm đọc tiếng Việt.
+**Engines**. App dùng máy chủ đã chọn, không tự chuyển sang dịch cloud. Khi
+dịch sang ngôn ngữ khác tiếng Việt, app tự dùng **Overlay only**.
 [Cấu hình Ollama local hoặc LAN](docs/USER_GUIDE.md#ollama-local-và-gpu-server-lan)
 
 ## Benchmark TTFA theo phiên bản

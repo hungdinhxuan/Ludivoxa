@@ -5,6 +5,15 @@ such as `v1.0.0`; numbering is independent of the upstream Interpreter project.
 
 ## Unreleased
 
+## [1.7.0] - 2026-11-21
+
+- Add translation target presets for English, Simplified and Traditional
+  Chinese, Japanese and Korean. Keep Vietnamese as the default and continue
+  to accept custom target names.
+- Use subtitles for non-Vietnamese LLM targets and restore the saved output
+  mode when switching back to Vietnamese.
+- Clear the previous subtitles and speech when the target changes during capture.
+
 ## [1.6.0] - 2026-11-21
 
 - Add offline PaddleOCR profiles for Simplified and Traditional Chinese and
@@ -248,3 +257,4 @@ Initial Ludivoxa release, based on Interpreter 2.23.3.
 [1.1.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.0
 [1.1.1]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.1.1
 [1.6.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.6.0
+[1.7.0]: https://github.com/hungdinhxuan/Ludivoxa/releases/tag/v1.7.0

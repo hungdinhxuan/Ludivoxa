@@ -14,15 +14,31 @@ import pytest
 import requests
 from PySide6.QtWidgets import QApplication
 
-from interpreter.config import Config, LLMSettings, OCRBackend, OverlayMode, PaddleSettings, TranslationBackend
+from interpreter.config import (
+    Config,
+    LLMSettings,
+    OCRBackend,
+    OutputMode,
+    OverlayMode,
+    PaddleSettings,
+    TranslationBackend,
+)
 from interpreter.gui.workers import ProcessWorker
 from interpreter.language_detection import detect_language
 from interpreter.languages import SAMPLE_TEXT, contains_script
 from interpreter.llm_translate import LLMTranslationError, LLMTranslator
 from interpreter.models import ModelLoadError
+from interpreter.ocr import OCRResult
 from interpreter.paddle_ocr import PaddleOCR
 
 LANGUAGES = ["English", "Japanese", "Korean"]
+TARGET_TRANSLATIONS = {
+    "English": "Welcome to our village.",
+    "Simplified Chinese": "欢迎来到我们的村庄。",
+    "Traditional Chinese": "歡迎來到我們的村莊。",
+    "Japanese": "私たちの村へようこそ。",
+    "Korean": "우리 마을에 오신 것을 환영합니다.",
+}
 
 
 @pytest.fixture(scope="module")
@@ -38,14 +54,18 @@ def endpoint(monkeypatch):
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             calls.append((self.path, body))
+            prompt = body["messages"][0]["content"]
+            translation = next(
+                (text for target, text in TARGET_TRANSLATIONS.items() if f"into {target}." in prompt), "Xin chào"
+            )
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(
                 json.dumps(
                     {
-                        "message": {"content": "Xin chào"},
-                        "choices": [{"message": {"content": "Xin chào"}}],
+                        "message": {"content": translation},
+                        "choices": [{"message": {"content": translation}}],
                     }
                 ).encode()
             )
@@ -139,6 +159,42 @@ def test_capture_ocr_http_translation_overlay(endpoint, qapp, provider, mode, la
     worker._process_frame(np.zeros((32, 100, 4), dtype=np.uint8))
     assert len(calls) == 2  # repeat frame is cached
     print(f"{provider} {language} {mode.value}: {elapsed:.1f} ms (synthetic OCR and HTTP fixture)")
+
+
+@pytest.mark.parametrize("target", TARGET_TRANSLATIONS)
+@pytest.mark.parametrize(
+    "mode,saved_output,provider",
+    [(OverlayMode.BANNER, OutputMode.TTS, "ollama"), (OverlayMode.INPLACE, OutputMode.BOTH, "openai")],
+)
+def test_target_preserves_unicode_and_uses_overlay_with_saved_speech_mode(
+    endpoint, qapp, target, mode, saved_output, provider
+):
+    base, calls = endpoint
+    source = "Japanese" if target == "English" else "English"
+    settings = LLMSettings(provider=provider, model="local-test", base_url=base, target_language=target)
+    config = Config(
+        source_language=source, translation_backend=TranslationBackend.LLM, llm=settings, output_mode=saved_output
+    )
+    worker = ProcessWorker(config)
+    worker.set_mode(mode)
+    worker._ocr = SimpleNamespace(
+        extract_text_regions=lambda _: [OCRResult(SAMPLE_TEXT[source], {"x": 1, "y": 2, "width": 61, "height": 19})]
+    )
+    worker._translator = LLMTranslator(settings, source_language=source)
+    subtitles, speech = [], []
+    worker.text_ready.connect(lambda text, _: subtitles.append(text))
+    worker.regions_ready.connect(lambda regions, _: subtitles.append(regions[0][0]))
+    worker.speech_ready.connect(lambda text, _: speech.append(text))
+    worker.speech_stream_ready.connect(lambda stream, _: speech.append(stream))
+
+    worker._process_frame(np.zeros((32, 100, 4), dtype=np.uint8))
+
+    assert subtitles == [TARGET_TRANSLATIONS[target]]
+    assert not speech
+    assert config.output_mode == saved_output
+    expected_path = "/api/chat" if provider == "ollama" else "/v1/chat/completions"
+    assert all(path == expected_path for path, _ in calls)
+    assert f"from {source} into {target}." in calls[-1][1]["messages"][0]["content"]
 
 
 @pytest.mark.parametrize("provider", ["ollama", "openai"])

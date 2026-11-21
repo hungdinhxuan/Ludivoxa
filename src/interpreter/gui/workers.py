@@ -15,7 +15,7 @@ from PySide6.QtCore import QObject, Signal
 
 from .. import log
 from ..config import Config, GameProfile, OCRBackend, OutputMode, OverlayMode, character_name, ignore_phrase_key
-from ..languages import contains_japanese, contains_script  # noqa: F401  (contains_japanese kept for callers)
+from ..languages import contains_japanese, contains_script, is_vietnamese_target  # noqa: F401
 from ..llm_translate import LLMTranslator
 from ..ocr import PADDLE_LANGUAGE_MODELS, OCREngine, OCRResult, create_ocr, group_ocr_rows
 from ..speech import SpeechStream, voice_details, voice_gender
@@ -45,7 +45,7 @@ class DialogueEntry:
 
     @property
     def can_replay(self):
-        return self.target_language.strip().casefold() in ("vietnamese", "vi", "vi-vn", "tiếng việt")
+        return is_vietnamese_target(self.target_language)
 
 
 # After this many consecutive runtime failures an engine is marked as failed
@@ -343,6 +343,9 @@ class ProcessWorker(QObject):
         self._emit_models_status()
 
         while self._running:
+            pending = self._frame_buffer.get(timeout=0.5)
+            if not self._running:
+                break
             if self._reload_ocr:
                 self._reload_ocr = False
                 self._load_ocr()
@@ -359,7 +362,6 @@ class ProcessWorker(QObject):
             else:
                 self._retranslate_dialogue(entry)
 
-            pending = self._frame_buffer.get(timeout=0.5)
             if pending is None:
                 continue
             if self._config.ocr_backend == OCRBackend.PADDLE:
@@ -726,7 +728,7 @@ class ProcessWorker(QObject):
         )
 
     def _overlay_result_is_current(self, frame, regions, generation, origin, source_key):
-        if not self._config.hide_stale_overlay or self._config.output_mode == OutputMode.TTS:
+        if not self._config.hide_stale_overlay or self._config.effective_output_mode == OutputMode.TTS:
             return True
         pending = self._frame_buffer.peek()
         if pending is None:
@@ -881,7 +883,7 @@ class ProcessWorker(QObject):
 
     def _unread_source_tail(self, text):
         """Keep completed dialogue carried onto a new GBA line out of TTS."""
-        if self._config.output_mode != OutputMode.TTS or not self._spoken_complete:
+        if self._config.effective_output_mode != OutputMode.TTS or not self._spoken_complete:
             return text
         previous = self._spoken_source.split()
         tokens = list(re.finditer(r"\w+", text))
@@ -1055,6 +1057,8 @@ class ProcessWorker(QObject):
             ocr_status = "All dialogue ignored" if ignored else "No dialogue detected"
         self.ocr_diagnostics = (generation, ocr_ms, raw_count, ignored, ocr_status)
         captured_text = text
+        output_mode = self._config.effective_output_mode
+        speech_enabled = self._config.tts_enabled and output_mode != OutputMode.OVERLAY
 
         # Speech follows stable source text, not each intermediate typewriter
         # frame or a new wording returned by the translator. A transient empty
@@ -1065,8 +1069,8 @@ class ProcessWorker(QObject):
             generation,
             origin,
             frame.shape[:2] if isinstance(frame, np.ndarray) else None,
-            self._config.output_mode,
-            self._config.tts_enabled,
+            output_mode,
+            speech_enabled,
             self._config.tts_model_path,
             self._config.tts_speaker_id,
             self._config.tts_rate,
@@ -1126,10 +1130,7 @@ class ProcessWorker(QObject):
         if (
             source_key != self._speech_candidate
             and self._speech_candidate
-            and (
-                self._config.hide_stale_overlay
-                or (self._config.tts_enabled and self._config.output_mode != OutputMode.OVERLAY)
-            )
+            and (self._config.hide_stale_overlay or speech_enabled)
             and self._same_dialogue_image(
                 frame,
                 regions,
@@ -1146,12 +1147,7 @@ class ProcessWorker(QObject):
             regions = self._speech_candidate_regions
         if source_key != self._speech_candidate:
             previous = self._speech_candidate
-            if (
-                previous
-                and source_key
-                and self._config.hide_stale_overlay
-                and self._config.output_mode != OutputMode.TTS
-            ):
+            if previous and source_key and self._config.hide_stale_overlay and output_mode != OutputMode.TTS:
                 if self._mode == OverlayMode.INPLACE:
                     self._emit(self.regions_ready, [], generation)
                 else:
@@ -1184,12 +1180,7 @@ class ProcessWorker(QObject):
                 growing=growing,
                 generation=generation,
             )
-        if (
-            source_key
-            and source_key != self._spoken_source
-            and self._config.tts_enabled
-            and self._config.output_mode != OutputMode.OVERLAY
-        ):
+        if source_key and source_key != self._spoken_source and speech_enabled:
             ink, cursor = self._reveal_ink(frame, regions)
             if cursor:
                 if not self._speech_cursor_expected:
@@ -1270,7 +1261,7 @@ class ProcessWorker(QObject):
         text = self._unread_source_tail(text)
         if not text:
             return
-        if self._config.output_mode == OutputMode.TTS and source_key == self._spoken_source:
+        if output_mode == OutputMode.TTS and source_key == self._spoken_source:
             self.ocr_diagnostics = (generation, ocr_ms, raw_count, ignored, "Repeat suppressed")
             return
         if profile_title and isinstance(self._translator, LLMTranslator):
@@ -1284,9 +1275,8 @@ class ProcessWorker(QObject):
         preview_key = (source_key, translation_context.get("speaker"))
         can_preview = (
             self.stream_speech
-            and self._config.tts_enabled
-            and self._config.output_mode == OutputMode.TTS
-            and self._config.llm.target_language.strip().casefold() in ("vietnamese", "vi", "vi-vn", "tiếng việt", "")
+            and speech_enabled
+            and output_mode == OutputMode.TTS
             and callable(getattr(type(self._translator), "preview_translation", None))
         )
         if can_preview and not speech_stable:
@@ -1308,7 +1298,7 @@ class ProcessWorker(QObject):
                 except Exception as exc:
                     self._record_translation_failure(exc)
             return
-        if self._config.output_mode == OutputMode.TTS and not speech_stable:
+        if output_mode == OutputMode.TTS and not speech_stable:
             self.ocr_diagnostics = (generation, ocr_ms, raw_count, ignored, "Waiting for stable dialogue")
             return
         # Take the copy before a potentially slow translation, not afterwards.
@@ -1327,7 +1317,7 @@ class ProcessWorker(QObject):
         speech_parts = []
         translated_sources = []
         streamed = False
-        if self._mode == OverlayMode.INPLACE and self._config.output_mode != OutputMode.TTS:
+        if self._mode == OverlayMode.INPLACE and output_mode != OutputMode.TTS:
             translated_regions = []
             all_cached = True
             for region in regions:
@@ -1368,11 +1358,8 @@ class ProcessWorker(QObject):
                         self.stream_speech
                         and speech_stable
                         and source_key != self._spoken_source
-                        and self._config.tts_enabled
-                        and self._config.output_mode != OutputMode.OVERLAY
+                        and speech_enabled
                         and callable(getattr(type(self._translator), "translate_stream", None))
-                        and self._config.llm.target_language.strip().casefold()
-                        in ("vietnamese", "vi", "vi-vn", "tiếng việt", "")
                     )
                     if can_stream:
                         stream = self._character_stream(source_key, voice_binding)
@@ -1426,14 +1413,7 @@ class ProcessWorker(QObject):
             )
             self._emit(self.text_ready, visible, generation)
 
-        if (
-            speech_parts
-            and not streamed
-            and speech_stable
-            and source_key != self._spoken_source
-            and self._config.tts_enabled
-            and self._config.output_mode != OutputMode.OVERLAY
-        ):
+        if speech_parts and not streamed and speech_stable and source_key != self._spoken_source and speech_enabled:
             self._spoken_source = source_key
             self._spoken_character = repeat_speaker
             self._spoken_snapshot = snapshot

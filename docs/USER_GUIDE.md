@@ -65,9 +65,11 @@ một lần trong phiên xử lý mới.
   `korean_PP-OCRv5_mobile_rec`. Với bản chạy từ mã nguồn, chuẩn bị model
   theo [hướng dẫn phát triển](DEVELOPMENT.md#provision-models-explicitly).
   Có thể lưu **Chinese** hoặc **Korean** theo từng game trong **Game profile…**.
-- Target mặc định: **Vietnamese**. Có thể chọn ngôn ngữ dịch khác; hãy dùng
-  **Overlay only** khi target không phải tiếng Việt vì các giọng đi kèm chỉ đọc
-  tiếng Việt.
+- Từ v1.7.0, trong **Engines → Translate to**, chọn **Vietnamese** (mặc định), **English**,
+  **Simplified Chinese**, **Traditional Chinese**, **Japanese** hoặc **Korean**,
+  rồi nhấn **Apply**. Có thể gõ ngôn ngữ khác mà model dịch hỗ trợ.
+- Khi dịch sang ngôn ngữ khác tiếng Việt, app tự dùng **Overlay only**. Chế
+  độ đầu ra đã lưu được khôi phục khi quay lại tiếng Việt.
 
 MeikiOCR, Sugoi V4 và owocr vẫn có trong ứng dụng. Sugoi dành cho Nhật → Anh.
 owocr là chương trình riêng; việc dùng engine online trong owocr là lựa chọn

@@ -59,6 +59,13 @@ def test_frozen_ocr_local_translation_and_speech(tmp_path):
     assert [item["source"] for item in cjk] == ["欢迎来到村庄", "歡迎來到村莊", "안녕하세요 용사님"]
     assert [item["language"] for item in cjk] == ["Chinese", "Chinese", "Korean"]
     assert all(item["translation"] and item["translation"] != item["source"] for item in cjk)
+    assert [item["target_language"] for item in report["target_translations"]] == [
+        "English",
+        "Simplified Chinese",
+        "Traditional Chinese",
+        "Japanese",
+        "Korean",
+    ]
     assert report["audio_seconds"] > 1
     assert report["voice_count"] >= 67
     assert report["cloned_audio_seconds"] > 1

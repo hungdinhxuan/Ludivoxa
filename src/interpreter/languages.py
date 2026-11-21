@@ -8,6 +8,15 @@ character belongs to the language's script.
 
 DEFAULT_SOURCE_LANGUAGE = "Japanese"
 OCR_SOURCE_LANGUAGES = ("Auto", "English", "Japanese", "Chinese", "Korean")
+DEFAULT_TARGET_LANGUAGE = "Vietnamese"
+TARGET_LANGUAGE_PRESETS = (
+    DEFAULT_TARGET_LANGUAGE,
+    "English",
+    "Simplified Chinese",
+    "Traditional Chinese",
+    "Japanese",
+    "Korean",
+)
 
 # Display names double as config values and as the words used in the LLM prompt.
 SOURCE_LANGUAGES = (
@@ -70,6 +79,14 @@ def normalize_source_language(value: object) -> str:
         if language.lower() == text:
             return language
     return DEFAULT_SOURCE_LANGUAGE
+
+
+def target_language_or_default(value: str | None) -> str:
+    return (value or "").strip() or DEFAULT_TARGET_LANGUAGE
+
+
+def is_vietnamese_target(value: str | None) -> bool:
+    return target_language_or_default(value).casefold() in ("vietnamese", "vi", "vi-vn", "tiếng việt")
 
 
 def contains_script(text: str, language: str) -> bool:

@@ -6,7 +6,8 @@ description: Capture a game window, select multiple dialogue regions for offline
 1. Open the game in windowed or borderless mode. In Ludivoxa select **Refresh**, choose the game window, and select **Start Capture** when the engines are ready.
 2. Open **Configure OCR**, choose **Only selected boxes**, draw the dialogue boxes, and select **OK**.
 3. Choose **English** with `en_PP-OCRv5_mobile_rec` for English games. Choose **Japanese** or **Auto** with `PP-OCRv5_mobile_rec` for Japanese or mixed dialogue.
-4. Choose **Overlay only**, **TTS only**, or **Overlay + TTS**. For other target languages, use **Overlay only**. The bundled voices read Vietnamese.
+4. In **Engines → Translate to**, select **Vietnamese**, **English**, **Simplified Chinese**, **Traditional Chinese**, **Japanese**, or **Korean** and select **Apply**. You can also type a language supported by your model.
+5. Choose **Overlay only**, **TTS only**, or **Overlay + TTS** for Vietnamese. Other target languages use subtitles automatically. Returning to Vietnamese restores your previous output mode.
 
 Boxes are saved per game window. Move or resize the boxes if the dialogue moves. Use **Full window (use exclusions)** to scan the window while omitting selected areas.
 

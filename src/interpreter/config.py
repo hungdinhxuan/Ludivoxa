@@ -11,7 +11,13 @@ from pathlib import Path
 import yaml
 
 from . import log
-from .languages import DEFAULT_SOURCE_LANGUAGE, SOURCE_LANGUAGES, normalize_source_language
+from .languages import (
+    DEFAULT_SOURCE_LANGUAGE,
+    DEFAULT_TARGET_LANGUAGE,
+    SOURCE_LANGUAGES,
+    is_vietnamese_target,
+    normalize_source_language,
+)
 
 
 class OverlayMode(str, Enum):
@@ -121,7 +127,7 @@ class LLMSettings:
     base_url: str = "http://127.0.0.1:11434"
     model: str = ""
     api_key: str = ""  # Stored in plain text in config.yml; only needed for hosted services
-    target_language: str = "Vietnamese"
+    target_language: str = DEFAULT_TARGET_LANGUAGE
     system_prompt: str | None = None  # None = built-in default; may contain {target_language}
     context_lines: int = 3  # Previous lines replayed as conversation history
     timeout: float = 30.0  # Seconds per request
@@ -449,6 +455,19 @@ class Config:
             for title, value in (game_profiles.items() if isinstance(game_profiles, dict) else [])
             if isinstance(title, str) and title and (profile := GameProfile.from_dict(value)).to_dict()
         }
+
+    @property
+    def target_supports_speech(self) -> bool:
+        return self.translation_backend != TranslationBackend.LLM or is_vietnamese_target(self.llm.target_language)
+
+    @property
+    def effective_output_mode(self) -> OutputMode:
+        """Use the overlay for LLM targets outside the bundled voices' language."""
+        return self.output_mode if self.target_supports_speech else OutputMode.OVERLAY
+
+    @property
+    def live_speech_enabled(self) -> bool:
+        return self.tts_enabled and self.effective_output_mode != OutputMode.OVERLAY
 
     @classmethod
     def load(cls, config_path: str | None = None) -> "Config":

@@ -275,6 +275,31 @@ def test_reload_ocr_sets_the_flag_for_the_worker_loop(ocr_worker):
     assert ocr_worker._reload_ocr
 
 
+def test_new_target_loads_before_processing_the_frame_that_wakes_worker(ocr_worker, monkeypatch):
+    worker = ocr_worker
+    loaded, processed = [], []
+    pending = iter([("frame", 1, (0, 0), False, None, None, "", None), None])
+
+    def next_frame(timeout):
+        frame = next(pending)
+        if frame is None:
+            worker._running = False
+        else:
+            worker._config.llm.target_language = "Korean"
+            worker.reload_translation()
+        return frame
+
+    monkeypatch.setattr(worker, "_load_ocr", lambda: None)
+    monkeypatch.setattr(worker, "_load_translator", lambda: loaded.append(worker._config.llm.target_language))
+    monkeypatch.setattr(worker, "_process_frame", lambda *args: processed.append(loaded[-1]))
+    monkeypatch.setattr(worker._frame_buffer, "get", next_frame)
+    worker._running = True
+    worker._run()
+
+    assert loaded == ["Vietnamese", "Korean"]
+    assert processed == ["Korean"]
+
+
 def test_discard_pending_frames_keeps_inflight_generation(monkeypatch):
     """Stopping capture drops queued frames and leaves the busy frame tagged as old."""
     import threading
