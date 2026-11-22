@@ -7,7 +7,7 @@ Choose **Overlay only**, **TTS only**, or **Overlay + TTS** in the session contr
 
 Choose a **Voice model** and **Speaker**, and use **Test voice** to hear it. Adjust **Speaking speed** and **Speech volume** independently. The volume applies from the next playback, including previews and History replay. VieNeu Nano supports cloning from a local reference recording.
 
-From v2.1.0, Ludivoxa can clone a voice for English, Japanese, Korean and Mandarin Chinese. Set up a loopback llama.cpp server with Qwen3-TTS Base, then enter its address under **Local clone server** and select a WAV or MP3 under **Clone from audio**. [Setup instructions](https://github.com/hungdinhxuan/Ludivoxa/blob/main/docs/USER_GUIDE.md#clone-giọng-đa-ngôn-ngữ)
+Ludivoxa can clone a voice for English, Japanese, Korean and Mandarin Chinese. With one of these targets selected, **Play → Session** displays **Qwen3-TTS Base (local clone)** as the Voice model. Start a local llama.cpp server with Qwen3-TTS Base, enter its address under **Local clone server**, then select a WAV or MP3 under **Clone from audio** and use **Test voice**. [Setup instructions](https://github.com/hungdinhxuan/Ludivoxa/blob/main/docs/USER_GUIDE.md#clone-giọng-đa-ngôn-ngữ)
 
 If you want the overlay to clear when the dialogue changes, turn on **Clear translation when dialogue changes** under **Overlay**.
 

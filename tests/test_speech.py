@@ -337,6 +337,10 @@ def test_clone_controls_follow_an_applied_translation_target(speech, tmp_path):
     win._mode_row_widget = QWidget()
     win._capturing = win._paused = False
     page = win._build_play_page(QGroupBox())
+    assert win._tts_preset_panel.isHidden()
+    assert not win._tts_clone_model_label.isHidden()
+    assert "Qwen3-TTS Base" in win._tts_clone_model_label.text()
+    assert "select a recording" in win._tts_clone_model_label.text()
     assert not win._clone_server_row.isHidden()
     assert not win._output_combo.isEnabled()
     assert not win._preview_voice_btn.isEnabled()
@@ -344,6 +348,7 @@ def test_clone_controls_follow_an_applied_translation_target(speech, tmp_path):
     win._on_clone_url_changed()
     win._tts_reference_edit.setText(str(tmp_path / "reference.wav"))
     win._on_reference_audio_changed()
+    assert win._tts_clone_model_label.text() == "Voice model: Qwen3-TTS Base (local clone)"
     assert win._output_combo.isEnabled() and win._preview_voice_btn.isEnabled()
     assert not win._tts_rate_spin.isEnabled()
     win._preview_voice_btn.click()
@@ -352,6 +357,8 @@ def test_clone_controls_follow_an_applied_translation_target(speech, tmp_path):
     assert loaded.speech_voice_settings == win._config.speech_voice_settings
     win._config.llm.target_language = "Vietnamese"
     win._sync_translation_output()
+    assert not win._tts_preset_panel.isHidden()
+    assert win._tts_clone_model_label.isHidden()
     assert win._clone_server_row.isHidden()
     assert win._tts_rate_spin.isEnabled()
     assert win._config.speech_voice_settings[0] == win._config.tts_model_path

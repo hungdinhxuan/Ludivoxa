@@ -3,6 +3,11 @@
 All notable Ludivoxa changes are recorded here using version tags such as
 `v1.0.0`.
 
+## [2.2.1] - 2026-11-22
+
+- Show Qwen3-TTS Base and setup guidance in Play for supported clone targets.
+  Show Vietnamese voice presets when the Vietnamese voice engine applies.
+
 ## [2.2.0] - 2026-11-22
 
 - Append game-specific translation instructions to the shared Engines prompt

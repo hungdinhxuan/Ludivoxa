@@ -367,18 +367,22 @@ class MainWindow(QMainWindow):
         output_row.addWidget(output_label)
         output_row.addWidget(self._output_combo, 1)
         session_layout.addLayout(output_row)
+
+        self._tts_preset_panel = QWidget()
+        preset_layout = QVBoxLayout(self._tts_preset_panel)
+        preset_layout.setContentsMargins(0, 0, 0, 0)
         voice_row = QHBoxLayout()
         self._tts_voice_combo = QComboBox()
+        self._tts_voice_combo.setToolTip(
+            "VAIS is recommended for Vietnamese pronunciation. Use Test voice to compare presets."
+        )
         self._tts_speaker_combo = QComboBox()
         for label, widget in (("Voice model:", self._tts_voice_combo), ("Speaker:", self._tts_speaker_combo)):
             voice_label = QLabel(label)
             voice_label.setBuddy(widget)
             voice_row.addWidget(voice_label)
             voice_row.addWidget(widget, 1)
-        session_layout.addLayout(voice_row)
-        self._character_status = QLabel("Character voices off")
-        self._character_status.setWordWrap(True)
-        session_layout.addWidget(self._character_status)
+        preset_layout.addLayout(voice_row)
         tts_row = QHBoxLayout()
         voice_label = QLabel("Local voice model:")
         self._tts_model_edit = QLineEdit(self._config.tts_model_path)
@@ -393,12 +397,12 @@ class MainWindow(QMainWindow):
         browse_voice = QPushButton("Browse...")
         browse_voice.clicked.connect(self._browse_tts_voice)
         tts_row.addWidget(browse_voice)
-        stop_speech = QPushButton("Stop reading")
-        stop_speech.clicked.connect(lambda: self._speech.stop())
-        tts_row.addWidget(stop_speech)
-        session_layout.addLayout(tts_row)
-        self._tts_preset_controls = (self._tts_voice_combo, self._tts_model_edit, browse_voice)
+        preset_layout.addLayout(tts_row)
+        session_layout.addWidget(self._tts_preset_panel)
 
+        self._tts_clone_model_label = QLabel()
+        self._tts_clone_model_label.setWordWrap(True)
+        session_layout.addWidget(self._tts_clone_model_label)
         self._clone_server_row = QWidget()
         server_layout = QHBoxLayout(self._clone_server_row)
         server_layout.setContentsMargins(0, 0, 0, 0)
@@ -424,6 +428,10 @@ class MainWindow(QMainWindow):
         browse_reference.clicked.connect(self._browse_reference_audio)
         clone_layout.addWidget(browse_reference)
         session_layout.addWidget(self._clone_row)
+
+        self._character_status = QLabel("Character voices off")
+        self._character_status.setWordWrap(True)
+        session_layout.addWidget(self._character_status)
         rate_row = QHBoxLayout()
         rate_label = QLabel("Speaking speed:")
         self._tts_rate_spin = QDoubleSpinBox()
@@ -438,6 +446,9 @@ class MainWindow(QMainWindow):
         self._preview_voice_btn = QPushButton("Test voice")
         self._preview_voice_btn.clicked.connect(lambda: self._speech.preview(*self._config.speech_voice_settings))
         rate_row.addWidget(self._preview_voice_btn)
+        stop_speech = QPushButton("Stop reading")
+        stop_speech.clicked.connect(lambda: self._speech.stop())
+        rate_row.addWidget(stop_speech)
         rate_row.addStretch()
         session_layout.addLayout(rate_row)
         volume_row = QHBoxLayout()
@@ -461,10 +472,7 @@ class MainWindow(QMainWindow):
         self._refresh_voice_models()
         self._tts_voice_combo.currentIndexChanged.connect(self._on_voice_model_changed)
         self._tts_speaker_combo.currentIndexChanged.connect(self._on_speech_settings_changed)
-        self._tts_status = QLabel(
-            "Offline voices. VAIS is recommended for Vietnamese pronunciation. "
-            "Older VIVOS/25hours voices may pronounce tones less accurately; use Test voice to compare."
-        )
+        self._tts_status = QLabel()
         self._tts_status.setWordWrap(True)
         self._speech.status_changed.connect(self._tts_status.setText)
         session_layout.addWidget(self._tts_status)
@@ -2610,6 +2618,14 @@ class MainWindow(QMainWindow):
             clone_language(self._config.llm.target_language)
         )
         clone = Path(self._config.tts_model_path).expanduser().is_dir()
+        clone_voice = self._config.clone_voice
+        self._tts_preset_panel.setVisible(not multilingual)
+        self._tts_clone_model_label.setVisible(multilingual)
+        if multilingual:
+            model_text = "Voice model: Qwen3-TTS Base (local clone)"
+            if clone_voice is None:
+                model_text += "\nSet the local clone server and select a recording to enable speech."
+            self._tts_clone_model_label.setText(model_text)
         self._clone_server_row.setVisible(multilingual)
         self._clone_row.setVisible(multilingual or clone)
         self._tts_reference_label.setText("Clone from audio:" if multilingual else "Clone from audio (optional):")
@@ -2621,11 +2637,9 @@ class MainWindow(QMainWindow):
             if multilingual
             else "Clear this field to use a preset. No transcript is required."
         )
-        for control in self._tts_preset_controls:
-            control.setEnabled(not multilingual)
-        self._tts_speaker_combo.setEnabled(not multilingual and not (clone and self._config.tts_reference_audio))
+        self._tts_speaker_combo.setEnabled(not (clone and self._config.tts_reference_audio))
         self._tts_rate_spin.setEnabled(not multilingual)
-        self._preview_voice_btn.setEnabled(not multilingual or self._config.clone_voice is not None)
+        self._preview_voice_btn.setEnabled(not multilingual or clone_voice is not None)
 
     def _browse_reference_audio(self):
         formats = "Audio (*.wav *.mp3)" if not self._clone_server_row.isHidden() else "Audio (*.wav *.flac *.mp3 *.ogg)"

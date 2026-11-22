@@ -136,9 +136,10 @@ giọng Quan Thoại. Chuẩn bị model và runtime một lần, sau đó có t
 
 3. Trong **Engines**, chọn đích **English**, **Japanese**, **Korean**,
    **Simplified Chinese** hoặc **Traditional Chinese** và bấm **Apply**.
-4. Trong **Session**, nhập `http://127.0.0.1:17867` vào **Local clone server**,
-   chọn WAV hoặc MP3 sạch khoảng 3–10 giây ở **Clone from audio**, rồi bấm
-   **Test voice**. Chọn **TTS only** hoặc **Overlay + TTS** để đọc tự động.
+4. Trong **Play → Session**, mục **Voice model** hiện **Qwen3-TTS Base (local clone)**.
+   Nhập `http://127.0.0.1:17867` vào **Local clone server**, chọn WAV hoặc MP3
+   sạch khoảng 3–10 giây ở **Clone from audio**, rồi bấm **Test voice**.
+   Chọn **TTS only** hoặc **Overlay + TTS** để đọc tự động.
 
 Clone dùng một mẫu giọng chung cho các câu. Tốc độ nói theo model. File mẫu
 và bản dịch chỉ gửi qua loopback tới dịch vụ trên cùng máy. Đóng dịch vụ bằng
