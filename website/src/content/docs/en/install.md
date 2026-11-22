@@ -15,4 +15,6 @@ The full package includes Python, Ollama, the Qwen translation model, English an
 
 Open **Updates → Check for updates**, choose a download, and select **Install and restart** once verification finishes. Starting with v1.4.0, the updater offers a smaller patch if the release provides one and your app files match. It verifies downloads with SHA-256.
 
+Optional startup checks run in the background while the app opens on **Play**.
+
 For a manual upgrade, download the standard **App-Update.exe** and choose the existing Ludivoxa directory. The update keeps your configuration, local models, and Ollama runtime. [Latest stable release](https://github.com/hungdinhxuan/Ludivoxa/releases/latest)

@@ -28,7 +28,7 @@ const pages = [
     slug: "ollama",
     title: "Cấu hình Ollama local hoặc máy chủ LAN",
     description: "Dùng Ollama đi kèm Ludivoxa, Ollama riêng hoặc máy chủ tương thích OpenAI trên mạng LAN.",
-    sections: ["Ollama local và GPU server LAN"],
+    sections: ["Ollama local và GPU server LAN", "API cục bộ"],
   },
   {
     slug: "voice",

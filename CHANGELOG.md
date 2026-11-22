@@ -3,6 +3,15 @@
 All notable Ludivoxa changes are recorded here using version tags such as
 `v1.0.0`.
 
+## [2.4.0] - 2026-11-23
+
+- Add an optional local HTTP API for text translation and WAV or streamed PCM
+  speech. Keep per-session translation context and support configured game profiles.
+- Require a bearer token on private LAN listeners and give desktop capture
+  priority over API inference by default.
+- Keep **Check for updates** inside the Updates tab. Optional startup checks
+  run in the background while the app opens on Play.
+
 ## [2.3.0] - 2026-11-22
 
 - Add an English and Vietnamese interface selector. Save the preference

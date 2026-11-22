@@ -350,11 +350,13 @@ class LLMTranslator:
     def is_loaded(self) -> bool:
         return self._loaded
 
-    def translate(self, text: str, *, speaker=None) -> tuple[str, bool]:
+    def translate(self, text: str, *, speaker=None, warmup=True) -> tuple[str, bool]:
         """Translate Japanese text.
 
         Returns:
             Tuple of (translated text, was_cached).
+
+        Pass warmup=False when serving a separate context on an already configured endpoint.
 
         Raises:
             LLMTranslationError: If the request fails.
@@ -368,13 +370,17 @@ class LLMTranslator:
         if ready is not None:
             return ready
 
-        if not self._loaded:
+        if warmup and not self._loaded:
             self.load()
 
         result = self._translate_request(text, speaker, self._build_messages(text, speaker))
         if result:
             self._remember(text, result, speaker)
         return result, False
+
+    def close(self):
+        """Release the HTTP connections owned by this translation session."""
+        self._session.close()
 
     def retranslate(self, text, *, source_language, speaker=None, system_prompt="", prompt_mode="override"):
         """Make a fresh request for a history entry without changing the live conversation."""
@@ -392,7 +398,7 @@ class LLMTranslator:
 
         result = clean_output(raw, speaker_label=_speaker_label_pattern(speaker))
         if not result:
-            logger.warning("empty translation from endpoint", text=text[:50])
+            logger.warning("empty translation from endpoint", source_chars=len(text))
         return result
 
     @staticmethod

@@ -44,6 +44,7 @@ VIETNAMESE = {
     "Character voices…": "Giọng theo nhân vật…",
     "Game profile…": "Hồ sơ game…",
     "Diagnostics": "Chẩn đoán",
+    "Could not start the local API on {host}:{port}.": "Không thể mở API cục bộ tại {host}:{port}.",
     "Apply": "Áp dụng",
     "Save the language pair and both engines, and reload what changed": "Lưu cặp ngôn ngữ và hai bộ xử lý, rồi nạp lại phần đã thay đổi",
     "Languages": "Ngôn ngữ",

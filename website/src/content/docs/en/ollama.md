@@ -14,3 +14,15 @@ For your own server, select an LLM provider in **Engines**, enter its URL and mo
 | OpenAI-compatible server on your LAN | `http://192.168.1.10:8000/v1` |
 
 Start the server before testing the endpoint and make sure your PC can reach it. Ludivoxa uses the endpoint you configure while translating. Update checks use GitHub separately and can be turned off. Shared local and LAN servers run independently of the app.
+
+## Local HTTP API
+
+Launch `Ludivoxa.exe --api` to serve `GET /v1/health`, `POST /v1/translate`, and
+`POST /v1/speech` at `http://127.0.0.1:8765`. The API uses the LLM and voice in
+the app settings. For LAN access, pass `--api-host` with the PC's private IPv4
+address and set `LUDIVOXA_API_TOKEN` in the launch environment. Clients send
+the token in the `Authorization: Bearer` header.
+
+By default the API pauses new inference requests while desktop capture is
+running. Use `--api-share-capture` to allow both workloads.
+[Request fields, PowerShell examples and LAN setup](../../ollama/#api-cục-bộ).

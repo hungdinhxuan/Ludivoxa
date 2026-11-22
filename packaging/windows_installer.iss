@@ -5,10 +5,10 @@
   #define OutputDir "..\dist\installer"
 #endif
 #ifndef AppVersion
-  #define AppVersion "2.3.0"
+  #define AppVersion "2.4.0"
 #endif
 #ifndef AppNumericVersion
-  #define AppNumericVersion "2.3.0.0"
+  #define AppNumericVersion "2.4.0.0"
 #endif
 #ifdef DeltaFrom
   #ifndef AppUpdateOnly

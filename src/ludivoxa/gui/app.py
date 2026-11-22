@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QApplication
 
 from .. import __version__, log
 from ..config import Config
+from ..local_api import DEFAULT_PORT, LocalApi, validate_listener
 from .main_window import MainWindow
 
 
@@ -54,6 +55,7 @@ class LudivoxaApp:
         self._config = config
         self._app: QApplication | None = None
         self._window: MainWindow | None = None
+        self._api: LocalApi | None = None
 
     def setup(self):
         """Set up the application."""
@@ -88,6 +90,27 @@ class LudivoxaApp:
         # Handle app quit
         self._app.aboutToQuit.connect(self._on_quit)
 
+    def start_api(self, host, port, token, *, share_capture=False):
+        logger = log.get_logger()
+        try:
+            self._api = LocalApi(
+                self._config,
+                self._window.render_api_speech,
+                host,
+                port,
+                token,
+                capture_active=None if share_capture else self._window.is_capturing,
+            )
+        except OSError as exc:
+            from .i18n import tr
+
+            logger.error("could not start local API", host=host, port=port, error=str(exc))
+            self._window.statusBar().showMessage(
+                tr("Could not start the local API on {host}:{port}.").format(host=host, port=port), 15000
+            )
+            return
+        logger.info("local API listening", host=host, port=self._api.server_port)
+
     def _get_icon_path(self) -> Path:
         """Get platform-appropriate icon path."""
         resources = Path(__file__).parent.parent / "resources" / "icons"
@@ -102,6 +125,10 @@ class LudivoxaApp:
     def _on_quit(self):
         """Handle application quit."""
         logger = log.get_logger()
+
+        if self._api is not None:
+            self._api.close()
+            self._api = None
 
         # Save banner position before saving config
         if self._window:
@@ -131,7 +158,17 @@ def run():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Ludivoxa - Offline game OCR, translation and speech")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--api", action="store_true", help="Enable the local HTTP API for this launch")
+    parser.add_argument("--api-host", default="127.0.0.1", help="Bind to loopback or one private LAN IPv4 address")
+    parser.add_argument("--api-port", default=DEFAULT_PORT, type=int, help="Local API port (default: %(default)s)")
+    parser.add_argument("--api-share-capture", action="store_true", help="Allow API inference during desktop capture")
     args = parser.parse_args()
+    token = os.environ.get("LUDIVOXA_API_TOKEN", "")
+    if args.api:
+        try:
+            validate_listener(args.api_host, args.api_port, token)
+        except ValueError as exc:
+            parser.error(str(exc))
 
     # Setup GPU libraries early (before any CUDA-dependent imports)
     from ..gpu import setup as setup_gpu
@@ -179,4 +216,6 @@ def run():
     # Create and run app
     app = LudivoxaApp(config)
     app.setup()
+    if args.api:
+        app.start_api(args.api_host, args.api_port, token, share_capture=args.api_share_capture)
     sys.exit(app.run())

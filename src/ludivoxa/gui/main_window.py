@@ -2962,6 +2962,12 @@ class MainWindow(QMainWindow):
         self._process_worker.discard_pending_frames()
         self._last_ocr_results = []
 
+    def render_api_speech(self, text, voice_settings, cancelled):
+        return self._speech.render_for_api(text, voice_settings, cancelled)
+
+    def is_capturing(self) -> bool:
+        return self._capturing
+
     def get_banner_position(self) -> tuple[int, int]:
         """Get current banner overlay position."""
         return self._banner_overlay.get_position()

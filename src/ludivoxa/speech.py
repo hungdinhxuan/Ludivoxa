@@ -820,6 +820,42 @@ class SpeechController(QObject):
 
         future.add_done_callback(done)
 
+    def render_for_api(self, text, voice_settings, cancelled):
+        """Render into a bounded stream on the resident voice's executor, without playback."""
+        if self._closed or self._busy:
+            return None
+        request = self._request
+        audio = SpeechStream(capacity=2)
+        model_path, speaker_id, rate, reference_audio = voice_settings
+
+        def interrupted():
+            return self._closed or request != self._request or self._busy or audio._cancelled.is_set() or cancelled()
+
+        def render():
+            if interrupted():
+                raise CancelledError()
+            for chunk in self._synthesizer.iter_audio(
+                text,
+                model_path or DEFAULT_VOICE_PATH,
+                speaker_id,
+                rate,
+                reference_audio=reference_audio,
+                cancelled=interrupted,
+                chunk_chars=40,
+            ):
+                audio.put(chunk, interrupted)
+
+        try:
+            future = self._executor.submit(render)
+        except RuntimeError:  # The app can close between the state check and submit.
+            return None
+
+        def done(result):
+            audio.finish(result.exception() if not result.cancelled() else CancelledError())
+
+        future.add_done_callback(done)
+        return audio
+
     def _on_voice_ready(self, generation, status):
         if generation == self._generation and not self._closed and not self._busy:
             self.status_changed.emit(status)

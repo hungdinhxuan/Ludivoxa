@@ -274,6 +274,75 @@ Prompt mặc định giữ sát ý nghĩa, cảm xúc, cách xưng hô và mức
 nguyên bản; không tự làm nhẹ, tăng nặng hay thêm chi tiết. Prompt tự nhập vẫn
 được ưu tiên nếu bạn đã cấu hình riêng.
 
+## API cục bộ
+
+API mặc định tắt. Chọn LLM và giọng đọc trong Ludivoxa, rồi mở app với
+`--api`. API sống cùng cửa sổ app và dùng chung Ollama cùng các model giọng
+đọc đã nạp. Có thể gọi cả khi chưa bấm **Start capture**.
+
+```powershell
+# Từ thư mục có Ludivoxa.exe. Với bản mã nguồn, dùng python -m ludivoxa --api.
+.\Ludivoxa.exe --api
+```
+
+Địa chỉ mặc định là `http://127.0.0.1:8765`. Thêm `--api-port` để đổi cổng.
+Ví dụ dịch một câu rồi ghi âm thanh ra `speech.wav` trong PowerShell.
+
+```powershell
+$api = 'http://127.0.0.1:8765/v1'
+Invoke-RestMethod "$api/health"
+$translation = Invoke-RestMethod "$api/translate" -Method Post -ContentType 'application/json' `
+  -Body '{"text":"Wait for me by the gate.","source_language":"English","target_language":"Vietnamese"}'
+$body = [Text.Encoding]::UTF8.GetBytes((@{ text = $translation.text } | ConvertTo-Json -Compress))
+Invoke-WebRequest "$api/speech" -Method Post -ContentType 'application/json' -Body $body `
+  -UseBasicParsing -OutFile speech.wav
+```
+
+| Endpoint | Trường JSON | Kết quả |
+| --- | --- | --- |
+| `GET /v1/health` | | Trạng thái HTTP và phiên bản app |
+| `POST /v1/translate` | `text`, tùy chọn `source_language`, `target_language`, `session_id`, `game_profile`, `speaker` | `text`, `source_language`, `target_language`, `session_id`, `cached` |
+| `POST /v1/speech` | `text`, tùy chọn `stream`, `speaker_id` | WAV mặc định. Đặt `stream: true` để nhận PCM 16-bit signed little-endian, mono, với tần số mẫu trong `Content-Type` |
+
+- Mỗi `text` tối đa 1.200 ký tự. Nguồn mặc định là **Auto**, hoặc ngôn ngữ
+  trong `game_profile` nếu có. Với câu chỉ chứa chữ Hán, chọn `Chinese` hoặc
+  `Japanese` trực tiếp khi biết ngôn ngữ. Đích mặc định theo **Engines** (mặc
+  định tiếng Việt).
+- Bỏ `session_id` ở câu đầu để tạo phiên. Gửi lại ID trả về ở các câu sau và
+  giữ nguyên cặp ngôn ngữ cùng `game_profile` để nối ngữ cảnh. App giữ tối đa
+  32 phiên trong RAM, mỗi phiên tối đa 12 lượt trước đó theo cấu hình LLM.
+  Nếu app trả `session_not_found` thì bắt đầu phiên mới. `speaker` có dạng
+  `{"name":"Mina","gender":"female"}`, với `gender` mặc định `unknown`.
+- Speech dùng giọng và ngôn ngữ đọc đang chọn trong app. Có thể chọn preset
+  cùng model bằng `speaker_id` khi dùng giọng có sẵn. Client tự phát audio.
+  Với PCM, phát khi nhận được dữ liệu và coi luồng HTTP bị ngắt là lỗi.
+- Mặc định capture desktop được ưu tiên. Nếu API trả `503 capture_active`,
+  bấm **Stop capture** để gọi lại. **Hide** chỉ ẩn overlay, capture vẫn chạy.
+  Có thể mở app với `--api --api-share-capture` để chạy đồng thời. Khi đó, hai
+  luồng dịch chia sẻ Ollama và TTFA lúc chơi có thể tăng.
+- Mỗi engine nhận tối đa một lượt API đang xử lý. Khi gặp `503 engine_busy`,
+  thử lại sau một giây. Audio API đang tổng hợp có thể bị hủy giữa các đoạn
+  khi Ludivoxa cần đọc thoại desktop. Lượt dịch đã gửi tới Ollama có thể
+  tiếp tục chạy nếu bạn bắt đầu capture trong lúc chờ phản hồi.
+
+Muốn kết nối từ thiết bị khác, chọn địa chỉ IPv4 LAN của **máy chạy Ludivoxa**
+và tạo token ngẫu nhiên, rồi khởi động app từ cùng cửa sổ PowerShell.
+
+```powershell
+$tokenBytes = New-Object byte[] 32
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+$rng.GetBytes($tokenBytes)
+$rng.Dispose()
+$env:LUDIVOXA_API_TOKEN = [BitConverter]::ToString($tokenBytes).Replace('-', '').ToLowerInvariant()
+.\Ludivoxa.exe --api --api-host 192.168.1.20
+```
+
+Client gửi `Authorization: Bearer <token>` tới địa chỉ LAN đó. Chỉ dùng HTTP
+này trong mạng riêng tin cậy vì token và nội dung đi qua mạng không có TLS.
+Nếu Windows hỏi quyền truy cập mạng, cấp cho mạng Private. API nhận client
+HTTP trực tiếp, không bật CORS và chỉ gửi yêu cầu dịch tới endpoint LLM
+loopback hoặc IP LAN đã cấu hình trong **Engines**.
+
 ## Cập nhật ứng dụng
 
 Mở **Updates** ở thanh bên để nâng cấp bản đang cài. Bạn cũng có thể tải gói
@@ -287,8 +356,9 @@ Mở **Updates** ở thanh bên để nâng cấp bản đang cài. Bạn cũng 
    đúng thư mục rồi mở lại ứng dụng.
 
 **Check for updates when Ludivoxa starts** bật kiểm tra tự động và thông báo
-trong UI; tải/cài vẫn do bạn chọn. Mặc định tùy chọn này tắt để giữ cách chạy
-offline. Tính năng cập nhật dùng mạng GitHub, độc lập với OCR/LLM/TTS local.
+trong UI. App mở ở tab **Play** và kiểm tra trong nền. Bạn chọn tải và cài
+trong tab **Updates**. Mặc định tùy chọn này tắt để giữ cách chạy offline.
+Tính năng cập nhật dùng mạng GitHub, độc lập với OCR/LLM/TTS local.
 
 Updater từ v1.4.0 ưu tiên gói vá nhỏ khi bản phát hành có gói phù hợp và mã băm
 các tệp ứng dụng đang cài khớp. Nếu xác minh thất bại, tab Updates hiển thị

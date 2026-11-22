@@ -39,6 +39,24 @@ def release():
     return Release("v1.0.1", "New release notes", (Asset("Ludivoxa-1.0.1-App-Update.exe", 1, 12),), True)
 
 
+def test_check_button_stays_inside_updates_page(page):
+    widget, client, factory, _app = page
+    assert widget.isAncestorOf(widget.check_button)
+    assert not widget.check_button.isVisible()
+    factory.assert_not_called()
+
+    widget.show()
+    assert widget.check_button.isVisibleTo(widget)
+    client.check.return_value = release()
+    widget.check_button.click()
+    until(lambda: not widget._busy)
+    client.check.assert_called_once_with(widget.version)
+    assert widget.check_button.isVisible() and widget.download_button.isVisible()
+
+    widget.hide()
+    assert not widget.check_button.isVisible()
+
+
 def test_offline_default_does_not_check_and_opt_in_is_saved(page):
     widget, _client, factory, _app = page
     QTest.qWait(30)

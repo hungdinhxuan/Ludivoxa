@@ -67,7 +67,7 @@ class UpdatesPage(QWidget):
         self.download_button = QPushButton(tr("Download update"))
         self.install_button = QPushButton(tr("Install and restart"))
         self.cancel_button = QPushButton(tr("Cancel"))
-        for button in (self.download_button, self.install_button, self.cancel_button):
+        for button in (self.check_button, self.download_button, self.install_button, self.cancel_button):
             row.addWidget(button)
         self.check_button.clicked.connect(self.check)
         self.download_button.clicked.connect(self.download)

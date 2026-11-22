@@ -89,6 +89,12 @@ voice cloning for English, Japanese, Korean and Chinese with a local speech serv
 [Multilingual voice cloning setup](docs/USER_GUIDE.md#clone-giọng-đa-ngôn-ngữ)
 [Local and LAN setup](docs/USER_GUIDE.md#ollama-local-và-gpu-server-lan)
 
+### Optional local HTTP API
+
+Launch Ludivoxa with `--api` to translate text or generate speech from a
+script or another device. The API uses the configured local models and can
+return WAV or stream PCM. [API setup and examples](docs/USER_GUIDE.md#api-cục-bộ)
+
 ## Architecture
 
 ```mermaid
