@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from ..capture.convert import bgra_to_rgb_pil
 from ..config import normalize_ocr_region, normalize_ocr_regions
+from .i18n import tr
 from .theme import ACCENT
 
 
@@ -176,7 +177,7 @@ class OCRConfigDialog(QDialog):
         selection_only: bool = False,
     ):
         super().__init__(parent)
-        self.setWindowTitle(f"Configure OCR: {window_title}" if window_title else "Configure OCR")
+        self.setWindowTitle(tr("Configure OCR: {0}", window_title) if window_title else tr("Configure OCR"))
         available = self.screen().availableGeometry().adjusted(12, 36, -12, -12)
         self.setMinimumSize(min(480, available.width()), min(320, available.height()))
         self.resize(min(1000, available.width()), min(700, available.height()))
@@ -222,16 +223,16 @@ class OCRConfigDialog(QDialog):
 
         # Instructions
         scan_row = QHBoxLayout()
-        scan_label = QLabel("Scan:")
+        scan_label = QLabel(tr("Scan:"))
         self._scan_mode = QComboBox()
-        self._scan_mode.addItem("Full window (use exclusions)")
-        self._scan_mode.addItem("Only selected box" if self._selection_only else "Only selected boxes")
-        self._scan_mode.setAccessibleName("OCR scan area")
+        self._scan_mode.addItem(tr("Full window (use exclusions)"))
+        self._scan_mode.addItem(tr("Only selected box") if self._selection_only else tr("Only selected boxes"))
+        self._scan_mode.setAccessibleName(tr("OCR scan area"))
         scan_label.setBuddy(self._scan_mode)
         scan_row.addWidget(scan_label)
         scan_row.addWidget(self._scan_mode)
         scan_row.addStretch()
-        self._preset_btn = QPushButton("Use bottom dialogue box")
+        self._preset_btn = QPushButton(tr("Use bottom dialogue box"))
         self._preset_btn.clicked.connect(self._use_bottom_box)
         scan_row.addWidget(self._preset_btn)
         layout.addLayout(scan_row)
@@ -250,9 +251,9 @@ class OCRConfigDialog(QDialog):
             spin.setDecimals(1)
             spin.setSuffix(" %")
             spin.setValue(value)
-            spin.setAccessibleName(f"Translation box {label}")
+            spin.setAccessibleName(tr("Translation box {0}", tr(label)))
             spin.editingFinished.connect(self._region_from_fields)
-            field_label = QLabel(label + ":")
+            field_label = QLabel(tr(label) + ":")
             field_label.setBuddy(spin)
             fields.addWidget(field_label)
             fields.addWidget(spin)
@@ -286,7 +287,7 @@ class OCRConfigDialog(QDialog):
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(0, 0, 0, 0)
 
-        detected_label = QLabel("Detected Text:")
+        detected_label = QLabel(tr("Detected Text:"))
         detected_label.setStyleSheet("font-weight: bold; font-size: 14px;")
         right_layout.addWidget(detected_label)
 
@@ -307,7 +308,7 @@ class OCRConfigDialog(QDialog):
         confidence_layout = QHBoxLayout()
 
         # Confidence slider
-        confidence_title = QLabel("Confidence:")
+        confidence_title = QLabel(tr("Confidence:"))
         confidence_layout.addWidget(confidence_title)
         self._confidence_slider = QSlider(Qt.Orientation.Horizontal)
         self._confidence_slider.setRange(0, 100)
@@ -327,18 +328,18 @@ class OCRConfigDialog(QDialog):
         actions.setContentsMargins(0, 0, 0, 0)
 
         # Clear exclusions button
-        self._clear_btn = QPushButton("Clear Exclusions")
+        self._clear_btn = QPushButton(tr("Clear Exclusions"))
         self._clear_btn.clicked.connect(self._clear_current)
         actions.addWidget(self._clear_btn)
         actions.addStretch()
 
         # OK/Cancel buttons
-        self._ok_btn = QPushButton("OK")
+        self._ok_btn = QPushButton(tr("OK"))
         self._ok_btn.setDefault(True)
         self._ok_btn.clicked.connect(self.accept)
         actions.addWidget(self._ok_btn)
 
-        self._cancel_btn = QPushButton("Cancel")
+        self._cancel_btn = QPushButton(tr("Cancel"))
         self._cancel_btn.clicked.connect(self.reject)
         actions.addWidget(self._cancel_btn)
         for button in (self._clear_btn, self._ok_btn, self._cancel_btn):
@@ -357,19 +358,21 @@ class OCRConfigDialog(QDialog):
         self._region_controls.setVisible(selected)
         self._preset_btn.setVisible(selected and not self._selection_only)
         self._clear_btn.setText(
-            ("Clear Box" if self._selection_only else "Remove Selected Box") if selected else "Clear Exclusions"
+            tr(("Clear Box" if self._selection_only else "Remove Selected Box") if selected else "Clear Exclusions")
         )
         self._clear_btn.setEnabled(not selected or bool(self._region_item))
         self._instructions.setText(
-            (
-                "Draw one box around the speaker name or use the percentage fields."
-                if self._selection_only
-                else "Drag on the preview to add a box. Select a box to move, resize, or remove it. "
-                "The percentages apply to the selected box. Green boxes show OCR detections."
+            tr(
+                (
+                    "Draw one box around the speaker name or use the percentage fields."
+                    if self._selection_only
+                    else "Drag on the preview to add a box. Select a box to move, resize, or remove it. "
+                    "The percentages apply to the selected box. Green boxes show OCR detections."
+                )
+                if selected
+                else "Draw red exclusion zones to block unwanted detections. Green boxes show OCR detections. "
+                "Choose Only selected boxes to scan just the dialogue areas."
             )
-            if selected
-            else "Draw red exclusion zones to block unwanted detections. Green boxes show OCR detections. "
-            "Choose Only selected boxes to scan just the dialogue areas."
         )
         for zone in self._zones:
             zone.setVisible(not selected)

@@ -247,7 +247,7 @@ def _panel(config: Config) -> MainWindow:
     win._owocr_panel = MagicMock()
     win._owocr_url_edit = QLineEdit(config.owocr.url)
     win._owocr_result_label = QLabel()
-    win._ocr_engine_label = QLabel()
+    win._ocr_status_pill = QLabel()
     win._ocr_status_label = QLabel()
     win._translation_status_label = QLabel()
     win._fix_models_btn = QPushButton()
@@ -255,7 +255,7 @@ def _panel(config: Config) -> MainWindow:
     win._engine_combo.addItem("Sugoi", TranslationBackend.SUGOI.value)
     win._engine_combo.addItem("LLM", TranslationBackend.LLM.value)
     win._engine_combo.setCurrentIndex(win._engine_combo.findData(config.translation_backend.value))
-    win._translation_engine_label = QLabel()
+    win._translation_status_pill = QLabel()
     win._pair_hint = QLabel()
     win._llm_provider_combo = QComboBox()
     for provider in PROVIDERS:
@@ -273,7 +273,6 @@ def _panel(config: Config) -> MainWindow:
     win._llm_result_label = QLabel()
     win._process_worker = MagicMock()
     win._sync_translation_output = MagicMock()
-    win._grow_to_fit = MagicMock()
     win.statusBar = MagicMock()
     config.save = MagicMock()
     return win

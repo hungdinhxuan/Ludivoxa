@@ -21,6 +21,7 @@ MUTED = "#8a93a6"
 ACCENT = "#4f8cff"
 ACCENT_HOVER = "#6b9dff"
 ACCENT_PRESSED = "#3b76e6"
+ACCENT_TEXT = "#080b12"
 OK = "#3ddc97"
 ERROR = "#ff6b6b"
 WARNING = "#ffb454"
@@ -48,12 +49,12 @@ QGroupBox {{
     border: 1px solid {CARD_BORDER};
     border-radius: {RADIUS + 4}px;
     margin-top: 14px;
-    padding: 18px 14px 12px 14px;
+    padding: 12px 10px 8px 10px;
 }}
 QGroupBox::title {{
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    left: 14px;
+    left: 10px;
     top: 4px;
     padding: 0 6px;
     color: {MUTED};
@@ -87,7 +88,7 @@ QPushButton:disabled {{
 QPushButton[primary="true"] {{
     background: {ACCENT};
     border-color: {ACCENT};
-    color: white;
+    color: {ACCENT_TEXT};
     font-weight: 600;
 }}
 QPushButton[primary="true"]:hover {{
@@ -109,7 +110,7 @@ QPushButton[segment="left"], QPushButton[segment="right"] {{
 QPushButton[segment="left"]:checked, QPushButton[segment="right"]:checked {{
     background: {ACCENT};
     border-color: {ACCENT};
-    color: white;
+    color: {ACCENT_TEXT};
     font-weight: 600;
 }}
 QPushButton[segment="left"] {{
@@ -120,6 +121,31 @@ QPushButton[segment="right"] {{
     border-top-right-radius: {RADIUS}px;
     border-bottom-right-radius: {RADIUS}px;
 }}
+QToolButton {{
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: {RADIUS}px;
+    padding: 6px 8px;
+    font-weight: 600;
+}}
+QToolButton:hover {{
+    background: {HOVER};
+}}
+QToolButton:focus {{
+    border-color: {ACCENT};
+}}
+QMenu {{
+    background: {CARD};
+    color: {TEXT};
+    border: 1px solid {CARD_BORDER};
+    padding: 4px;
+}}
+QMenu::item {{
+    padding: 7px 14px;
+}}
+QMenu::item:selected {{
+    background: {HOVER};
+}}
 
 /* Inputs */
 QComboBox, QLineEdit, QPlainTextEdit, QKeySequenceEdit, QSpinBox {{
@@ -128,6 +154,7 @@ QComboBox, QLineEdit, QPlainTextEdit, QKeySequenceEdit, QSpinBox {{
     border-radius: {RADIUS}px;
     padding: 5px 10px;
     selection-background-color: {ACCENT};
+    selection-color: {ACCENT_TEXT};
 }}
 QComboBox:hover, QLineEdit:hover, QPlainTextEdit:hover {{
     border-color: #3a4152;
@@ -231,7 +258,7 @@ QListWidget[role="nav"]::item:hover {{
 }}
 QListWidget[role="nav"]::item:selected {{
     background: #4f8cff;
-    color: white;
+    color: {ACCENT_TEXT};
     font-weight: 600;
 }}
 
@@ -242,10 +269,7 @@ QLabel[role="app-title"] {{
     letter-spacing: 0.5px;
 }}
 QFrame[role="pill"] {{
-    background: #0f1115;
-    border: 1px solid #2c3240;
-    border-radius: 14px;
-    padding: 2px 10px;
+    border: none;
 }}
 QLabel[role="hint"] {{
     color: #8a93a6;
@@ -317,7 +341,7 @@ def apply_theme(app: QApplication) -> None:
     palette.setColor(QPalette.ColorRole.Button, QColor(HOVER))
     palette.setColor(QPalette.ColorRole.ButtonText, QColor(TEXT))
     palette.setColor(QPalette.ColorRole.Highlight, QColor(ACCENT))
-    palette.setColor(QPalette.ColorRole.HighlightedText, QColor("white"))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(ACCENT_TEXT))
     palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(CARD))
     palette.setColor(QPalette.ColorRole.ToolTipText, QColor(TEXT))
     palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(MUTED))

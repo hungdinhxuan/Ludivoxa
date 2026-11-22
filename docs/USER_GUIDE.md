@@ -53,6 +53,10 @@ một lần trong phiên xử lý mới.
 
 ## Ngôn ngữ và engine
 
+Để đổi ngôn ngữ giao diện, chọn **Tiếng Việt** hoặc **English** ở ô
+**Interface language / Ngôn ngữ giao diện** dưới thanh điều hướng, rồi mở
+lại Ludivoxa. Chọn ngôn ngữ của game và bản dịch trong **Bộ xử lý / Engines**.
+
 - Game tiếng Anh: chọn **English**, PaddleOCR và model nhận dạng
   `models/en_PP-OCRv5_mobile_rec` để ưu tiên tốc độ.
 - Game tiếng Nhật: chọn **Japanese** và `models/PP-OCRv5_mobile_rec`.
@@ -82,8 +86,9 @@ Chọn **Overlay only**, **TTS only** hoặc **Overlay + TTS** trong Session.
 **Stop reading** dừng âm thanh hiện tại. Dừng capture hoặc chọn Overlay only
 cũng dừng TTS.
 
-Chọn **Voice model**, **Speaker**, chỉnh **Speaking speed**, rồi dùng **Test
-voice** để nghe thử. Bản đầy đủ có 11 preset VieNeu Nano và 67 lựa chọn Piper.
+Mở **Voice settings / Cài đặt giọng đọc** trong phần Phiên chơi để chọn
+**Voice model**, **Speaker**, chỉnh tốc độ và nghe thử. Bản đầy đủ có
+11 preset VieNeu Nano và 67 lựa chọn Piper.
 Thanh **Speech volume** chỉnh riêng âm lượng giọng đọc từ 0% đến 100%. Mức mới
 áp dụng từ lượt phát tiếp theo, kể cả **Test voice** và **Replay** trong History.
 Với Nano, **Clone from audio** nhận một file ghi âm sạch trên máy; không cần
@@ -137,7 +142,8 @@ giọng Quan Thoại. Chuẩn bị model và runtime một lần, sau đó có t
 3. Trong **Engines**, chọn đích **English**, **Japanese**, **Korean**,
    **Simplified Chinese** hoặc **Traditional Chinese** và bấm **Apply**.
 4. Trong **Play → Session**, mục **Voice model** hiện **Qwen3-TTS Base (local clone)**.
-   Nhập `http://127.0.0.1:17867` vào **Local clone server**, chọn WAV hoặc MP3
+   Mở **Voice settings / Cài đặt giọng đọc**, nhập `http://127.0.0.1:17867`
+   vào **Local clone server**, chọn WAV hoặc MP3
    sạch khoảng 3–10 giây ở **Clone from audio**, rồi bấm **Test voice**.
    Chọn **TTS only** hoặc **Overlay + TTS** để đọc tự động.
 
@@ -168,7 +174,7 @@ tùy chọn **Show History button over the game** trong trang **Overlay** nếu 
 
 ### Hồ sơ theo game
 
-Chọn nguồn trong **Play**, rồi bấm **Game profile…** trên đầu ứng dụng. Khi
+Chọn nguồn trong **Play**, rồi mở **Tools → Game profile…** trên đầu ứng dụng. Khi
 đang capture, nút mở cấu hình của cửa sổ đang chụp. Mỗi hồ sơ lưu theo đúng tên
 cửa sổ, cùng cách lưu vùng OCR, ngưỡng tin cậy và giọng theo nhân vật.
 
@@ -186,12 +192,12 @@ cửa sổ, cùng cách lưu vùng OCR, ngưỡng tin cậy và giọng theo nh�
   có chứa cụm đã lọc vẫn được dịch nếu không trùng toàn bộ dòng OCR.
 
 Chỉnh vùng quét và ngưỡng tin cậy bằng **Configure OCR**, và chỉnh vùng tên
-cùng giọng nhân vật bằng **Character voices…**. Các phiên Wayland dùng chung
+cùng giọng nhân vật trong **Tools → Character voices…**. Các phiên Wayland dùng chung
 hồ sơ **Wayland Capture** vì cổng chọn màn hình không cung cấp tên cửa sổ.
 
 ### Chẩn đoán capture và âm thanh
 
-Mở **Diagnostics** để xem capture có nhận frame hay không, backend capture
+Mở **Tools → Diagnostics** để xem capture có nhận frame hay không, backend capture
 đang cấp frame, thời gian OCR/dịch gần nhất, số vùng bị lọc và trạng thái TTS.
 Trên Windows có thêm trạng thái Remote Desktop, tên thiết bị âm thanh mặc
 định hiện tại, thiết bị phát ở lượt gần nhất và mã lỗi PortAudio nếu có.
@@ -200,7 +206,7 @@ bị, tên cửa sổ, nội dung hội thoại và cài đặt endpoint.
 
 ### Giọng theo nhân vật (thử nghiệm từ v1.2.0)
 
-1. Chọn cửa sổ game trong mục **Capture**, bắt đầu capture, rồi mở **Character voices…** ở đầu app.
+1. Chọn cửa sổ game trong mục **Capture**, bắt đầu capture, rồi mở **Tools → Character voices…** ở đầu app.
 2. Chọn **Select name area…**, khoanh riêng nhãn tên người đang nói và nhấn **OK**.
 3. Nhập tên như game hiển thị, chọn **Voice preset** và **Character gender**, rồi **Add / update**.
    **From preset** lấy nhãn của giọng Nano. Chọn giới tính trực tiếp nếu nhân vật

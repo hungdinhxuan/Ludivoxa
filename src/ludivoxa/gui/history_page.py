@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .i18n import tr
 from .workers import DialogueEntry
 
 HISTORY_LIMIT = 100
@@ -31,20 +32,20 @@ class HistoryPage(QWidget):
         layout.setSpacing(8)
         self.entries = QListWidget()
         self.entries.setProperty("role", "feed")
-        self.entries.setAccessibleName("Dialogue history")
+        self.entries.setAccessibleName(tr("Dialogue history"))
         self.entries.setTextElideMode(Qt.TextElideMode.ElideRight)
         layout.addWidget(self.entries, 2)
         self.source = self._add_text(layout, "Original")
         self.translation = self._add_text(layout, "Translation")
 
         buttons = QHBoxLayout()
-        self.replay = QPushButton("Replay")
-        self.copy = QPushButton("Copy translation")
-        self.retranslate = QPushButton("Retranslate")
+        self.replay = QPushButton(tr("Replay"))
+        self.copy = QPushButton(tr("Copy translation"))
+        self.retranslate = QPushButton(tr("Retranslate"))
         for button in (self.replay, self.copy, self.retranslate):
             buttons.addWidget(button)
         layout.addLayout(buttons)
-        self.status = QLabel("Completed dialogue will appear here during capture.")
+        self.status = QLabel(tr("Completed dialogue will appear here during capture."))
         self.status.setWordWrap(True)
         self.status.setTextFormat(Qt.TextFormat.PlainText)
         self.status.setProperty("role", "hint")
@@ -58,10 +59,10 @@ class HistoryPage(QWidget):
 
     @staticmethod
     def _add_text(layout, name):
-        label = QLabel(name)
+        label = QLabel(tr(name))
         text = QPlainTextEdit()
         text.setReadOnly(True)
-        text.setAccessibleName(name)
+        text.setAccessibleName(tr(name))
         label.setBuddy(text)
         layout.addWidget(label)
         layout.addWidget(text, 1)
@@ -102,7 +103,7 @@ class HistoryPage(QWidget):
         entry = self._selected_entry()
         if entry:
             QApplication.clipboard().setText(entry.translation)
-            self.status.setText("Translation copied.")
+            self.status.setText(tr("Translation copied."))
 
     def _retranslate_selected(self):
         entry = self._selected_entry()
@@ -110,7 +111,7 @@ class HistoryPage(QWidget):
             return
         self._pending_entry = entry
         self.retranslate.setEnabled(False)
-        self.status.setText("Retranslating…")
+        self.status.setText(tr("Retranslating…"))
         self.retranslation_requested.emit(entry)
 
     def finish_retranslation(self, entry, result):
@@ -127,7 +128,7 @@ class HistoryPage(QWidget):
                     item.setText(self._summary(result))
                     message = "History translation updated."
                     break
-        self.status.setText(message)
+        self.status.setText(tr(message))
         self._show_entry(self.entries.currentItem())
 
     def cancel_retranslation(self):

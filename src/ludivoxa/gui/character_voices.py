@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from ..config import CharacterVoices, character_name
 from ..speech import voice_details, voice_label
+from .i18n import tr
 from .ocr_config import OCRConfigDialog
 
 
@@ -28,7 +29,7 @@ class CharacterVoicesDialog(QDialog):
 
     def __init__(self, parent, title, profile, model_path, frame=None, detected_name=""):
         super().__init__(parent)
-        self.setWindowTitle("Character voices (experimental)")
+        self.setWindowTitle(tr("Character voices (experimental)"))
         bounds = self.screen().availableGeometry().adjusted(12, 36, -12, -12)
         self.setMinimumSize(min(480, bounds.width()), min(320, bounds.height()))
         self.resize(min(780, bounds.width()), min(600, bounds.height()))
@@ -43,10 +44,10 @@ class CharacterVoicesDialog(QDialog):
         outer = QVBoxLayout(self)
         actions = QHBoxLayout()
         actions.addStretch()
-        self._ok = QPushButton("OK")
+        self._ok = QPushButton(tr("OK"))
         self._ok.setDefault(True)
         self._ok.clicked.connect(self.accept)
-        cancel = QPushButton("Cancel")
+        cancel = QPushButton(tr("Cancel"))
         cancel.clicked.connect(self.reject)
         for button in (self._ok, cancel):
             button.setMinimumHeight(44)
@@ -63,21 +64,21 @@ class CharacterVoicesDialog(QDialog):
         body = QVBoxLayout(content)
         scroll.setWidget(content)
         outer.addWidget(scroll, 1)
-        game = QLabel(f"Capture source: {title}")
+        game = QLabel(tr("Capture source: {0}", title))
         game.setTextFormat(Qt.TextFormat.PlainText)
         game.setWordWrap(True)
         body.addWidget(game)
-        self._enabled = QCheckBox("Automatically select a voice from the speaker name")
+        self._enabled = QCheckBox(tr("Automatically select a voice from the speaker name"))
         self._enabled.setChecked(profile.enabled)
         body.addWidget(self._enabled)
         help_text = QLabel(
-            "Select the speaker-name label, then assign each name a preset. "
-            "Unknown names and narration use your default voice or clone. "
-            "Gender defaults to the preset label. You can override it for translation."
+            tr(
+                "Select the speaker-name label, then assign each name a preset. Unknown names and narration use your default voice or clone. Gender defaults to the preset label. You can override it for translation."
+            )
         )
         help_text.setWordWrap(True)
         body.addWidget(help_text)
-        self._region_button = QPushButton("Select name area…")
+        self._region_button = QPushButton(tr("Select name area…"))
         self._region_button.setMinimumHeight(44)
         self._region_button.setEnabled(frame is not None)
         self._region_button.clicked.connect(self._select_region)
@@ -93,18 +94,18 @@ class CharacterVoicesDialog(QDialog):
         fields = QFormLayout()
         self._name = QLineEdit()
         self._name.setMaxLength(64)
-        self._name.setAccessibleName("Character name")
-        fields.addRow("Character name:", self._name)
+        self._name.setAccessibleName(tr("Character name"))
+        fields.addRow(tr("Character name:"), self._name)
         self._preset = self._preset_combo()
-        self._preset.setAccessibleName("Character voice preset")
-        fields.addRow("Voice preset:", self._preset)
+        self._preset.setAccessibleName(tr("Character voice preset"))
+        fields.addRow(tr("Voice preset:"), self._preset)
         self._gender = self._gender_combo()
-        fields.addRow("Character gender:", self._gender)
+        fields.addRow(tr("Character gender:"), self._gender)
         body.addLayout(fields)
         add_row = QHBoxLayout()
-        add = QPushButton("Add / update")
+        add = QPushButton(tr("Add / update"))
         add.clicked.connect(self._add_name)
-        test = QPushButton("Test selected voice")
+        test = QPushButton(tr("Test selected voice"))
         test.setEnabled(self._preset.currentData() is not None)
         self._preset.currentIndexChanged.connect(lambda: test.setEnabled(self._preset.currentData() is not None))
         test.clicked.connect(self._preview)
@@ -113,14 +114,16 @@ class CharacterVoicesDialog(QDialog):
             add_row.addWidget(button)
         body.addLayout(add_row)
         self._table = QTableWidget(0, 3)
-        self._table.setHorizontalHeaderLabels(["Character name", "Voice preset", "Character gender"])
+        self._table.setHorizontalHeaderLabels(
+            [tr(label) for label in ("Character name", "Voice preset", "Character gender")]
+        )
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.setMinimumHeight(150)
-        self._table.setAccessibleName("Character voice assignments")
+        self._table.setAccessibleName(tr("Character voice assignments"))
         self._table.itemSelectionChanged.connect(self._edit_selected)
         body.addWidget(self._table)
-        remove = QPushButton("Remove selected")
+        remove = QPushButton(tr("Remove selected"))
         remove.setMinimumHeight(44)
         remove.clicked.connect(self._remove_selected)
         body.addWidget(remove)
@@ -131,7 +134,9 @@ class CharacterVoicesDialog(QDialog):
             if name.casefold() not in assigned:
                 self._append_row(name, None, gender)
         if not self._model_matches and profile.voices:
-            self._error.setText("Saved assignments use another voice model. Choose current presets before enabling.")
+            self._error.setText(
+                tr("Saved assignments use another voice model. Choose current presets before enabling.")
+            )
             self._error.show()
         self.set_detected_name(detected_name)
         if detected_name:
@@ -141,16 +146,16 @@ class CharacterVoicesDialog(QDialog):
 
     def _preset_combo(self, index=None):
         combo = QComboBox()
-        combo.addItem("Default voice", None)
+        combo.addItem(tr("Default voice"), None)
         for name, speaker_id in self._speakers:
-            combo.addItem(voice_label(self._model_path, name), speaker_id)
+            combo.addItem(tr(voice_label(self._model_path, name)), speaker_id)
         combo.setCurrentIndex(max(0, combo.findData(index)))
         return combo
 
     @staticmethod
     def _gender_combo(value=None):
         combo = QComboBox()
-        combo.setAccessibleName("Character gender")
+        combo.setAccessibleName(tr("Character gender"))
         for label, data in (
             ("From preset", None),
             ("Male", "male"),
@@ -158,7 +163,7 @@ class CharacterVoicesDialog(QDialog):
             ("Nonbinary", "nonbinary"),
             ("Unspecified", "unknown"),
         ):
-            combo.addItem(label, data)
+            combo.addItem(tr(label), data)
         combo.setCurrentIndex(max(0, combo.findData(value)))
         return combo
 
@@ -167,7 +172,7 @@ class CharacterVoicesDialog(QDialog):
         self._table.insertRow(row)
         self._table.setItem(row, 0, QTableWidgetItem(name))
         combo = self._preset_combo(index)
-        combo.setAccessibleName(f"Voice for {name}")
+        combo.setAccessibleName(tr("Voice for {0}", name))
         self._table.setCellWidget(row, 1, combo)
         self._table.setCellWidget(row, 2, self._gender_combo(gender))
         self._table.setRowHeight(row, 44)
@@ -176,7 +181,7 @@ class CharacterVoicesDialog(QDialog):
         name, index = character_name(self._name.text()), self._preset.currentData()
         gender = self._gender.currentData()
         if not name or (index is None and gender is None):
-            self._error.setText("Enter a name and choose a voice preset or a character gender.")
+            self._error.setText(tr("Enter a name and choose a voice preset or a character gender."))
             self._error.show()
             return
         for row in range(self._table.rowCount()):
@@ -213,17 +218,17 @@ class CharacterVoicesDialog(QDialog):
             self.preview_requested.emit(index)
 
     def set_detected_name(self, name):
-        self._detected.setText(f"Detected name: {name}" if name else "Detected name: none (default voice)")
+        self._detected.setText(tr("Detected name: {0}", name) if name else tr("Detected name: none (default voice)"))
 
     def _refresh_region_status(self):
-        status = "Speaker-name area selected." if self._profile.name_region else "No name area selected."
+        status = tr("Speaker-name area selected." if self._profile.name_region else "No name area selected.")
         if self._frame is None:
-            status += " Start capture on this source to select or change the area."
+            status += tr(" Start capture on this source to select or change the area.")
         self._region_status.setText(status)
 
     def _select_region(self):
         editor = OCRConfigDialog(self, initial_region=self._profile.name_region, selection_only=True)
-        editor.setWindowTitle("Select speaker name area")
+        editor.setWindowTitle(tr("Select speaker name area"))
         editor.update_frame(self._frame)
         if editor.exec() == QDialog.DialogCode.Accepted:
             self._profile.name_region = editor.get_scan_region()
@@ -257,7 +262,7 @@ class CharacterVoicesDialog(QDialog):
         try:
             self.get_profile()
         except ValueError as exc:
-            self._error.setText(str(exc))
+            self._error.setText(tr(str(exc)))
             self._error.show()
             return
         super().accept()

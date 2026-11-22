@@ -497,7 +497,7 @@ def test_existing_box_editor_can_select_name_area_without_ocr_settings(qapp):
         dialog.close()
 
 
-def test_main_header_keeps_character_and_ocr_actions_at_top(main, qapp):
+def test_main_header_keeps_ocr_and_game_tools_at_top(main, qapp):
     main._ocr_config_btn = QPushButton("Configure OCR")
     header = main._build_header()
     container = QWidget()
@@ -507,7 +507,9 @@ def test_main_header_keeps_character_and_ocr_actions_at_top(main, qapp):
     container.resize(850, 400)
     container.show()
     qapp.processEvents()
-    for button in (main._ocr_config_btn, main._character_voices_btn):
+    tools = next(button for button in header.findChildren(QPushButton) if button.menu())
+    assert [action.text() for action in tools.menu().actions()] == ["Game profile…", "Character voices…", "Diagnostics"]
+    for button in (main._ocr_config_btn, tools):
         assert button.isVisible()
         assert button.mapTo(container, button.rect().center()).y() < 160
     container.close()

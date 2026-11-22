@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFontDialog,
+    QFormLayout,
     QFrame,
     QGridLayout,
     QGroupBox,
@@ -28,12 +29,15 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSlider,
     QStackedWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -96,6 +100,7 @@ from .character_voices import CharacterVoicesDialog
 from .diagnostics import DiagnosticsDialog
 from .game_profile import GameProfileDialog
 from .history_page import HistoryPage
+from .i18n import set_interface_language, tr
 from .ocr_config import OCRConfigDialog
 from .theme import ERROR, OK, set_role
 from .updates_page import UpdatesPage
@@ -134,6 +139,7 @@ class MainWindow(QMainWindow):
     def __init__(self, config: Config):
         super().__init__()
         self._config = config
+        set_interface_language(config.interface_language)
         self._speech = SpeechController(self)
         self._speech.set_enabled(config.live_speech_enabled)
         self._speech.set_volume(config.tts_volume)
@@ -215,11 +221,8 @@ class MainWindow(QMainWindow):
         self._media_devices.videoInputsChanged.connect(self._on_video_devices_changed)
 
         self._setup_ui()
-        # Auto-size window to fit all widgets, then lock minimum size
-        self.adjustSize()
-        self.setMinimumSize(self.size())
-        # Open with room for the capture preview; the user can still shrink to the minimum
-        self.resize(self.width(), max(self.height(), 680))
+        available = self.screen().availableGeometry()
+        self.resize(min(840, available.width() - 24), min(660, available.height() - 48))
         self._refresh_sources()
         self._load_models()
 
@@ -259,9 +262,6 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(16, 12, 16, 8)
-        layout.setSpacing(12)
-
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
@@ -285,13 +285,35 @@ class MainWindow(QMainWindow):
         # Sidebar navigation
         self._nav = QListWidget()
         self._nav.setProperty("role", "nav")
-        self._nav.setFixedWidth(170)
+        self._nav.setFixedWidth(132)
         for name in ("Play", "Overlay", "Engines", "Updates", "History"):
-            self._nav.addItem(name)
+            self._nav.addItem(tr(name))
         nav_box = QWidget()
         nav_layout = QVBoxLayout(nav_box)
-        nav_layout.setContentsMargins(12, 12, 4, 12)
+        nav_layout.setContentsMargins(8, 8, 4, 8)
         nav_layout.addWidget(self._nav)
+        interface_language = self._config.interface_language
+        interface_combo = QComboBox()
+        interface_combo.addItem("English", "en")
+        interface_combo.addItem("Tiếng Việt", "vi")
+        interface_combo.setCurrentIndex(interface_combo.findData(interface_language))
+        interface_label = QLabel(tr("Interface language"))
+        interface_label.setWordWrap(True)
+        interface_label.setBuddy(interface_combo)
+        interface_hint = QLabel(tr("Reopen Ludivoxa to apply the language."))
+        interface_hint.setWordWrap(True)
+        set_role(interface_hint, "hint")
+        interface_hint.hide()
+
+        def save_interface_language():
+            self._config.interface_language = interface_combo.currentData()
+            self._config.save()
+            interface_hint.setVisible(self._config.interface_language != interface_language)
+
+        interface_combo.currentIndexChanged.connect(save_interface_language)
+        nav_layout.addWidget(interface_label)
+        nav_layout.addWidget(interface_combo)
+        nav_layout.addWidget(interface_hint)
         version = QLabel(f"v{__version__}")
         version.setProperty("role", "hint")
         nav_layout.addWidget(version)
@@ -300,11 +322,11 @@ class MainWindow(QMainWindow):
         # Pages
         self._pages = QStackedWidget()
         self._pages.addWidget(self._build_play_page(capture_group))
-        self._pages.addWidget(self._page(appearance_group))
+        self._pages.addWidget(self._scroll_page(self._page(appearance_group)))
         self._pages.addWidget(self._build_engines_page(pair_card, ocr_group, translation_group))
         self._updates_page = UpdatesPage(self._config, __version__, self)
         self._updates_page.update_available.connect(self._on_update_available)
-        self._pages.addWidget(self._updates_page)
+        self._pages.addWidget(self._scroll_page(self._updates_page))
         self._history = HistoryPage(self)
         self._history.replay_requested.connect(self._replay_history)
         self._history.retranslation_requested.connect(self._retranslate_history)
@@ -324,97 +346,117 @@ class MainWindow(QMainWindow):
         layout.addLayout(body, 1)
 
         # Status bar
-        self.statusBar().showMessage("Idle")
+        self.statusBar().showMessage(tr("Idle"))
 
     @staticmethod
     def _page(*widgets) -> QWidget:
         """A settings page: the given cards stacked, then empty space."""
         page = QWidget()
         page_layout = QVBoxLayout(page)
-        page_layout.setContentsMargins(12, 12, 16, 12)
-        page_layout.setSpacing(12)
+        page_layout.setContentsMargins(8, 8, 12, 8)
+        page_layout.setSpacing(8)
         for widget in widgets:
             page_layout.addWidget(widget)
         page_layout.addStretch()
         return page
 
-    def _on_update_available(self, version):
-        self._nav.item(3).setText("Updates •")
-        self.statusBar().showMessage(f"Ludivoxa {version} is available. Open Updates to download it.")
+    @staticmethod
+    def _scroll_page(page: QWidget) -> QScrollArea:
+        scroll = QScrollArea()
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(page)
+        return scroll
 
-    def _build_play_page(self, capture_group: QGroupBox) -> QWidget:
+    def _on_update_available(self, version):
+        self._nav.item(3).setText(tr("Updates •"))
+        self.statusBar().showMessage(tr("Ludivoxa {0} is available. Open Updates to download it.", version))
+
+    def _build_play_page(self, capture_group: QGroupBox) -> QScrollArea:
         """Everything used during a session: window, preview, mode, hide, and the feed."""
-        session = QGroupBox("Session")
+        session = QGroupBox(tr("Session"))
         session_layout = QVBoxLayout(session)
-        self._mode_row_widget.setParent(None)
         session_layout.addWidget(self._mode_row_widget)
-        hint = QLabel("Hotkeys work while the game has focus. Banner shows one subtitle; Inplace draws over the text.")
-        hint.setProperty("role", "hint")
-        hint.setWordWrap(True)
-        session_layout.addWidget(hint)
         output_row = QHBoxLayout()
-        output_label = QLabel("Output:")
+        output_label = QLabel(tr("Output:"))
         self._output_combo = QComboBox()
         for label, value in (
             ("Overlay only", OutputMode.OVERLAY),
             ("TTS only", OutputMode.TTS),
             ("Overlay + TTS", OutputMode.BOTH),
         ):
-            self._output_combo.addItem(label, value.value)
+            self._output_combo.addItem(tr(label), value.value)
         self._sync_output_selection()
         self._output_combo.currentIndexChanged.connect(self._on_output_changed)
         output_label.setBuddy(self._output_combo)
         output_row.addWidget(output_label)
         output_row.addWidget(self._output_combo, 1)
+        stop_speech = QPushButton(tr("Stop reading"))
+        stop_speech.clicked.connect(lambda: self._speech.stop())
+        output_row.addWidget(stop_speech)
         session_layout.addLayout(output_row)
+
+        voice_toggle = QToolButton()
+        voice_toggle.setText(tr("Voice settings"))
+        voice_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        voice_toggle.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        voice_toggle.setCheckable(True)
+        voice_toggle.setArrowType(Qt.ArrowType.RightArrow)
+        voice_options = QHBoxLayout()
+        voice_options.addWidget(voice_toggle, alignment=Qt.AlignmentFlag.AlignTop)
+        self._tts_clone_model_label = QLabel()
+        self._tts_clone_model_label.setWordWrap(True)
+        voice_options.addWidget(self._tts_clone_model_label, 1)
+        voice_options.addStretch()
+        session_layout.addLayout(voice_options)
+
+        voice_settings = QWidget()
+        voice_layout = QVBoxLayout(voice_settings)
+        voice_layout.setContentsMargins(0, 0, 0, 0)
+        voice_settings.hide()
+        session_layout.addWidget(voice_settings)
 
         self._tts_preset_panel = QWidget()
         preset_layout = QVBoxLayout(self._tts_preset_panel)
         preset_layout.setContentsMargins(0, 0, 0, 0)
-        voice_row = QHBoxLayout()
+        voice_form = QFormLayout()
         self._tts_voice_combo = QComboBox()
         self._tts_voice_combo.setToolTip(
-            "VAIS is recommended for Vietnamese pronunciation. Use Test voice to compare presets."
+            tr("VAIS is recommended for Vietnamese pronunciation. Use Test voice to compare presets.")
         )
         self._tts_speaker_combo = QComboBox()
         for label, widget in (("Voice model:", self._tts_voice_combo), ("Speaker:", self._tts_speaker_combo)):
-            voice_label = QLabel(label)
-            voice_label.setBuddy(widget)
-            voice_row.addWidget(voice_label)
-            voice_row.addWidget(widget, 1)
-        preset_layout.addLayout(voice_row)
+            voice_form.addRow(tr(label), widget)
+        preset_layout.addLayout(voice_form)
         tts_row = QHBoxLayout()
-        voice_label = QLabel("Local voice model:")
+        voice_label = QLabel(tr("Local voice model:"))
         self._tts_model_edit = QLineEdit(self._config.tts_model_path)
         self._tts_model_edit.setPlaceholderText(DEFAULT_VOICE_PATH)
         self._tts_model_edit.setToolTip(
-            "Piper .onnx file, or a local VieNeu Nano folder. Models are never downloaded by the app."
+            tr("Piper .onnx file, or a local VieNeu Nano folder. Models are never downloaded by the app.")
         )
         voice_label.setBuddy(self._tts_model_edit)
         self._tts_model_edit.editingFinished.connect(self._on_tts_model_changed)
         tts_row.addWidget(voice_label)
         tts_row.addWidget(self._tts_model_edit, 1)
-        browse_voice = QPushButton("Browse...")
+        browse_voice = QPushButton(tr("Browse..."))
         browse_voice.clicked.connect(self._browse_tts_voice)
         tts_row.addWidget(browse_voice)
         preset_layout.addLayout(tts_row)
-        session_layout.addWidget(self._tts_preset_panel)
+        voice_layout.addWidget(self._tts_preset_panel)
 
-        self._tts_clone_model_label = QLabel()
-        self._tts_clone_model_label.setWordWrap(True)
-        session_layout.addWidget(self._tts_clone_model_label)
         self._clone_server_row = QWidget()
         server_layout = QHBoxLayout(self._clone_server_row)
         server_layout.setContentsMargins(0, 0, 0, 0)
-        server_label = QLabel("Local clone server:")
+        server_label = QLabel(tr("Local clone server:"))
         self._tts_clone_url_edit = QLineEdit(self._config.tts_clone_url)
         self._tts_clone_url_edit.setPlaceholderText("http://127.0.0.1:17867")
-        self._tts_clone_url_edit.setToolTip("Loopback URL of llama.cpp running Qwen3-TTS Base.")
+        self._tts_clone_url_edit.setToolTip(tr("Loopback URL of llama.cpp running Qwen3-TTS Base."))
         self._tts_clone_url_edit.editingFinished.connect(self._on_clone_url_changed)
         server_label.setBuddy(self._tts_clone_url_edit)
         server_layout.addWidget(server_label)
         server_layout.addWidget(self._tts_clone_url_edit, 1)
-        session_layout.addWidget(self._clone_server_row)
+        voice_layout.addWidget(self._clone_server_row)
         self._clone_row = QWidget()
         clone_layout = QHBoxLayout(self._clone_row)
         clone_layout.setContentsMargins(0, 0, 0, 0)
@@ -424,16 +466,16 @@ class MainWindow(QMainWindow):
         self._tts_reference_edit.editingFinished.connect(self._on_reference_audio_changed)
         clone_layout.addWidget(self._tts_reference_label)
         clone_layout.addWidget(self._tts_reference_edit, 1)
-        browse_reference = QPushButton("Browse audio...")
+        browse_reference = QPushButton(tr("Browse audio..."))
         browse_reference.clicked.connect(self._browse_reference_audio)
         clone_layout.addWidget(browse_reference)
-        session_layout.addWidget(self._clone_row)
+        voice_layout.addWidget(self._clone_row)
 
-        self._character_status = QLabel("Character voices off")
+        self._character_status = QLabel(tr("Character voices off"))
         self._character_status.setWordWrap(True)
-        session_layout.addWidget(self._character_status)
+        voice_layout.addWidget(self._character_status)
         rate_row = QHBoxLayout()
-        rate_label = QLabel("Speaking speed:")
+        rate_label = QLabel(tr("Speaking speed:"))
         self._tts_rate_spin = QDoubleSpinBox()
         self._tts_rate_spin.setRange(0.75, 2.0)
         self._tts_rate_spin.setSingleStep(0.05)
@@ -443,23 +485,20 @@ class MainWindow(QMainWindow):
         rate_label.setBuddy(self._tts_rate_spin)
         rate_row.addWidget(rate_label)
         rate_row.addWidget(self._tts_rate_spin)
-        self._preview_voice_btn = QPushButton("Test voice")
+        self._preview_voice_btn = QPushButton(tr("Test voice"))
         self._preview_voice_btn.clicked.connect(lambda: self._speech.preview(*self._config.speech_voice_settings))
         rate_row.addWidget(self._preview_voice_btn)
-        stop_speech = QPushButton("Stop reading")
-        stop_speech.clicked.connect(lambda: self._speech.stop())
-        rate_row.addWidget(stop_speech)
         rate_row.addStretch()
-        session_layout.addLayout(rate_row)
+        voice_layout.addLayout(rate_row)
         volume_row = QHBoxLayout()
-        volume_label = QLabel("Speech volume:")
+        volume_label = QLabel(tr("Speech volume:"))
         volume_slider = QSlider(Qt.Orientation.Horizontal)
-        volume_slider.setAccessibleName("Speech volume")
+        volume_slider.setAccessibleName(tr("Speech volume"))
         volume_slider.setRange(0, 100)
         volume_slider.setPageStep(10)
         volume_slider.setTracking(False)
         volume_slider.setValue(self._config.tts_volume)
-        volume_slider.setToolTip("Applies to the next line, including Test voice and History replay.")
+        volume_slider.setToolTip(tr("Applies to the next line, including Test voice and History replay."))
         volume_label.setBuddy(volume_slider)
         volume_value = QLabel(f"{self._config.tts_volume}%")
         volume_slider.sliderMoved.connect(lambda percent: volume_value.setText(f"{percent}%"))
@@ -468,13 +507,14 @@ class MainWindow(QMainWindow):
         volume_row.addWidget(volume_label)
         volume_row.addWidget(volume_slider, 1)
         volume_row.addWidget(volume_value)
-        session_layout.addLayout(volume_row)
+        voice_layout.addLayout(volume_row)
         self._refresh_voice_models()
         self._tts_voice_combo.currentIndexChanged.connect(self._on_voice_model_changed)
         self._tts_speaker_combo.currentIndexChanged.connect(self._on_speech_settings_changed)
         self._tts_status = QLabel()
         self._tts_status.setWordWrap(True)
-        self._speech.status_changed.connect(self._tts_status.setText)
+        self._tts_status.hide()
+        self._speech.status_changed.connect(self._show_speech_status)
         session_layout.addWidget(self._tts_status)
 
         page = self._page(capture_group, session)
@@ -483,118 +523,124 @@ class MainWindow(QMainWindow):
             permissions = QGridLayout()
             self._setup_permissions_ui(permissions)
             page.layout().insertLayout(page.layout().count() - 1, permissions)
-        return page
+        scroll = self._scroll_page(page)
+
+        def toggle_voice_settings(opened):
+            voice_toggle.setArrowType(Qt.ArrowType.DownArrow if opened else Qt.ArrowType.RightArrow)
+            voice_settings.setVisible(opened)
+            if opened:
+                QTimer.singleShot(0, scroll, lambda: scroll.ensureWidgetVisible(voice_settings, 0, 8))
+
+        voice_toggle.toggled.connect(toggle_voice_settings)
+        return scroll
 
     def _build_header(self) -> QWidget:
-        """Keep OCR configuration at the top, alongside engine status."""
+        """Keep capture tools above the scrollable pages."""
         header = QWidget()
-        outer_layout = QVBoxLayout(header)
-        outer_layout.setContentsMargins(20, 12, 16, 4)
-        header_layout = QHBoxLayout()
-        outer_layout.addLayout(header_layout)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(16, 8, 12, 4)
         title = QLabel("Ludivoxa")
         title.setProperty("role", "app-title")
         header_layout.addWidget(title)
         header_layout.addStretch()
 
-        self._ocr_engine_label = QLabel(self._ocr_engine_name())
-        self._ocr_status_label = QLabel("Loading...")
-        header_layout.addWidget(self._pill("OCR", self._ocr_engine_label, self._ocr_status_label))
-        self._translation_engine_label = QLabel(self._translation_engine_name())
-        self._translation_status_label = QLabel("Loading...")
-        header_layout.addWidget(
-            self._pill("Translation", self._translation_engine_label, self._translation_status_label)
+        self._ocr_status_label = QLabel(tr("Loading..."))
+        self._translation_status_label = QLabel(tr("Loading..."))
+        self._ocr_status_pill = self._pill("OCR", self._ocr_engine_name(), self._ocr_status_label)
+        self._translation_status_pill = self._pill(
+            tr("Translation"), self._translation_engine_name(), self._translation_status_label
         )
+        self.statusBar().addPermanentWidget(self._ocr_status_pill)
+        self.statusBar().addPermanentWidget(self._translation_status_pill)
 
-        self._fix_models_btn = QPushButton("Fix Models")
+        self._fix_models_btn = QPushButton(tr("Fix Models"))
         self._fix_models_btn.clicked.connect(self._on_fix_models)
         self._fix_models_btn.setVisible(False)
         header_layout.addWidget(self._fix_models_btn)
-        actions = QHBoxLayout()
-        actions.addWidget(self._ocr_config_btn)
-        self._character_voices_btn = QPushButton("Character voices…")
-        self._character_voices_btn.setMinimumHeight(44)
-        self._character_voices_btn.clicked.connect(self._open_character_voices)
-        actions.addWidget(self._character_voices_btn)
-        profile_btn = QPushButton("Game profile…")
-        profile_btn.setMinimumHeight(44)
-        profile_btn.clicked.connect(self._open_game_profile)
-        actions.addWidget(profile_btn)
-        diagnostics_btn = QPushButton("Diagnostics")
-        diagnostics_btn.setMinimumHeight(44)
-        diagnostics_btn.clicked.connect(self._open_diagnostics)
-        actions.addWidget(diagnostics_btn)
-        actions.addStretch()
-        outer_layout.addLayout(actions)
+        header_layout.addWidget(self._ocr_config_btn)
+        tools_button = QPushButton(tr("Tools"))
+        tools_button.setMinimumHeight(44)
+        menu = QMenu(tools_button)
+        menu.addAction(tr("Game profile…"), self._open_game_profile)
+        menu.addAction(tr("Character voices…"), self._open_character_voices)
+        menu.addAction(tr("Diagnostics"), self._open_diagnostics)
+        tools_button.setMenu(menu)
+        header_layout.addWidget(tools_button)
         return header
 
     @staticmethod
-    def _pill(kind: str, engine_label: QLabel, status_label: QLabel) -> QFrame:
+    def _pill(kind: str, engine_name: str, status_label: QLabel) -> QFrame:
         pill = QFrame()
         pill.setProperty("role", "pill")
+        pill.setToolTip(engine_name)
         pill_layout = QHBoxLayout(pill)
         pill_layout.setContentsMargins(6, 2, 6, 2)
         pill_layout.setSpacing(6)
         kind_label = QLabel(kind)
         kind_label.setProperty("role", "hint")
         pill_layout.addWidget(kind_label)
-        pill_layout.addWidget(engine_label)
         pill_layout.addWidget(status_label)
         return pill
 
     def _build_engines_page(self, *cards) -> QWidget:
         """Language pair, OCR engine and translation engine, saved together by one Apply."""
-        page = self._page(*cards)
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 8)
+        layout.setSpacing(4)
+        layout.addWidget(self._scroll_page(self._page(*cards)), 1)
         actions = QHBoxLayout()
+        actions.setContentsMargins(8, 0, 12, 0)
         actions.addStretch()
-        self._apply_engines_btn = QPushButton("Apply")
+        self._apply_engines_btn = QPushButton(tr("Apply"))
         self._apply_engines_btn.setProperty("primary", True)
-        self._apply_engines_btn.setToolTip("Save the language pair and both engines, and reload what changed")
+        self._apply_engines_btn.setToolTip(tr("Save the language pair and both engines, and reload what changed"))
         self._apply_engines_btn.clicked.connect(self._apply_engines)
         actions.addWidget(self._apply_engines_btn)
-        page.layout().insertLayout(page.layout().count() - 1, actions)
+        layout.addLayout(actions)
         return page
 
     def _build_language_pair_card(self) -> QGroupBox:
         """Pick the language pair first; the engines below then explain what they can do."""
-        card = QGroupBox("Languages")
+        card = QGroupBox(tr("Languages"))
         grid = QGridLayout(card)
-        grid.addWidget(QLabel("Game text:"), 0, 0)
+        source_label = QLabel(tr("Game text:"))
+        grid.addWidget(source_label, 0, 0)
         self._source_language_combo = QComboBox()
         for language in dict.fromkeys((*OCR_SOURCE_LANGUAGES, self._config.source_language)):
-            self._source_language_combo.addItem(language, language)
+            self._source_language_combo.addItem(tr(language), language)
         self._source_language_combo.setCurrentIndex(
             max(0, self._source_language_combo.findData(self._config.source_language))
         )
         self._source_language_combo.setToolTip(
-            "Auto is intended for English/Japanese. Select Chinese or Korean to load its offline recognition model."
+            tr("Auto is intended for English/Japanese. Select Chinese or Korean to load its offline recognition model.")
         )
         self._source_language_combo.currentIndexChanged.connect(lambda _i: self._update_pair_hint())
         grid.addWidget(self._source_language_combo, 0, 1)
-        arrow = QLabel("\u2192")
-        arrow.setProperty("role", "hint")
-        grid.addWidget(arrow, 0, 2)
-        target_label = QLabel("Translate to:")
-        grid.addWidget(target_label, 0, 3)
+        source_label.setBuddy(self._source_language_combo)
+        target_label = QLabel(tr("Translate to:"))
+        grid.addWidget(target_label, 1, 0)
         self._target_language_combo = QComboBox()
         self._target_language_combo.setEditable(True)
         self._target_language_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        self._target_language_combo.addItems(TARGET_LANGUAGE_PRESETS)
+        for language in TARGET_LANGUAGE_PRESETS:
+            self._target_language_combo.addItem(tr(language), language)
         target = target_language_or_default(self._config.llm.target_language)
-        target_index = self._target_language_combo.findText(target)
+        target_index = self._target_language_combo.findData(target)
         self._target_language_combo.setCurrentIndex(target_index)
         if target_index < 0:
             self._target_language_combo.setEditText(target)
-        self._target_language_combo.setToolTip("Pick a target language or type a language supported by your LLM model.")
+        self._target_language_combo.setToolTip(
+            tr("Pick a target language or type a language supported by your LLM model.")
+        )
         self._target_language_combo.currentTextChanged.connect(self._update_pair_hint)
         target_label.setBuddy(self._target_language_combo)
-        grid.addWidget(self._target_language_combo, 0, 4)
+        grid.addWidget(self._target_language_combo, 1, 1)
         self._pair_hint = QLabel("")
         self._pair_hint.setTextFormat(Qt.TextFormat.PlainText)
         self._pair_hint.setWordWrap(True)
-        grid.addWidget(self._pair_hint, 1, 0, 1, 5)
+        grid.addWidget(self._pair_hint, 2, 0, 1, 2)
         grid.setColumnStretch(1, 1)
-        grid.setColumnStretch(4, 1)
         return card
 
     def _update_pair_hint(self):
@@ -605,15 +651,17 @@ class MainWindow(QMainWindow):
         chosen = self._source_language_combo.currentData()
         problems = []
         if self._selected_ocr_backend() == OCRBackend.MEIKI and chosen != DEFAULT_SOURCE_LANGUAGE:
-            problems.append(f"MeikiOCR reads Japanese only: pick the owocr engine to read {chosen}.")
+            problems.append(
+                tr("MeikiOCR reads Japanese only: pick the owocr engine to read {0}.", tr(chosen or source))
+            )
         if self._selected_backend() == TranslationBackend.SUGOI and source != SUGOI_SOURCE_LANGUAGE:
-            problems.append("Sugoi V4 translates Japanese to English only: pick the LLM endpoint engine.")
+            problems.append(tr("Sugoi V4 translates Japanese to English only: pick the LLM endpoint engine."))
         if problems:
             set_role(self._pair_hint, "hint-warn")
             self._pair_hint.setText(" ".join(problems))
         else:
             set_role(self._pair_hint, "hint")
-            target = target_language_or_default(self._target_language_combo.currentText())
+            target = self._selected_target_language()
             hint = ""
             if self._selected_backend() == TranslationBackend.SUGOI:
                 target = "English"
@@ -622,40 +670,42 @@ class MainWindow(QMainWindow):
                 if clone_language(target):
                     ready = local_clone_url(self._config.tts_clone_url) and self._config.tts_reference_audio
                     hint = (
-                        " · Local voice cloning"
+                        tr(" · Local voice cloning")
                         if ready
-                        else " · Overlay only until a clone server and recording are configured in Session."
+                        else tr(" · Overlay only until a clone server and recording are configured in Session.")
                     )
                 else:
-                    hint = " · Overlay only. The bundled voices read Vietnamese."
-            self._pair_hint.setText(f"{source} \u2192 {target}{hint}")
+                    hint = tr(" · Overlay only. The bundled voices read Vietnamese.")
+            self._pair_hint.setText(f"{tr(source)} \u2192 {tr(target)}{hint}")
 
     def _build_capture_group(self) -> QGroupBox:
         """Source selection, capture controls and the preview."""
         # ==================== CAPTURE ====================
         # Source selection + Preview in one logical group
-        capture_group = QGroupBox("Capture")
+        capture_group = QGroupBox(tr("Capture"))
         capture_layout = QVBoxLayout(capture_group)
 
         # Source row: windows (or the Wayland portal picker) and video devices in one list
         source_row = QHBoxLayout()
 
         self._window_combo = QComboBox()
-        self._window_combo.setAccessibleName("Capture source")
-        self._window_combo.setMinimumWidth(250)
+        self._window_combo.setAccessibleName(tr("Capture source"))
+        self._window_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self._window_combo.setMinimumContentsLength(12)
+        self._window_combo.currentTextChanged.connect(self._window_combo.setToolTip)
         source_row.addWidget(self._window_combo, 1)
 
-        self._start_btn = QPushButton("Start Capture")
+        self._start_btn = QPushButton(tr("Start Capture"))
         self._start_btn.setProperty("primary", True)
         self._start_btn.setEnabled(False)  # Disabled until models are loaded
         self._start_btn.clicked.connect(self._toggle_capture)
         source_row.addWidget(self._start_btn)
 
-        refresh_btn = QPushButton("Refresh")
+        refresh_btn = QPushButton(tr("Refresh"))
         refresh_btn.clicked.connect(self._refresh_sources)
         source_row.addWidget(refresh_btn)
 
-        self._ocr_config_btn = QPushButton("Configure OCR")
+        self._ocr_config_btn = QPushButton(tr("Configure OCR"))
         self._ocr_config_btn.setMinimumHeight(44)
         self._ocr_config_btn.setEnabled(False)  # Disabled until capturing
         self._ocr_config_btn.clicked.connect(self._open_ocr_config)
@@ -664,10 +714,10 @@ class MainWindow(QMainWindow):
 
         # Preview (centered, aspect ratio preserved)
         self._preview_label = QLabel()
-        self._preview_label.setMinimumSize(320, 180)  # Minimum size, will grow to match aspect ratio
+        self._preview_label.setMinimumSize(240, 120)
         self._preview_label.setFrameStyle(QFrame.Shape.NoFrame)
         self._preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview_label.setText("No preview")
+        self._preview_label.setText(tr("No preview"))
         self._preview_label.setProperty("role", "preview")
         # Ignored horizontally: a QLabel's size hint is its pixmap, which would make the window
         # grow to fit the scaled preview and then scale the preview to the wider window again.
@@ -680,24 +730,24 @@ class MainWindow(QMainWindow):
         """Overlay mode, hotkeys and the visual settings."""
         # ==================== APPEARANCE ====================
         # Overlay mode + all visual settings
-        appearance_group = QGroupBox("Overlay style")
+        appearance_group = QGroupBox(tr("Overlay style"))
         appearance_layout = QVBoxLayout(appearance_group)
 
-        # Mode row (Banner/Inplace toggle + hotkeys), a widget so a layout can move it
+        # The session page owns these live controls.
         self._mode_row_widget = QWidget()
         mode_row = QHBoxLayout(self._mode_row_widget)
         mode_row.setContentsMargins(0, 0, 0, 0)
-        mode_row.addWidget(QLabel("Mode:"))
+        mode_row.addWidget(QLabel(tr("Mode:")))
 
         self._mode_group = QButtonGroup(self)
         self._mode_group.setExclusive(True)
 
-        self._banner_btn = QPushButton("Banner")
+        self._banner_btn = QPushButton(tr("Banner"))
         self._banner_btn.setCheckable(True)
         self._banner_btn.setChecked(self._mode == OverlayMode.BANNER)
         self._mode_group.addButton(self._banner_btn, 0)
 
-        self._inplace_btn = QPushButton("Inplace")
+        self._inplace_btn = QPushButton(tr("Inplace"))
         self._inplace_btn.setCheckable(True)
         self._inplace_btn.setChecked(self._mode == OverlayMode.INPLACE)
         self._mode_group.addButton(self._inplace_btn, 1)
@@ -724,19 +774,18 @@ class MainWindow(QMainWindow):
         self._mode_hotkey.setFixedWidth(80)
         self._mode_hotkey.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self._mode_hotkey.keySequenceChanged.connect(self._on_mode_hotkey_changed)
-        mode_row.addWidget(self._mode_hotkey)
 
         # Wayland limitation warning (only shown on Wayland)
         if self._is_wayland_session:
-            wayland_warning = QLabel("<a href='#' style='color: #ffa500;'>⚠️ Wayland limitations</a>")
-            wayland_warning.setToolTip("Click for details about inplace mode on Wayland")
+            wayland_warning = QLabel(tr("<a href='#' style='color: #ffa500;'>⚠️ Wayland limitations</a>"))
+            wayland_warning.setToolTip(tr("Click for details about inplace mode on Wayland"))
             wayland_warning.linkActivated.connect(self._show_wayland_warning)
-            mode_row.addWidget(wayland_warning)
+            appearance_layout.addWidget(wayland_warning)
 
         mode_row.addStretch()
 
         # Hide/Show button with hotkey
-        self._pause_btn = QPushButton("Hide")
+        self._pause_btn = QPushButton(tr("Hide"))
         self._pause_btn.clicked.connect(self._toggle_pause)
         self._pause_btn.setEnabled(False)
         mode_row.addWidget(self._pause_btn)
@@ -747,16 +796,17 @@ class MainWindow(QMainWindow):
         self._pause_hotkey.setFixedWidth(80)
         self._pause_hotkey.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self._pause_hotkey.keySequenceChanged.connect(self._on_pause_hotkey_changed)
-        mode_row.addWidget(self._pause_hotkey)
-
-        appearance_layout.addWidget(self._mode_row_widget)
-        hide_stale = QCheckBox("Clear translation when dialogue changes")
+        hotkeys = QFormLayout()
+        hotkeys.addRow(tr("Switch overlay mode:"), self._mode_hotkey)
+        hotkeys.addRow(tr("Show or hide overlay:"), self._pause_hotkey)
+        appearance_layout.addLayout(hotkeys)
+        hide_stale = QCheckBox(tr("Clear translation when dialogue changes"))
         hide_stale.setChecked(self._config.hide_stale_overlay)
-        hide_stale.setToolTip("Clear the overlay while the new dialogue is being translated.")
+        hide_stale.setToolTip(tr("Clear the overlay while the new dialogue is being translated."))
         hide_stale.toggled.connect(self._set_hide_stale_overlay)
         appearance_layout.addWidget(hide_stale)
         if sys.platform == "win32":
-            history_overlay = QCheckBox("Show History button over the game")
+            history_overlay = QCheckBox(tr("Show History button over the game"))
             history_overlay.setChecked(self._config.history_overlay_enabled)
             history_overlay.toggled.connect(self._set_history_overlay_enabled)
             appearance_layout.addWidget(history_overlay)
@@ -765,13 +815,13 @@ class MainWindow(QMainWindow):
         visual_grid = QGridLayout()
 
         # Font family
-        visual_grid.addWidget(QLabel("Font:"), 0, 0)
-        self._font_family_btn = QPushButton(self._config.font_family or "System Default")
+        visual_grid.addWidget(QLabel(tr("Font:")), 0, 0)
+        self._font_family_btn = QPushButton(self._config.font_family or tr("System Default"))
         self._font_family_btn.clicked.connect(self._pick_font_family)
         visual_grid.addWidget(self._font_family_btn, 0, 1)
 
         # Font size
-        visual_grid.addWidget(QLabel("Size:"), 0, 2)
+        visual_grid.addWidget(QLabel(tr("Size:")), 0, 2)
         self._font_slider = QSlider(Qt.Orientation.Horizontal)
         self._font_slider.setRange(MIN_FONT_SIZE, MAX_FONT_SIZE)
         self._font_slider.setValue(self._config.font_size)
@@ -781,21 +831,21 @@ class MainWindow(QMainWindow):
         visual_grid.addWidget(self._font_label, 0, 4)
 
         # Font color
-        visual_grid.addWidget(QLabel("Text Color:"), 1, 0)
+        visual_grid.addWidget(QLabel(tr("Text Color:")), 1, 0)
         self._font_color_btn = QPushButton()
         self._font_color_btn.setStyleSheet(f"background-color: {self._config.font_color};")
         self._font_color_btn.clicked.connect(self._pick_font_color)
         visual_grid.addWidget(self._font_color_btn, 1, 1)
 
         # Background color
-        visual_grid.addWidget(QLabel("Background:"), 1, 2)
+        visual_grid.addWidget(QLabel(tr("Background:")), 1, 2)
         self._bg_color_btn = QPushButton()
         self._bg_color_btn.setStyleSheet(f"background-color: {self._config.background_color};")
         self._bg_color_btn.clicked.connect(self._pick_bg_color)
         visual_grid.addWidget(self._bg_color_btn, 1, 3)
 
         # Opacity
-        visual_grid.addWidget(QLabel("Opacity:"), 2, 0)
+        visual_grid.addWidget(QLabel(tr("Opacity:")), 2, 0)
         self._opacity_slider = QSlider(Qt.Orientation.Horizontal)
         self._opacity_slider.setRange(0, 100)
         self._opacity_slider.setValue(int(self._config.background_opacity * 100))
@@ -808,14 +858,14 @@ class MainWindow(QMainWindow):
 
         # Live sample: exactly what a subtitle looks like with these settings
         sample_row = QHBoxLayout()
-        sample_caption = QLabel("Sample:")
+        sample_caption = QLabel(tr("Sample:"))
         sample_row.addWidget(sample_caption)
         sample_box = QWidget()
         sample_box.setProperty("role", "sample-stage")
         sample_box.setMinimumHeight(96)
         sample_layout = QVBoxLayout(sample_box)
         sample_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._style_sample = QLabel("Brave hero, you must defeat the demon king.")
+        self._style_sample = QLabel(tr("Brave hero, you must defeat the demon king."))
         self._style_sample.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._style_sample.setWordWrap(True)
         # The sample must never dictate the window width (a big font would)
@@ -843,42 +893,6 @@ class MainWindow(QMainWindow):
             f"font-size: {self._config.font_size}pt; font-weight: 700; {family}"
         )
 
-    def _build_status_group(self) -> QGroupBox:
-        """Engine status rows and the Fix Models button."""
-        # ==================== STATUS ====================
-        # Models status (at bottom, less prominent)
-        status_group = QGroupBox("Status")
-        status_layout = QGridLayout(status_group)
-
-        # OCR engine row (name follows the selected backend)
-        status_layout.addWidget(QLabel("OCR:"), 0, 0)
-        self._ocr_engine_label = QLabel(self._ocr_engine_name())
-        status_layout.addWidget(self._ocr_engine_label, 0, 1)
-        self._ocr_status_label = QLabel("Loading...")
-        status_layout.addWidget(self._ocr_status_label, 0, 2)
-
-        # Translation engine row (name follows the selected backend)
-        status_layout.addWidget(QLabel("Translation:"), 1, 0)
-        self._translation_engine_label = QLabel(self._translation_engine_name())
-        status_layout.addWidget(self._translation_engine_label, 1, 1)
-        self._translation_status_label = QLabel("Loading...")
-        status_layout.addWidget(self._translation_status_label, 1, 2)
-
-        # Fix Models button (hidden by default)
-        self._fix_models_btn = QPushButton("Fix Models")
-        self._fix_models_btn.clicked.connect(self._on_fix_models)
-        self._fix_models_btn.setVisible(False)
-        status_layout.addWidget(self._fix_models_btn, 2, 0, 1, 3, Qt.AlignRight)
-
-        # macOS Permissions (inline, only shown on macOS when needed)
-        if is_macos():
-            self._setup_permissions_ui(status_layout)
-
-        # Set column stretch so status is right-aligned
-        status_layout.setColumnStretch(1, 1)
-
-        return status_group
-
     def _setup_hotkeys(self):
         """Global hotkey listener, from the strings read by the appearance builder."""
         # Global hotkey listener - load from config
@@ -900,11 +914,11 @@ class MainWindow(QMainWindow):
 
         # Engine row
         engine_row = QHBoxLayout()
-        engine_row.addWidget(QLabel("Engine:"))
+        engine_row.addWidget(QLabel(tr("Engine:")))
         self._ocr_engine_combo = QComboBox()
-        self._ocr_engine_combo.addItem("MeikiOCR (built-in, offline)", OCRBackend.MEIKI.value)
-        self._ocr_engine_combo.addItem("owocr (external process, websocket)", OCRBackend.OWOCR.value)
-        self._ocr_engine_combo.addItem("PaddleOCR (local models, offline)", OCRBackend.PADDLE.value)
+        self._ocr_engine_combo.addItem(tr("MeikiOCR (built-in, offline)"), OCRBackend.MEIKI.value)
+        self._ocr_engine_combo.addItem(tr("owocr (external process, websocket)"), OCRBackend.OWOCR.value)
+        self._ocr_engine_combo.addItem(tr("PaddleOCR (local models, offline)"), OCRBackend.PADDLE.value)
         self._ocr_engine_combo.setCurrentIndex(self._ocr_engine_combo.findData(self._config.ocr_backend.value))
         self._ocr_engine_combo.currentIndexChanged.connect(self._on_ocr_engine_changed)
         engine_row.addWidget(self._ocr_engine_combo, 1)
@@ -923,14 +937,14 @@ class MainWindow(QMainWindow):
                 ("Recognition model directory:", self._paddle_recognition_edit),
             )
         ):
-            widget = QLabel(label)
+            widget = QLabel(tr(label))
             widget.setBuddy(edit)
             paddle_grid.addWidget(widget, row, 0)
             paddle_grid.addWidget(edit, row, 1)
         hint = QLabel(
-            "Chinese and Korean select a matching local recognition model next to the detector. "
-            "Auto detects text language after OCR; it does not switch recognition models. "
-            "Models are never downloaded. CPU, two threads by default."
+            tr(
+                "Chinese and Korean select a matching local recognition model next to the detector. Auto detects text language after OCR; it does not switch recognition models. Models are never downloaded. CPU, two threads by default."
+            )
         )
         hint.setWordWrap(True)
         paddle_grid.addWidget(hint, 2, 0, 1, 2)
@@ -942,17 +956,19 @@ class MainWindow(QMainWindow):
         owocr_grid = QGridLayout(self._owocr_panel)
         owocr_grid.setContentsMargins(0, 0, 0, 0)
 
-        owocr_grid.addWidget(QLabel("Server URL:"), 0, 0)
+        owocr_grid.addWidget(QLabel(tr("Server URL:")), 0, 0)
         self._owocr_url_edit = QLineEdit(self._config.owocr.url)
         self._owocr_url_edit.setToolTip(
-            f"Start owocr as: {OWOCR_SERVER_COMMAND}\n"
-            f"Default address: {OWOCR_DEFAULT_URL}. "
-            "Prefer 127.0.0.1 over localhost: on Windows, localhost adds ~2 s per request."
+            tr(
+                "Start owocr as: {0}\nDefault address: {1}. Prefer 127.0.0.1 over localhost: on Windows, localhost adds ~2 s per request.",
+                OWOCR_SERVER_COMMAND,
+                OWOCR_DEFAULT_URL,
+            )
         )
         owocr_grid.addWidget(self._owocr_url_edit, 0, 1, 1, 2)
 
-        self._owocr_test_btn = QPushButton("Test")
-        self._owocr_test_btn.setToolTip("Send a blank image to the server and measure the round trip")
+        self._owocr_test_btn = QPushButton(tr("Test"))
+        self._owocr_test_btn.setToolTip(tr("Send a blank image to the server and measure the round trip"))
         self._owocr_test_btn.clicked.connect(self._test_owocr_endpoint)
         owocr_grid.addWidget(self._owocr_test_btn, 1, 0)
         self._owocr_result_label = QLabel("")
@@ -961,7 +977,9 @@ class MainWindow(QMainWindow):
         self._owocr_result_label.setMinimumHeight(self._owocr_test_btn.sizeHint().height())
         owocr_grid.addWidget(self._owocr_result_label, 1, 1, 1, 2)
 
-        note = QLabel("owocr returns no confidence scores; the OCR confidence slider has no effect with this engine.")
+        note = QLabel(
+            tr("owocr returns no confidence scores; the OCR confidence slider has no effect with this engine.")
+        )
         note.setProperty("role", "muted")
         note.setWordWrap(True)
         owocr_grid.addWidget(note, 2, 0, 1, 3)
@@ -994,7 +1012,6 @@ class MainWindow(QMainWindow):
             self._paddle_panel.setVisible(self._selected_ocr_backend() == OCRBackend.PADDLE)
         self._sync_source_language_combo()
         self._update_pair_hint()
-        self._grow_to_fit()
 
     def _sync_source_language_combo(self):
         """Pin the source language to Japanese while MeikiOCR is selected; free it for owocr."""
@@ -1009,6 +1026,11 @@ class MainWindow(QMainWindow):
             return DEFAULT_SOURCE_LANGUAGE
         return self._source_language_combo.currentData() or DEFAULT_SOURCE_LANGUAGE
 
+    def _selected_target_language(self) -> str:
+        combo = self._target_language_combo
+        text = combo.currentText()
+        return target_language_or_default(combo.itemData(combo.findText(text)) or text)
+
     def _set_owocr_result(self, text: str, error: bool = False):
         self._set_result_label(self._owocr_result_label, text, error)
 
@@ -1017,7 +1039,7 @@ class MainWindow(QMainWindow):
         settings = self._owocr_settings_from_ui()
         self._owocr_test_request = settings
         self._owocr_test_btn.setEnabled(False)
-        self._set_owocr_result("Testing...")
+        self._set_owocr_result(tr("Testing..."))
 
         def run():
             try:
@@ -1034,14 +1056,14 @@ class MainWindow(QMainWindow):
         self._owocr_test_request = None
         self._owocr_test_btn.setEnabled(True)
         if settings != self._owocr_settings_from_ui():
-            self._set_owocr_result("Settings changed during the test; click Test again.", error=True)
+            self._set_owocr_result(tr("Settings changed during the test; click Test again."), error=True)
             return
         if isinstance(result, str):
             self._set_owocr_result(result, error=True)
             return
         warning = owocr_remote_warning(settings.url)
         self._set_owocr_result(
-            f"OK in {result} ms. {warning}" if warning else f"OK in {result} ms", error=bool(warning)
+            tr("OK in {0} ms. {1}", result, warning) if warning else tr("OK in {0} ms", result), error=bool(warning)
         )
 
     def _apply_engines(self):
@@ -1055,7 +1077,7 @@ class MainWindow(QMainWindow):
         translation_backend = self._selected_backend()
         source_language = self._selected_source_language()
         if translation_backend == TranslationBackend.SUGOI and source_language != SUGOI_SOURCE_LANGUAGE:
-            self._set_pair_error(SUGOI_ONLY_JAPANESE)
+            self._set_pair_error(tr(SUGOI_ONLY_JAPANESE))
             return
         if self._capturing:
             error = self._profile_language_error(
@@ -1070,7 +1092,7 @@ class MainWindow(QMainWindow):
         llm = self._llm_settings_from_ui()  # carries the target language from the pair card
         if translation_backend == TranslationBackend.LLM and not llm.model:
             self._set_llm_result("Pick a model before applying.", error=True)
-            self._set_pair_error("Pick an LLM model before applying.")
+            self._set_pair_error(tr("Pick an LLM model before applying."))
             return
         owocr = self._owocr_settings_from_ui() if ocr_backend == OCRBackend.OWOCR else config.owocr
         paddle = config.paddle
@@ -1112,11 +1134,11 @@ class MainWindow(QMainWindow):
             self._owocr_url_edit.setText(owocr.url)
             warning = owocr_remote_warning(owocr.url)
             self._set_owocr_result(warning or "", error=bool(warning))
-        self._ocr_engine_label.setText(self._ocr_engine_name())
-        self._translation_engine_label.setText(self._translation_engine_name())
+        self._ocr_status_pill.setToolTip(self._ocr_engine_name())
+        self._translation_status_pill.setToolTip(self._translation_engine_name())
         self._update_pair_hint()
         if not (ocr_changed or translation_changed):
-            self.statusBar().showMessage("Engines unchanged")
+            self.statusBar().showMessage(tr("Engines unchanged"))
             return
         self._fix_models_btn.setVisible(False)
         if ocr_changed:
@@ -1127,7 +1149,7 @@ class MainWindow(QMainWindow):
             self._process_worker.reload_translation()
         if target_changed:
             self._sync_translation_output()
-        self.statusBar().showMessage("Reloading engines...")
+        self.statusBar().showMessage(tr("Reloading engines..."))
 
     def _set_pair_error(self, message: str):
         """Show why the Engines page could not be applied, next to the language pair."""
@@ -1139,15 +1161,15 @@ class MainWindow(QMainWindow):
 
     def _build_translation_group(self) -> QGroupBox:
         """Build the Translation group: engine selector plus the LLM endpoint panel."""
-        group = QGroupBox("Translation")
+        group = QGroupBox(tr("Translation"))
         group_layout = QVBoxLayout(group)
 
         # Engine row
         engine_row = QHBoxLayout()
-        engine_row.addWidget(QLabel("Engine:"))
+        engine_row.addWidget(QLabel(tr("Engine:")))
         self._engine_combo = QComboBox()
-        self._engine_combo.addItem("Sugoi V4 (built-in, offline)", TranslationBackend.SUGOI.value)
-        self._engine_combo.addItem("LLM endpoint (Ollama / OpenAI-compatible)", TranslationBackend.LLM.value)
+        self._engine_combo.addItem(tr("Sugoi V4 (built-in, offline)"), TranslationBackend.SUGOI.value)
+        self._engine_combo.addItem(tr("LLM endpoint (Ollama / OpenAI-compatible)"), TranslationBackend.LLM.value)
         self._engine_combo.setCurrentIndex(self._engine_combo.findData(self._config.translation_backend.value))
         self._engine_combo.currentIndexChanged.connect(self._on_engine_changed)
         engine_row.addWidget(self._engine_combo, 1)
@@ -1159,68 +1181,71 @@ class MainWindow(QMainWindow):
         llm_grid.setContentsMargins(0, 0, 0, 0)
         settings = self._config.llm
 
-        llm_grid.addWidget(QLabel("Provider:"), 0, 0)
+        llm_grid.addWidget(QLabel(tr("Provider:")), 0, 0)
         self._llm_provider_combo = QComboBox()
         for provider in PROVIDERS:
             self._llm_provider_combo.addItem(PROVIDER_LABELS[provider], provider)
         self._llm_provider_combo.setCurrentIndex(max(0, self._llm_provider_combo.findData(settings.provider)))
         self._llm_provider_combo.currentIndexChanged.connect(self._on_llm_provider_changed)
-        llm_grid.addWidget(self._llm_provider_combo, 0, 1)
+        llm_grid.addWidget(self._llm_provider_combo, 0, 1, 1, 2)
 
-        llm_grid.addWidget(QLabel("Server URL:"), 0, 2)
+        llm_grid.addWidget(QLabel(tr("Server URL:")), 1, 0)
         self._llm_url_edit = QLineEdit(settings.base_url)
         self._llm_url_edit.setToolTip(
-            "Ollama: http://127.0.0.1:11434 - LM Studio: http://127.0.0.1:1234/v1 - OpenAI: https://api.openai.com/v1\n"
-            "Prefer 127.0.0.1 over localhost: on Windows, localhost adds ~2 s per request."
+            tr(
+                "Ollama: http://127.0.0.1:11434 - LM Studio: http://127.0.0.1:1234/v1 - OpenAI: https://api.openai.com/v1\nPrefer 127.0.0.1 over localhost: on Windows, localhost adds ~2 s per request."
+            )
         )
-        llm_grid.addWidget(self._llm_url_edit, 0, 3, 1, 2)
+        llm_grid.addWidget(self._llm_url_edit, 1, 1, 1, 2)
 
-        llm_grid.addWidget(QLabel("Model:"), 1, 0)
+        llm_grid.addWidget(QLabel(tr("Model:")), 2, 0)
         self._llm_model_combo = QComboBox()
         self._llm_model_combo.setEditable(True)
         self._llm_model_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self._llm_model_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self._llm_model_combo.setMinimumContentsLength(12)
         if settings.model:
             self._llm_model_combo.addItem(settings.model)
         self._llm_model_combo.setCurrentText(settings.model)
-        self._llm_model_combo.setToolTip("Type a model name or click Refresh to list the models on the server")
-        llm_grid.addWidget(self._llm_model_combo, 1, 1)
-        self._llm_refresh_btn = QPushButton("Refresh")
-        self._llm_refresh_btn.setToolTip("Ask the server which models it has")
+        self._llm_model_combo.setToolTip(tr("Type a model name or click Refresh to list the models on the server"))
+        llm_grid.addWidget(self._llm_model_combo, 2, 1)
+        self._llm_refresh_btn = QPushButton(tr("Refresh"))
+        self._llm_refresh_btn.setToolTip(tr("Ask the server which models it has"))
         self._llm_refresh_btn.clicked.connect(self._refresh_llm_models)
-        llm_grid.addWidget(self._llm_refresh_btn, 1, 2)
+        llm_grid.addWidget(self._llm_refresh_btn, 2, 2)
 
         # Target language lives in the language pair card
 
-        llm_grid.addWidget(QLabel("API key:"), 2, 0)
+        llm_grid.addWidget(QLabel(tr("API key:")), 3, 0)
         self._llm_api_key_edit = QLineEdit(settings.api_key)
         self._llm_api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self._llm_api_key_edit.setPlaceholderText("Optional - only for hosted services (stored in config.yml)")
-        llm_grid.addWidget(self._llm_api_key_edit, 2, 1, 1, 4)
+        self._llm_api_key_edit.setPlaceholderText(tr("Optional - only for hosted services (stored in config.yml)"))
+        llm_grid.addWidget(self._llm_api_key_edit, 3, 1, 1, 2)
 
-        llm_grid.addWidget(QLabel("Prompt:"), 3, 0, Qt.AlignmentFlag.AlignTop)
+        llm_grid.addWidget(QLabel(tr("Prompt:")), 4, 0, Qt.AlignmentFlag.AlignTop)
         self._llm_prompt_edit = QPlainTextEdit(settings.system_prompt or DEFAULT_SYSTEM_PROMPT)
         self._llm_prompt_edit.setFixedHeight(64)
         self._llm_prompt_edit.setToolTip(
-            "System prompt sent to the model. {source_language} and {target_language} are replaced."
+            tr("System prompt sent to the model. {source_language} and {target_language} are replaced.")
         )
-        llm_grid.addWidget(self._llm_prompt_edit, 3, 1, 1, 3)
-        reset_prompt_btn = QPushButton("Reset")
-        reset_prompt_btn.setToolTip("Restore the default prompt")
+        llm_grid.addWidget(self._llm_prompt_edit, 4, 1)
+        reset_prompt_btn = QPushButton(tr("Reset"))
+        reset_prompt_btn.setToolTip(tr("Restore the default prompt"))
         reset_prompt_btn.clicked.connect(lambda: self._llm_prompt_edit.setPlainText(DEFAULT_SYSTEM_PROMPT))
-        llm_grid.addWidget(reset_prompt_btn, 3, 4, Qt.AlignmentFlag.AlignTop)
+        llm_grid.addWidget(reset_prompt_btn, 4, 2, Qt.AlignmentFlag.AlignTop)
 
-        self._llm_test_btn = QPushButton("Test")
-        self._llm_test_btn.setToolTip("Translate a sample line with these settings and measure the round trip")
+        self._llm_test_btn = QPushButton(tr("Test"))
+        self._llm_test_btn.setToolTip(tr("Translate a sample line with these settings and measure the round trip"))
         self._llm_test_btn.clicked.connect(self._test_llm_endpoint)
-        llm_grid.addWidget(self._llm_test_btn, 4, 0)
+        llm_grid.addWidget(self._llm_test_btn, 5, 2)
         self._llm_result_label = QLabel("")
         self._llm_result_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._llm_result_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         # Reserve one text line even while empty so the row never collapses
         self._llm_result_label.setMinimumHeight(self._llm_test_btn.sizeHint().height())
-        llm_grid.addWidget(self._llm_result_label, 4, 1, 1, 4)
+        llm_grid.addWidget(self._llm_result_label, 5, 0, 1, 2)
 
         llm_grid.setColumnStretch(1, 1)
-        llm_grid.setColumnStretch(4, 1)
         group_layout.addWidget(self._llm_panel)
         self._llm_panel.setVisible(self._config.translation_backend == TranslationBackend.LLM)
 
@@ -1247,7 +1272,7 @@ class MainWindow(QMainWindow):
             base_url=self._llm_url_edit.text().strip() or DEFAULT_BASE_URLS[self._selected_provider()],
             model=self._llm_model_combo.currentText().strip(),
             api_key=self._llm_api_key_edit.text().strip(),
-            target_language=target_language_or_default(self._target_language_combo.currentText()),
+            target_language=self._selected_target_language(),
             system_prompt=None if not prompt or prompt == DEFAULT_SYSTEM_PROMPT else prompt,
             # Config-only fields (no widgets) are carried over so Apply never drops them
             context_lines=self._config.llm.context_lines,
@@ -1261,13 +1286,6 @@ class MainWindow(QMainWindow):
         self._llm_panel.setVisible(is_llm)
         self._target_language_combo.setEnabled(is_llm)  # Sugoi V4 always outputs English
         self._update_pair_hint()
-        self._grow_to_fit()
-
-    def _grow_to_fit(self):
-        """Grow the window height when a panel was revealed (adjustSize() caps at 2/3 of the screen)."""
-        needed = self.sizeHint().height()
-        if needed > self.height():
-            self.resize(self.width(), needed)
 
     def _on_llm_provider_changed(self, _index: int):
         """Swap the default URL when the provider changes, unless the user typed their own."""
@@ -1285,8 +1303,7 @@ class MainWindow(QMainWindow):
         """Show a one-line result under a settings panel; the full text is in the tooltip."""
         label.setStyleSheet(f"color: {ERROR};" if error else f"color: {OK};")
         label.setToolTip(text)
-        # Elide instead of wrapping: the window's minimum size is locked, so a taller
-        # label would overlap the prompt box instead of growing the panel.
+        # Keep transient messages on a single line. The full text stays in the tooltip.
         width = max(label.width() - 4, 200)
         label.setText(label.fontMetrics().elidedText(text, Qt.TextElideMode.ElideRight, width))
 
@@ -1305,7 +1322,7 @@ class MainWindow(QMainWindow):
         settings = self._llm_settings_from_ui()
         self._llm_refresh_request = settings
         self._llm_refresh_btn.setEnabled(False)
-        self._set_llm_result("Listing models...")
+        self._set_llm_result(tr("Listing models..."))
 
         def run():
             try:
@@ -1322,7 +1339,7 @@ class MainWindow(QMainWindow):
         self._llm_refresh_request = None
         self._llm_refresh_btn.setEnabled(True)
         if self._endpoint_identity(settings) != self._endpoint_identity(self._llm_settings_from_ui()):
-            self._set_llm_result("Endpoint changed while listing models; click Refresh again.", error=True)
+            self._set_llm_result(tr("Endpoint changed while listing models; click Refresh again."), error=True)
             return
         if isinstance(result, str):
             self._set_llm_result(result, error=True)
@@ -1335,16 +1352,16 @@ class MainWindow(QMainWindow):
         elif current:
             self._llm_model_combo.setCurrentText(current)
         if not result:
-            hint = " Run 'ollama pull <model>' first." if self._selected_provider() == "ollama" else ""
-            self._set_llm_result(f"The server has no models.{hint}", error=True)
+            hint = tr(" Run 'ollama pull <model>' first.") if self._selected_provider() == "ollama" else ""
+            self._set_llm_result(tr("The server has no models.{0}", hint), error=True)
         else:
-            self._set_llm_result(f"{len(result)} model(s) found")
+            self._set_llm_result(tr("{0} model(s) found", len(result)))
 
     def _test_llm_endpoint(self):
         """Translate a sample line with the current panel settings on a background thread."""
         settings = self._llm_settings_from_ui()
         if not settings.model:
-            self._set_llm_result("Pick a model first.", error=True)
+            self._set_llm_result(tr("Pick a model first."), error=True)
             return
         # The source language the OCR group would apply, not the saved one: the Test must
         # validate what the user is about to Apply, like every other pending field
@@ -1352,7 +1369,9 @@ class MainWindow(QMainWindow):
         self._llm_test_request = settings
         self._llm_test_language = source_language
         self._llm_test_btn.setEnabled(False)
-        self._set_llm_result(f"Testing with a {source_language} sample (loading the model may take a moment)...")
+        self._set_llm_result(
+            tr("Testing with a {0} sample (loading the model may take a moment)...", tr(source_language))
+        )
 
         def run():
             try:
@@ -1369,13 +1388,13 @@ class MainWindow(QMainWindow):
         self._llm_test_request = None
         self._llm_test_btn.setEnabled(True)
         if settings != self._llm_settings_from_ui() or self._llm_test_language != self._selected_source_language():
-            self._set_llm_result("Settings changed during the test; click Test again.", error=True)
+            self._set_llm_result(tr("Settings changed during the test; click Test again."), error=True)
             return
         if isinstance(result, str):
             self._set_llm_result(result, error=True)
             return
         translation, ms = result
-        self._set_llm_result(f"OK in {ms} ms: {translation}")
+        self._set_llm_result(tr("OK in {0} ms: {1}", ms, translation))
 
     def _setup_permissions_ui(self, status_layout: QGridLayout):
         """Set up macOS permissions in the status section."""
@@ -1383,20 +1402,20 @@ class MainWindow(QMainWindow):
         row = status_layout.rowCount()
 
         # Screen Recording row
-        status_layout.addWidget(QLabel("Screen Recording:"), row, 0)
+        status_layout.addWidget(QLabel(tr("Screen Recording:")), row, 0)
         self._screen_recording_status = QLabel()
         status_layout.addWidget(self._screen_recording_status, row, 1)
-        self._screen_recording_btn = QPushButton("Grant")
+        self._screen_recording_btn = QPushButton(tr("Grant"))
         self._screen_recording_btn.setFixedWidth(80)
         self._screen_recording_btn.clicked.connect(self._on_request_screen_recording)
         status_layout.addWidget(self._screen_recording_btn, row, 2)
 
         # Accessibility row (required for global hotkeys)
         row += 1
-        status_layout.addWidget(QLabel("Accessibility:"), row, 0)
+        status_layout.addWidget(QLabel(tr("Accessibility:")), row, 0)
         self._accessibility_status = QLabel()
         status_layout.addWidget(self._accessibility_status, row, 1)
-        self._accessibility_btn = QPushButton("Grant")
+        self._accessibility_btn = QPushButton(tr("Grant"))
         self._accessibility_btn.setFixedWidth(80)
         self._accessibility_btn.clicked.connect(self._on_request_accessibility)
         status_layout.addWidget(self._accessibility_btn, row, 2)
@@ -1411,21 +1430,21 @@ class MainWindow(QMainWindow):
 
         # Screen Recording
         if check_screen_recording():
-            self._screen_recording_status.setText("✓ Granted")
+            self._screen_recording_status.setText(tr("✓ Granted"))
             set_role(self._screen_recording_status, "status-ok")
             self._screen_recording_btn.setVisible(False)
         else:
-            self._screen_recording_status.setText("✗ Required")
+            self._screen_recording_status.setText(tr("✗ Required"))
             set_role(self._screen_recording_status, "status-error")
             self._screen_recording_btn.setVisible(True)
 
         # Accessibility
         if check_accessibility():
-            self._accessibility_status.setText("✓ Granted")
+            self._accessibility_status.setText(tr("✓ Granted"))
             set_role(self._accessibility_status, "status-ok")
             self._accessibility_btn.setVisible(False)
         else:
-            self._accessibility_status.setText("✗ Required")
+            self._accessibility_status.setText(tr("✗ Required"))
             set_role(self._accessibility_status, "status-error")
             self._accessibility_btn.setVisible(True)
 
@@ -1451,14 +1470,14 @@ class MainWindow(QMainWindow):
 
     def _load_models(self):
         """Start worker thread and load OCR/translation models."""
-        self.statusBar().showMessage("Loading models...")
+        self.statusBar().showMessage(tr("Loading models..."))
         self._process_worker.set_mode(self._mode)
         self._process_worker.start(self._config.ocr_confidence)
 
     def _on_models_ready(self):
         """Handle models loaded signal from worker thread."""
         self._start_btn.setEnabled(True)
-        self.statusBar().showMessage("Ready")
+        self.statusBar().showMessage(tr("Ready"))
         logger.debug("models loaded")
         if self._config.live_speech_enabled and hasattr(self, "_speech"):
             self._speech.prepare(self._config.speech_voice_settings[0])
@@ -1467,7 +1486,7 @@ class MainWindow(QMainWindow):
         """Handle model loading failure from worker thread."""
         self._start_btn.setEnabled(self._capturing)
         self._show_fix_models_button()
-        self.statusBar().showMessage(f"Model loading failed: {error[:120]}")
+        self.statusBar().showMessage(tr("Model loading failed: {0}", error[:120]))
         # Full message on hover, since the status bar truncates
         failed = self._process_worker.get_failed_models()
         if "translation" in failed:
@@ -1509,32 +1528,31 @@ class MainWindow(QMainWindow):
     def _update_status_label(self, label: QLabel, status: str):
         """Update a model status label with appropriate text and style."""
         if status == "loading":
-            label.setText("Loading...")
+            label.setText(tr("Loading..."))
             set_role(label, "status-busy")
         elif status == "downloading":
-            label.setText("Downloading...")
+            label.setText(tr("Downloading..."))
             set_role(label, "status-busy")
         elif status == "ready":
-            label.setText("Ready")
+            label.setText(tr("Ready"))
             set_role(label, "status-ok")
         elif status == "error":
-            label.setText("Error")
+            label.setText(tr("Error"))
             set_role(label, "status-error")
 
     def _update_fix_button_visibility(self):
         """Show/hide the Fix Models button based on model status."""
-        has_error = self._ocr_status_label.text() == "Error" or self._translation_status_label.text() == "Error"
+        has_error = any(
+            label.property("role") == "status-error"
+            for label in (self._ocr_status_label, self._translation_status_label)
+        )
         if has_error:
             self._show_fix_models_button()
         else:
             self._fix_models_btn.setVisible(False)
 
     def _show_fix_models_button(self):
-        """Reveal the Fix Models button and grow the window so the extra row does not squeeze the layout."""
-        if self._fix_models_btn.isVisible():
-            return
-        self._fix_models_btn.setVisible(True)
-        self._grow_to_fit()
+        self._fix_models_btn.show()
 
     def _on_fix_models(self):
         """Handle Fix Models button click."""
@@ -1564,14 +1582,14 @@ class MainWindow(QMainWindow):
 
         if not (self._fixing_ocr or self._fixing_translation):
             # Nothing to download: retry the endpoints with the current settings
-            self.statusBar().showMessage("Reconnecting...")
+            self.statusBar().showMessage(tr("Reconnecting..."))
             if "ocr" in failed:
                 self._process_worker.reload_ocr()
             if "translation" in failed:
                 self._process_worker.reload_translation()
             return
 
-        self.statusBar().showMessage("Downloading models...")
+        self.statusBar().showMessage(tr("Downloading models..."))
 
         # Stop and restart the worker to reload models
         self._history.cancel_retranslation()
@@ -1599,7 +1617,7 @@ class MainWindow(QMainWindow):
         if self._is_wayland_session:
             # Wayland has no window list; the portal shows the system picker on start
             self._windows_list = []
-            self._window_combo.addItem("Window (system picker)", ("portal", None))
+            self._window_combo.addItem(tr("Window (system picker)"), ("portal", None))
             selected_idx = 0
         else:
             self._windows_list = WindowCapture.list_windows()
@@ -1684,7 +1702,7 @@ class MainWindow(QMainWindow):
             self._start_video_capture(name, id_text)
             return
         if kind != "window" or value >= len(self._windows_list):
-            self.statusBar().showMessage("No source selected")
+            self.statusBar().showMessage(tr("No source selected"))
             return
 
         window = self._windows_list[value]
@@ -1701,11 +1719,11 @@ class MainWindow(QMainWindow):
             )
             if not self._capture.find_window():
                 self._stop_capture()
-                self.statusBar().showMessage("Window not found")
+                self.statusBar().showMessage(tr("Window not found"))
                 return
             if not self._capture.start_stream():
                 self._stop_capture()
-                self.statusBar().showMessage("Failed to start stream")
+                self.statusBar().showMessage(tr("Failed to start stream"))
                 return
         except Exception as e:
             error_msg = str(e)
@@ -1713,7 +1731,7 @@ class MainWindow(QMainWindow):
             # Show truncated message in status bar (full message in logs)
             display_msg = error_msg.split("\n")[0][:100]  # First line, max 100 chars
             self._stop_capture()
-            self.statusBar().showMessage(f"Capture failed: {display_msg}")
+            self.statusBar().showMessage(tr("Capture failed: {0}", display_msg))
             return
 
         self._process_timer.setInterval(PROCESS_INTERVAL_MS)
@@ -1723,11 +1741,11 @@ class MainWindow(QMainWindow):
 
         self._last_ocr_results = []  # boxes from a previous session must not outlive it
         self._paused = False
-        self._start_btn.setText("Stop Capture")
+        self._start_btn.setText(tr("Stop Capture"))
         self._pause_btn.setEnabled(True)
-        self._pause_btn.setText("Hide")
+        self._pause_btn.setText(tr("Hide"))
         self._ocr_config_btn.setEnabled(True)
-        self.statusBar().showMessage(f"Capturing '{title[:40]}...'")
+        self.statusBar().showMessage(tr("Capturing '{0}...'", title[:40]))
 
         # Update config with selected window
         self._config.window_title = title
@@ -1750,7 +1768,7 @@ class MainWindow(QMainWindow):
             return
         device = find_video_device(name, id_text)
         if device is None:
-            self.statusBar().showMessage(f"Video device not found: {name[:40]}")
+            self.statusBar().showMessage(tr("Video device not found: {0}", name[:40]))
             self._refresh_sources()
             return
 
@@ -1761,7 +1779,7 @@ class MainWindow(QMainWindow):
             logger.error("video device capture failed", device=name, error=str(e))
             first_line = (str(e).splitlines() or [""])[0]
             self._stop_capture()
-            self.statusBar().showMessage(f"Capture failed: {first_line[:100]}")
+            self.statusBar().showMessage(tr("Capture failed: {0}", first_line[:100]))
             return
 
         self._process_timer.setInterval(PROCESS_INTERVAL_MS)
@@ -1774,11 +1792,11 @@ class MainWindow(QMainWindow):
 
         self._last_ocr_results = []  # boxes from a previous session must not outlive it
         self._paused = False
-        self._start_btn.setText("Stop Capture")
+        self._start_btn.setText(tr("Stop Capture"))
         self._pause_btn.setEnabled(True)
-        self._pause_btn.setText("Hide")
+        self._pause_btn.setText(tr("Hide"))
         self._ocr_config_btn.setEnabled(True)
-        self.statusBar().showMessage(f"Capturing video device '{name[:40]}'")
+        self.statusBar().showMessage(tr("Capturing video device '{0}'", name[:40]))
 
         # Remember the device; exclusion zones and OCR confidence are keyed by its name
         self._config.video_device = name
@@ -1800,7 +1818,7 @@ class MainWindow(QMainWindow):
         self._banner_only = banner_only
         if banner_only:
             self._inplace_btn.setEnabled(False)
-            self._inplace_btn.setToolTip("Video devices have no window on screen to draw over: banner mode only")
+            self._inplace_btn.setToolTip(tr("Video devices have no window on screen to draw over: banner mode only"))
             if self._mode == OverlayMode.INPLACE:
                 self._mode_before_video = self._mode
                 self._banner_btn.setChecked(True)
@@ -1826,7 +1844,7 @@ class MainWindow(QMainWindow):
             return
         self._wayland_selecting = True
 
-        self.statusBar().showMessage("Select a window...")
+        self.statusBar().showMessage(tr("Select a window..."))
         self._start_btn.setEnabled(False)
 
         try:
@@ -1837,7 +1855,7 @@ class MainWindow(QMainWindow):
             self._wayland_selecting = False
 
             if not stream_info:
-                self.statusBar().showMessage("Window selection cancelled")
+                self.statusBar().showMessage(tr("Window selection cancelled"))
                 self._start_btn.setEnabled(True)
                 self._wayland_portal.close()
                 self._wayland_portal = None
@@ -1858,12 +1876,12 @@ class MainWindow(QMainWindow):
             self._last_ocr_results = []  # boxes from a previous session must not outlive it
             self._paused = False
             self._pause_btn.setEnabled(True)
-            self._pause_btn.setText("Hide")
+            self._pause_btn.setText(tr("Hide"))
             self._ocr_config_btn.setEnabled(True)
-            self.statusBar().showMessage("Capturing Wayland window...")
+            self.statusBar().showMessage(tr("Capturing Wayland window..."))
 
             # Update button to show stop action
-            self._start_btn.setText("Stop Capture")
+            self._start_btn.setText(tr("Stop Capture"))
             self._start_btn.setEnabled(True)
 
             # Store window title for exclusion zone lookup (Wayland doesn't have window titles)
@@ -1883,12 +1901,12 @@ class MainWindow(QMainWindow):
             logger.error("failed to start wayland capture", error=str(e))
             self._wayland_selecting = False
             self._stop_capture()
-            self.statusBar().showMessage("Wayland capture failed")
+            self.statusBar().showMessage(tr("Wayland capture failed"))
             message = QMessageBox(self)
             message.setIcon(QMessageBox.Icon.Warning)
-            message.setWindowTitle("Wayland capture failed")
+            message.setWindowTitle(tr("Wayland capture failed"))
             message.setTextFormat(Qt.TextFormat.PlainText)
-            message.setText("Could not start screen capture.")
+            message.setText(tr("Could not start screen capture."))
             message.setInformativeText(str(e).split("\n", 1)[0])
             message.setDetailedText(str(e))
             message.exec()
@@ -1933,19 +1951,19 @@ class MainWindow(QMainWindow):
         self._last_ocr_results = []
         self._detected_character = ""
         if hasattr(self, "_character_status"):
-            self._character_status.setText("Character voices off")
+            self._character_status.setText(tr("Character voices off"))
         self._paused = False
         self._pause_btn.setEnabled(False)
         self._ocr_config_btn.setEnabled(False)
-        self.statusBar().showMessage("Ready")
+        self.statusBar().showMessage(tr("Ready"))
 
-        self._start_btn.setText("Start Capture")
+        self._start_btn.setText(tr("Start Capture"))
         self._start_btn.setEnabled(True)
 
         # Clear preview
         self._preview_pixmap = None
         self._preview_label.clear()
-        self._preview_label.setText("No preview")
+        self._preview_label.setText(tr("No preview"))
 
         # Hide overlays and clear inplace labels
         self._banner_overlay.hide()
@@ -1963,14 +1981,14 @@ class MainWindow(QMainWindow):
         self._paused = not self._paused
         logger.debug("overlay visibility toggled", hidden=self._paused, tts_continues=self._config.live_speech_enabled)
         if self._paused:
-            self._pause_btn.setText("Show")
+            self._pause_btn.setText(tr("Show"))
             self._banner_overlay.hide()
             self._inplace_overlay.clear_regions()
             self._inplace_overlay.hide()
             if getattr(self, "_history_overlay", None) is not None:
                 self._history_overlay.hide()
         else:
-            self._pause_btn.setText("Hide")
+            self._pause_btn.setText(tr("Hide"))
             self._show_overlay()
 
     def _toggle_mode(self):
@@ -2104,11 +2122,10 @@ class MainWindow(QMainWindow):
         """Show warning about inplace mode limitations on Wayland."""
         QMessageBox.information(
             self,
-            "Inplace Mode on Wayland",
-            "Inplace mode only works correctly with fullscreen games on Wayland.\n\n"
-            "For windowed games, the text labels may appear in the wrong position "
-            "because Wayland doesn't expose window coordinates.\n\n"
-            "This is a Wayland security limitation, not a bug.",
+            tr("Inplace Mode on Wayland"),
+            tr(
+                "Inplace mode only works correctly with fullscreen games on Wayland.\n\nFor windowed games, the text labels may appear in the wrong position because Wayland doesn't expose window coordinates.\n\nThis is a Wayland security limitation, not a bug."
+            ),
         )
 
     def _show_overlay(self):
@@ -2177,7 +2194,7 @@ class MainWindow(QMainWindow):
             logger.error("capture frame failed", error=str(e))
             self._stop_capture()
             first_line = str(e).split("\n", 1)[0]
-            self.statusBar().showMessage(f"Capture stopped: {first_line[:100]}")
+            self.statusBar().showMessage(tr("Capture stopped: {0}", first_line[:100]))
             return
 
         # Check if the window was closed or the video device went away
@@ -2186,7 +2203,7 @@ class MainWindow(QMainWindow):
             logger.info("capture source gone, stopping capture", error=error)
             self._stop_capture()
             if error:
-                self.statusBar().showMessage(f"Capture stopped: {error[:100]}")
+                self.statusBar().showMessage(tr("Capture stopped: {0}", error[:100]))
             return
 
         # Get bounds (None on Wayland, dict on X11/Windows/macOS)
@@ -2209,18 +2226,20 @@ class MainWindow(QMainWindow):
             if self._frames_missing * PROCESS_INTERVAL_MS >= NO_SIGNAL_NOTICE_MS and not self._waiting_for_signal:
                 self._waiting_for_signal = True
                 if isinstance(self._capture, VideoDeviceCapture):
-                    self.statusBar().showMessage(f"Waiting for a video signal from '{self._capture.name[:40]}'...")
+                    self.statusBar().showMessage(
+                        tr("Waiting for a video signal from '{0}'...", self._capture.name[:40])
+                    )
                 else:
                     self.statusBar().showMessage(
-                        "Waiting for window frames. Keep the game visible; capture will retry."
+                        tr("Waiting for window frames. Keep the game visible; capture will retry.")
                     )
             return
 
         if self._waiting_for_signal:
             if isinstance(self._capture, VideoDeviceCapture):
-                self.statusBar().showMessage(f"Capturing video device '{self._capture.name[:40]}'")
+                self.statusBar().showMessage(tr("Capturing video device '{0}'", self._capture.name[:40]))
             else:
-                self.statusBar().showMessage(f"Capturing '{self._current_window_title[:40]}'")
+                self.statusBar().showMessage(tr("Capturing '{0}'", self._current_window_title[:40]))
         self._waiting_for_signal = False
         self._frames_missing = 0
 
@@ -2351,9 +2370,9 @@ class MainWindow(QMainWindow):
         if entry is None or not entry.can_replay:
             return
         if self._speech.replay(entry.translation, *entry.voice):
-            self._history.status.setText("Replay requested.")
+            self._history.status.setText(tr("Replay requested."))
         else:
-            self._history.status.setText("Replay unavailable. Wait for current speech to finish and try again.")
+            self._history.status.setText(tr("Replay unavailable. Wait for current speech to finish and try again."))
 
     def _retranslate_history(self, entry):
         if not self._process_worker.request_retranslation(entry):
@@ -2413,9 +2432,9 @@ class MainWindow(QMainWindow):
         self._detected_character = name
         if hasattr(self, "_character_status"):
             self._character_status.setText(
-                f"Character: {name} ({'assigned preset' if mapped else 'default voice'})"
+                tr("Character: {0} ({1})", name, tr("assigned preset" if mapped else "default voice"))
                 if name
-                else "Narration / no name: default voice"
+                else tr("Narration / no name: default voice")
             )
         if getattr(self, "_character_dialog", None) is not None:
             self._character_dialog.set_detected_name(name)
@@ -2458,16 +2477,16 @@ class MainWindow(QMainWindow):
             profile = config.game_profiles.get(title)
             language = profile.source_language if profile else ""
         if (ocr_backend or config.ocr_backend) == OCRBackend.MEIKI and language and language != "Japanese":
-            return "MeikiOCR only reads Japanese. Select PaddleOCR or owocr in Engines for this game profile."
+            return tr("MeikiOCR only reads Japanese. Select PaddleOCR or owocr in Engines for this game profile.")
         language = language or default_language or config.source_language
         if (backend or config.translation_backend) == TranslationBackend.SUGOI and language != SUGOI_SOURCE_LANGUAGE:
-            return "The game profile requires an LLM endpoint for this source language. " + SUGOI_ONLY_JAPANESE
+            return tr("The game profile requires an LLM endpoint for this source language. ") + tr(SUGOI_ONLY_JAPANESE)
         return ""
 
     def _open_game_profile(self):
         title = self._profile_source_title()
         if not title:
-            self.statusBar().showMessage("Select a capture source first.")
+            self.statusBar().showMessage(tr("Select a capture source first."))
             return
         profile = self._config.game_profiles.get(title) or GameProfile()
         dialog = GameProfileDialog(
@@ -2490,12 +2509,14 @@ class MainWindow(QMainWindow):
                 self._speech.stop(reset=True, reason="game profile changed")
                 self._banner_overlay.set_text("")
                 self._inplace_overlay.clear_regions()
-        self.statusBar().showMessage("Game profile saved")
+        self.statusBar().showMessage(tr("Game profile saved"))
 
     def _open_character_voices(self):
         title = self._profile_source_title()
         if not title:
-            self.statusBar().showMessage("Select a capture source first. On Wayland, start capture to choose a window.")
+            self.statusBar().showMessage(
+                tr("Select a capture source first. On Wayland, start capture to choose a window.")
+            )
             return
         dialog = CharacterVoicesDialog(
             self,
@@ -2516,7 +2537,7 @@ class MainWindow(QMainWindow):
                 self._config.save()
                 if self._capturing:
                     self._character_status.setText(
-                        "Waiting for speaker name…" if profile.enabled else "Character voices off"
+                        tr("Waiting for speaker name…") if profile.enabled else tr("Character voices off")
                     )
         finally:
             self._character_dialog = None
@@ -2527,9 +2548,9 @@ class MainWindow(QMainWindow):
         with QSignalBlocker(self._output_combo):
             self._output_combo.setCurrentIndex(self._output_combo.findData(mode.value))
         self._output_combo.setEnabled(speech_supported)
-        hint = "The bundled voices read Vietnamese."
+        hint = tr("The bundled voices read Vietnamese.")
         if clone_language(self._config.llm.target_language):
-            hint = "Set a local clone server and choose a recording to enable speech for this target."
+            hint = tr("Set a local clone server and choose a recording to enable speech for this target.")
         self._output_combo.setToolTip("" if speech_supported else hint)
 
     def _sync_translation_output(self):
@@ -2567,13 +2588,13 @@ class MainWindow(QMainWindow):
         from pathlib import Path
 
         if Path(self._config.tts_model_path).expanduser().is_dir():
-            path = QFileDialog.getExistingDirectory(self, "Select a local VieNeu Nano model folder")
+            path = QFileDialog.getExistingDirectory(self, tr("Select a local VieNeu Nano model folder"))
             if path:
                 self._tts_model_edit.setText(path)
                 self._on_tts_model_changed()
             return
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select an offline Vietnamese Piper voice", "", "Piper voice (*.onnx)"
+            self, tr("Select an offline Vietnamese Piper voice"), "", tr("Piper voice (*.onnx)")
         )
         if path:
             self._tts_model_edit.setText(path)
@@ -2586,10 +2607,10 @@ class MainWindow(QMainWindow):
         self._tts_voice_combo.blockSignals(True)
         self._tts_voice_combo.clear()
         for label, path in available_voices(selected):
-            self._tts_voice_combo.addItem(label, path)
+            self._tts_voice_combo.addItem(tr(label), path)
         index = self._tts_voice_combo.findData(str(Path(selected).expanduser().resolve())) if selected else -1
         if index < 0:
-            self._tts_voice_combo.addItem("Custom / select local model", selected)
+            self._tts_voice_combo.addItem(tr("Custom / select local model"), selected)
             index = self._tts_voice_combo.count() - 1
         self._tts_voice_combo.setCurrentIndex(index)
         self._tts_voice_combo.blockSignals(False)
@@ -2603,7 +2624,7 @@ class MainWindow(QMainWindow):
         except (OSError, ValueError, TypeError, KeyError):
             speakers = [("Default speaker", 0)]
         for label, index in speakers:
-            self._tts_speaker_combo.addItem(voice_label(self._config.tts_model_path, label), index)
+            self._tts_speaker_combo.addItem(tr(voice_label(self._config.tts_model_path, label)), index)
         index = self._tts_speaker_combo.findData(self._config.tts_speaker_id)
         self._tts_speaker_combo.setCurrentIndex(max(0, index))
         self._tts_speaker_combo.blockSignals(False)
@@ -2622,20 +2643,22 @@ class MainWindow(QMainWindow):
         self._tts_preset_panel.setVisible(not multilingual)
         self._tts_clone_model_label.setVisible(multilingual)
         if multilingual:
-            model_text = "Voice model: Qwen3-TTS Base (local clone)"
+            model_text = tr("Voice model: Qwen3-TTS Base (local clone)")
             if clone_voice is None:
-                model_text += "\nSet the local clone server and select a recording to enable speech."
+                model_text += tr("\nSet the local clone server and select a recording to enable speech.")
             self._tts_clone_model_label.setText(model_text)
         self._clone_server_row.setVisible(multilingual)
         self._clone_row.setVisible(multilingual or clone)
-        self._tts_reference_label.setText("Clone from audio:" if multilingual else "Clone from audio (optional):")
+        self._tts_reference_label.setText(
+            tr("Clone from audio:") if multilingual else tr("Clone from audio (optional):")
+        )
         self._tts_reference_edit.setPlaceholderText(
-            "Select a WAV or MP3 recording" if multilingual else "No recording: use the selected Speaker preset"
+            tr("Select a WAV or MP3 recording") if multilingual else tr("No recording: use the selected Speaker preset")
         )
         self._tts_reference_edit.setToolTip(
-            "Use a clean WAV or MP3 recording of about 3–10 seconds."
+            tr("Use a clean WAV or MP3 recording of about 3–10 seconds.")
             if multilingual
-            else "Clear this field to use a preset. No transcript is required."
+            else tr("Clear this field to use a preset. No transcript is required.")
         )
         self._tts_speaker_combo.setEnabled(not (clone and self._config.tts_reference_audio))
         self._tts_rate_spin.setEnabled(not multilingual)
@@ -2643,9 +2666,7 @@ class MainWindow(QMainWindow):
 
     def _browse_reference_audio(self):
         formats = "Audio (*.wav *.mp3)" if not self._clone_server_row.isHidden() else "Audio (*.wav *.flac *.mp3 *.ogg)"
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select a local voice reference", "", formats
-        )
+        path, _ = QFileDialog.getOpenFileName(self, tr("Select a local voice reference"), "", formats)
         if path:
             self._tts_reference_edit.setText(path)
             self._on_reference_audio_changed()
@@ -2659,7 +2680,11 @@ class MainWindow(QMainWindow):
         self._config.tts_clone_url = local_clone_url(value)
         self._on_speech_settings_changed()
         if value and not self._config.tts_clone_url:
-            self._tts_status.setText("Use a loopback address such as http://127.0.0.1:17867.")
+            self._show_speech_status("Use a loopback address such as http://127.0.0.1:17867.")
+
+    def _show_speech_status(self, message: str):
+        self._tts_status.setText(tr(message))
+        self._tts_status.setVisible(bool(message))
 
     def _on_voice_model_changed(self):
         self._config.tts_model_path = self._tts_voice_combo.currentData() or ""
@@ -2805,8 +2830,8 @@ class MainWindow(QMainWindow):
         profile = self._config.get_character_voices(self._current_window_title)
         if not profile.enabled or not profile.name_region:
             self._detected_character = ""
-            if hasattr(self, "_character_status") and self._character_status.text() != "Character voices off":
-                self._character_status.setText("Character voices off")
+            if hasattr(self, "_character_status") and self._character_status.text() != tr("Character voices off"):
+                self._character_status.setText(tr("Character voices off"))
             return dialogue_frame, None
         region = profile.name_region
         height, width = full_frame.shape[:2]

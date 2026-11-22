@@ -400,8 +400,10 @@ class Config:
         hide_stale_overlay: bool = False,
         tts_volume: int = 100,
         tts_clone_url: str = "",
+        interface_language: str = "en",
     ):
         self.window_title = window_title
+        self.interface_language = interface_language if interface_language in ("en", "vi") else "en"
         self.update_check_on_startup = update_check_on_startup is True
         self.history_overlay_enabled = history_overlay_enabled is True
         self.hide_stale_overlay = hide_stale_overlay is True
@@ -573,6 +575,7 @@ class Config:
 
             return cls(
                 window_title=data.get("window_title", cls.DEFAULT_WINDOW_TITLE),
+                interface_language=data.get("interface_language", "en"),
                 update_check_on_startup=data.get("update_check_on_startup", False) is True,
                 history_overlay_enabled=data.get("history_overlay_enabled", True) is True,
                 hide_stale_overlay=data.get("hide_stale_overlay", False) is True,
@@ -811,6 +814,7 @@ hotkeys:
         if self.ocr_backend == OCRBackend.OWOCR or self.owocr != OwocrSettings():
             data["owocr"] = self.owocr.to_dict()
         data["source_language"] = str(self.source_language)
+        data["interface_language"] = self.interface_language
         data["update_check_on_startup"] = self.update_check_on_startup
         data["history_overlay_enabled"] = self.history_overlay_enabled
         data["hide_stale_overlay"] = self.hide_stale_overlay

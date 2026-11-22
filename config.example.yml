@@ -1,6 +1,8 @@
 # Source-development profile. Provision these local model folders first.
 window_title: ''
 update_check_on_startup: false
+# Desktop interface: en (English) or vi (Tiếng Việt).
+interface_language: en
 source_language: English
 ocr_backend: paddle
 ocr_confidence: 0.6

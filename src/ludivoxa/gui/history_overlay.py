@@ -4,6 +4,7 @@ from PySide6.QtCore import QObject, QPoint, QRect, Qt
 from PySide6.QtWidgets import QApplication, QDialog, QPushButton, QVBoxLayout
 
 from ..overlay.windows import _WindowsOverlayMixin
+from .i18n import tr
 
 MARGIN = 8
 
@@ -31,7 +32,7 @@ def _visible_game_area(bounds, screens):
 
 class _HistoryButton(_WindowsOverlayMixin, QPushButton):
     def __init__(self):
-        super().__init__("History")
+        super().__init__(tr("History"))
         self.setWindowFlags(
             Qt.WindowType.Tool
             | Qt.WindowType.FramelessWindowHint
@@ -40,7 +41,7 @@ class _HistoryButton(_WindowsOverlayMixin, QPushButton):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setWindowOpacity(0.78)
-        self.setToolTip("Open dialogue history")
+        self.setToolTip(tr("Open dialogue history"))
         self.adjustSize()
 
 
@@ -54,7 +55,7 @@ class HistoryOverlay(QObject):
         self._button.clicked.connect(self._open_panel)
         # A parentless tool window stays available when the main app is minimized.
         self._panel = QDialog(None, Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
-        self._panel.setWindowTitle("Ludivoxa History")
+        self._panel.setWindowTitle(tr("Ludivoxa History"))
         self._panel_layout = QVBoxLayout(self._panel)
         self._panel_layout.setContentsMargins(0, 0, 0, 0)
         self._panel.finished.connect(self._restore_history)

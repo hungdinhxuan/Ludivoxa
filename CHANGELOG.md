@@ -3,6 +3,15 @@
 All notable Ludivoxa changes are recorded here using version tags such as
 `v1.0.0`.
 
+## [2.3.0] - 2026-11-22
+
+- Add an English and Vietnamese interface selector. Save the preference
+  independently of OCR and translation languages and apply it on restart.
+- Keep OCR setup at the top, group game tools in one menu, and collapse
+  voice settings in Play while keeping the clone model visible.
+- Make settings scroll within the window and keep the Engines Apply button
+  visible. Improve contrast on selected navigation and primary buttons.
+
 ## [2.2.1] - 2026-11-22
 
 - Show Qwen3-TTS Base and setup guidance in Play for supported clone targets.
